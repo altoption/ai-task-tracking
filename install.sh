@@ -1,11 +1,15 @@
 #!/bin/bash
 # Install or upgrade AI Task Tracking on this Mac. Run with --help for the options.
-#   gh api repos/altoption/ai-task-tracking/contents/install.sh --jq .content | base64 -d | bash
+#   curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
 #   … | bash -s -- --yes        (options when piped)
 #   ./install.sh [options]      (from a clone)
 set -euo pipefail
 
 REPO=altoption/ai-task-tracking
+# The repo is public: everything is fetched with curl and git, no GitHub account or CLI needed.
+RAW_URL="https://raw.githubusercontent.com/$REPO"
+API_URL="https://api.github.com/repos/$REPO"
+DOWNLOAD_URL="https://github.com/$REPO/releases/download"
 MIN_MACOS=13
 MIN_BUN=1.4
 
@@ -18,7 +22,7 @@ usage() {
 Install AI Task Tracking on this Mac (macOS 13+, Apple Silicon or Intel). Re-running it upgrades: the app is
 quit and replaced; your data folder and settings stay.
 
-  gh api repos/altoption/ai-task-tracking/contents/install.sh --jq .content | base64 -d | bash
+  curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
   … | bash -s -- [options]       (options when piped)
   ./install.sh [options]         (from a clone: builds that checkout when no release is used)
 
@@ -76,7 +80,7 @@ parse_args() {
   case "$VERSION" in [0-9]*) VERSION="v$VERSION" ;; esac
 }
 
-# scripts/lib.sh: from this checkout, else fetched from the repo with gh (when this script was piped into bash).
+# scripts/lib.sh: from this checkout, else downloaded from the repo (when this script was piped into bash).
 load_lib() {
   local src="${BASH_SOURCE[0]:-}" here="" lib
   if [ -n "$src" ] && [ -f "$src" ]; then here="$(cd "$(dirname "$src")" && pwd -P)"; fi
@@ -86,20 +90,21 @@ load_lib() {
     . "$here/scripts/lib.sh"
     return
   fi
-  command -v gh >/dev/null 2>&1 || {
-    echo "✗ The installer needs the GitHub CLI: brew install gh && gh auth login, then run it again." >&2
-    exit 1
-  }
   new_tmp
   lib="$NEW_TMP/lib.sh"
   # The same ref as the release asked for, so the functions match the version being installed.
-  gh api "repos/$REPO/contents/scripts/lib.sh${VERSION:+?ref=$VERSION}" --jq .content | base64 -d >"$lib" ||
-    { echo "✗ Could not read scripts/lib.sh from $REPO (gh auth status; do you have access?)" >&2; exit 1; }
+  curl -fsSL "$RAW_URL/${VERSION:-HEAD}/scripts/lib.sh" -o "$lib" ||
+    { echo "✗ Could not download scripts/lib.sh from github.com/$REPO${VERSION:+ at $VERSION}; check your connection, then run this again." >&2; exit 1; }
   # shellcheck source=scripts/lib.sh
   . "$lib"
 }
 
 have_tty() { (: </dev/tty) 2>/dev/null; }
+
+# json_str JSON KEY VALUE_PATTERN: the first string value of KEY that matches VALUE_PATTERN (grep BRE), else "".
+json_str() {
+  printf '%s' "$1" | grep -o "\"$2\": *\"$3\"" | head -n 1 | sed 's/^"[^"]*": *"//; s/"$//' || true
+}
 
 # ask QUESTION DEFAULT: the answer from the terminal (stdin may be this script), else the default.
 ask() {
@@ -123,24 +128,15 @@ detect() {
   if [ -z "$BUN" ] && [ -x "$HOME/.bun/bin/bun" ]; then BUN="$HOME/.bun/bin/bun"; fi
   BUN_VER=""; [ -n "$BUN" ] && BUN_VER="$("$BUN" --version 2>/dev/null || true)"
   BUN_OK=0; if [ -n "$BUN_VER" ] && version_ge "$BUN_VER" "$MIN_BUN"; then BUN_OK=1; fi
-  HAS_BREW=0; command -v brew >/dev/null 2>&1 && HAS_BREW=1
   HAS_CLAUDE=0; command -v claude >/dev/null 2>&1 && HAS_CLAUDE=1
-  HAS_GH=0 GH_AUTH=0 GH_REPO=0
-  if command -v gh >/dev/null 2>&1; then
-    HAS_GH=1
-    gh auth status --hostname github.com >/dev/null 2>&1 && GH_AUTH=1
-    if [ "$GH_AUTH" = 1 ] && gh api "repos/$REPO" --jq .full_name >/dev/null 2>&1; then GH_REPO=1; fi
-  fi
   RELEASE_TAG="" RELEASE_ZIP=""
-  if [ "$FROM_SOURCE" = 0 ] && [ "$GH_REPO" = 1 ]; then
-    local out
-    out="$(gh release view ${VERSION:+"$VERSION"} --repo "$REPO" --json tagName,assets \
-      --jq '.tagName + " " + ([.assets[].name | select(test("^AI-Task-Tracking-.*-macos[.]zip$"))] | first // "")' 2>/dev/null || true)"
-    if [ -n "$out" ]; then
-      RELEASE_TAG="${out%% *}"
-      RELEASE_ZIP="${out#* }"
-      [ "$RELEASE_ZIP" = "$out" ] && RELEASE_ZIP=""
-    fi
+  if [ "$FROM_SOURCE" = 0 ]; then
+    # The release's JSON from the GitHub API; no release (404) or no connection leaves both empty: a source build.
+    local json
+    json="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+      "$API_URL/releases/${VERSION:+tags/}${VERSION:-latest}" 2>/dev/null || true)"
+    RELEASE_TAG="$(json_str "$json" tag_name '[^"]*')"
+    if [ -n "$RELEASE_TAG" ]; then RELEASE_ZIP="$(json_str "$json" name 'AI-Task-Tracking-[^"/]*-macos[.]zip')"; fi
   fi
   INSTALLED_VER=""
   if [ -f "$APP/Contents/Info.plist" ]; then
@@ -153,45 +149,24 @@ detect() {
 plan() {
   METHOD=source
   if [ -n "$RELEASE_ZIP" ]; then METHOD=release; fi
-  NEED_GH=0
-  if [ "$METHOD" = release ] || [ -z "$CLONE" ]; then NEED_GH=1; fi
   BLOCKERS=()
   version_ge "$OS_VER" "$MIN_MACOS" || BLOCKERS+=("macOS $MIN_MACOS or later is required (this Mac has $OS_VER)")
-  if [ "$NEED_GH" = 1 ]; then
-    if [ "$HAS_GH" = 0 ] && [ "$HAS_BREW" = 0 ]; then
-      BLOCKERS+=("Install the GitHub CLI (https://cli.github.com), run gh auth login, then run this again")
-    elif [ "$HAS_GH" = 1 ] && [ "$GH_AUTH" = 0 ]; then
-      BLOCKERS+=("Sign the GitHub CLI in: gh auth login, then run this again")
-    elif [ "$GH_AUTH" = 1 ] && [ "$GH_REPO" = 0 ]; then
-      BLOCKERS+=("Your GitHub account can't read $REPO; ask for access, then run this again")
-    fi
-  fi
 }
 
 row() { printf '  %-28s %-34s %s\n' "$1" "$2" "$3"; }
 
 print_table() {
-  local gh_found gh_do src
-  if [ "$HAS_GH" = 0 ]; then gh_found="missing"
-  elif [ "$GH_AUTH" = 0 ]; then gh_found="found, not signed in"
-  elif [ "$GH_REPO" = 0 ]; then gh_found="signed in, no access to repo"
-  else gh_found="signed in, repo readable"; fi
-  if [ "$NEED_GH" = 0 ]; then gh_do="not needed (building this checkout)"
-  elif [ "$HAS_GH" = 0 ] && [ "$HAS_BREW" = 1 ]; then gh_do="install with Homebrew, then gh auth login"
-  elif [ "$GH_REPO" = 1 ]; then gh_do="—"
-  else gh_do="see below"; fi
+  local src
   echo "AI Task Tracking installer"
   echo
   row "Requirement" "Found" "What happens"
   row "macOS $MIN_MACOS+" "$OS_VER ($ARCH)" "$(version_ge "$OS_VER" "$MIN_MACOS" && echo — || echo 'not supported')"
-  row "GitHub CLI (gh)" "$gh_found" "$gh_do"
-  row "Homebrew (optional)" "$([ "$HAS_BREW" = 1 ] && echo found || echo missing)" "only used to install gh"
   if [ "$METHOD" = release ]; then
     row "Release" "$RELEASE_TAG ($RELEASE_ZIP)" "download, verify signature + notarization"
     row "" "" "(builds from source if verification fails)"
     row "Bun $MIN_BUN+ (for that case)" "${BUN_VER:-missing}" "$([ "$BUN_OK" = 1 ] && echo — || echo 'installed from bun.sh only if a source build is needed (asks first)')"
   else
-    if [ "$FROM_SOURCE" = 1 ]; then src="--from-source"; elif [ "$GH_REPO" = 1 ]; then src="no release${VERSION:+ $VERSION}"; else src="not checked"; fi
+    if [ "$FROM_SOURCE" = 1 ]; then src="--from-source"; else src="no release${VERSION:+ $VERSION}"; fi
     row "Release" "$src" "build from source"
     row "Xcode Command Line Tools" "$([ "$HAS_CLT" = 1 ] && echo found || echo missing)" "$([ "$HAS_CLT" = 1 ] && echo — || echo 'install (xcode-select --install), then run this again')"
     row "git" "$([ "$HAS_GIT" = 1 ] && echo found || echo missing)" "$([ "$HAS_GIT" = 1 ] && echo — || echo 'comes with the Command Line Tools')"
@@ -218,16 +193,6 @@ print_table() {
 }
 
 # ---------- doing it ----------
-
-install_gh() {
-  [ "$NEED_GH" = 1 ] && [ "$HAS_GH" = 0 ] || return 0
-  echo "installing the GitHub CLI with Homebrew…"
-  brew install gh
-  if ! gh auth status --hostname github.com >/dev/null 2>&1; then
-    echo "Now sign it in (gh auth login), then run this installer again."
-    exit 1
-  fi
-}
 
 ensure_source_prereqs() {
   if [ "$HAS_CLT" = 0 ]; then
@@ -273,9 +238,9 @@ install_release() {
   new_tmp
   dl="$NEW_TMP"
   echo "downloading $RELEASE_ZIP ($RELEASE_TAG)…"
-  gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$RELEASE_ZIP" --dir "$dl" >/dev/null || return 1
+  curl -fsSL "$DOWNLOAD_URL/$RELEASE_TAG/$RELEASE_ZIP" -o "$dl/$RELEASE_ZIP" || return 1
   # The checksum file is published next to the zip; older releases may not have one.
-  if gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$RELEASE_ZIP.sha256" --dir "$dl" >/dev/null 2>&1; then
+  if curl -fsSL "$DOWNLOAD_URL/$RELEASE_TAG/$RELEASE_ZIP.sha256" -o "$dl/$RELEASE_ZIP.sha256" 2>/dev/null; then
     (cd "$dl" && shasum -a 256 -c "$RELEASE_ZIP.sha256" >/dev/null 2>&1) || { aitt_warn "$RELEASE_ZIP doesn't match its .sha256"; return 1; }
   fi
   new_stage
@@ -302,7 +267,7 @@ install_source() {
     else
       echo "cloning $REPO to $src…"
       mkdir -p "$(dirname "$src")"
-      gh repo clone "$REPO" "$src" -- --quiet
+      git clone --quiet "https://github.com/$REPO.git" "$src"
       if [ -n "$VERSION" ]; then git -C "$src" checkout --quiet --detach "$VERSION"; fi
     fi
   fi
@@ -362,7 +327,6 @@ main() {
   mkdir -p "$APP_DIR"
   APP_DIR="$(canon_dir "$APP_DIR")"
   APP="$APP_DIR/$AITT_APP_NAME"
-  install_gh
   if [ "$METHOD" = release ] && ! install_release; then
     aitt_warn "the release couldn't be installed; building from source instead"
     install_source

@@ -6,7 +6,7 @@ sidebar:
 ---
 
 ```sh
-gh api repos/altoption/ai-task-tracking/contents/uninstall.sh --jq .content | base64 -d | bash
+curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/uninstall.sh | bash
 ```
 
 Use `bash -s -- --yes` instead of `bash` to skip the question. From a clone, `./uninstall.sh [--yes]`; or run

@@ -6,7 +6,7 @@ For engineers, and the agents working with them, adding features or fixing bugs.
 ## Setup
 
 ```sh
-gh repo clone altoption/ai-task-tracking && cd ai-task-tracking
+git clone https://github.com/altoption/ai-task-tracking.git && cd ai-task-tracking
 bun install
 scripts/dev-setup.sh      # optional: a pre-push hook that runs bun run check
 bun run check             # should pass before you change anything

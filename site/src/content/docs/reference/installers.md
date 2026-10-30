@@ -15,13 +15,13 @@ The installers' own `--help` text, and the options and environment variables it 
 
 ## install.sh (users)
 
-The user installer at the repo root. Piped from `gh api`, or `./install.sh` from a clone.
+The user installer at the repo root. Piped from `curl`, or `./install.sh` from a clone.
 
 ```text
 Install AI Task Tracking on this Mac (macOS 13+, Apple Silicon or Intel). Re-running it upgrades: the app is
 quit and replaced; your data folder and settings stay.
 
-  gh api repos/altoption/ai-task-tracking/contents/install.sh --jq .content | base64 -d | bash
+  curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
   … | bash -s -- [options]       (options when piped)
   ./install.sh [options]         (from a clone: builds that checkout when no release is used)
 
@@ -69,7 +69,7 @@ The user uninstaller at the repo root. It runs `aitt uninstall` from the install
 ```text
 Uninstall AI Task Tracking from this Mac. Your data folder is kept (the output says where it is).
 
-  gh api repos/altoption/ai-task-tracking/contents/uninstall.sh --jq .content | base64 -d | bash
+  curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/uninstall.sh | bash
   … | bash -s -- --yes              (options when piped)
   ./uninstall.sh [--yes]            (from a clone)
 

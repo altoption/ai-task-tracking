@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 /**
  * install.sh's checks and plan, run as --dry-run (and the paths that stop before changing anything) with a temp
- * HOME, a scratch AITT_APP_DIR and a stub `gh` first on PATH. Each run is under setsid (no controlling terminal),
+ * HOME, a scratch AITT_APP_DIR and a stub `curl` first on PATH (no `gh` anywhere on it: the installer doesn't need one). Each run is under setsid (no controlling terminal),
  * so the installer can never prompt. The full install/upgrade runs (which build the app) are done by hand with the
  * same kind of sandbox; see the B1-B3 report.
  */
@@ -15,14 +15,24 @@ const temps: string[] = []
 afterAll(async () => { await Promise.all(temps.map((d) => rm(d, { recursive: true, force: true }))) })
 const exists = (p: string) => lstat(p).then(() => true, () => false)
 
-const GH = `#!/bin/bash
-echo "gh $*" >> "$STUB_LOG"
-case "$1 $2" in
-  "auth status") exit "\${GH_AUTH_EXIT:-0}" ;;
-  "api repos/altoption/ai-task-tracking") [ -n "$GH_NO_REPO" ] && exit 1; echo altoption/ai-task-tracking ;;
-  "api repos/altoption/ai-task-tracking/contents/scripts/lib.sh"*) base64 < "$STUB_LIB" ;;
-  "release view") [ -n "$STUB_RELEASE" ] && { echo "$STUB_RELEASE"; exit 0; }; echo "release not found" >&2; exit 1 ;;
-  *) echo "gh stub: unexpected $*" >&2; exit 1 ;;
+/**
+ * A stub curl for github.com. STUB_RELEASE="<tag> <zip name>" is the release the API returns (none: 404),
+ * STUB_ASSETS holds the release downloads, STUB_OFFLINE=1 fails every request like a lost connection.
+ */
+const CURL = `#!/bin/bash
+echo "curl $*" >> "$STUB_LOG"
+out="" url="" prev=""
+for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; case "$a" in https://*) url="$a" ;; esac; prev="$a"; done
+emit() { if [ -n "$out" ]; then cat > "$out"; else cat; fi; }
+[ -n "$STUB_OFFLINE" ] && exit 6
+case "$url" in
+  https://raw.githubusercontent.com/altoption/ai-task-tracking/*/scripts/lib.sh) emit < "$STUB_LIB" ;;
+  https://api.github.com/repos/altoption/ai-task-tracking/releases/*)
+    [ -n "$STUB_RELEASE" ] || exit 22
+    printf '{\n  "tag_name": "%s",\n  "assets": [ { "name": "%s" } ]\n}\n' "\${STUB_RELEASE%% *}" "\${STUB_RELEASE#* }" | emit ;;
+  https://github.com/altoption/ai-task-tracking/releases/download/*)
+    f="$STUB_ASSETS/\${url##*/}"; [ -f "$f" ] || exit 22; emit < "$f" ;;
+  *) echo "curl stub: unexpected $*" >&2; exit 1 ;;
 esac
 `
 
@@ -31,8 +41,8 @@ async function sandbox() {
   temps.push(base)
   const home = join(base, 'home'), stubs = join(base, 'stubs'), apps = join(base, 'apps')
   await mkdir(home); await mkdir(stubs)
-  await writeFile(join(stubs, 'gh'), GH)
-  await chmod(join(stubs, 'gh'), 0o755)
+  await writeFile(join(stubs, 'curl'), CURL)
+  await chmod(join(stubs, 'curl'), 0o755)
   const log = join(base, 'stub.log')
   await writeFile(log, '')
   const bunDir = join(process.execPath, '..')
@@ -72,7 +82,7 @@ describe('install.sh --dry-run', () => {
     await untouched(sb)
   })
 
-  test('piped into bash: fetches lib.sh with gh, plans a clone into ~/.aitt/src; its temp folder is removed', async () => {
+  test('piped into bash: downloads lib.sh, plans a clone into ~/.aitt/src; its temp folder is removed', async () => {
     const sb = await sandbox()
     const tmp = join(sb.base, 'tmp')
     await mkdir(tmp)
@@ -80,7 +90,8 @@ describe('install.sh --dry-run', () => {
     expect(await readdir(tmp)).toEqual([])
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/Source\s+—\s+clone altoption\/ai-task-tracking to ~\/.aitt\/src/)
-    expect(await sb.calls()).toContain('gh api repos/altoption/ai-task-tracking/contents/scripts/lib.sh --jq .content')
+    expect((await sb.calls()).some((c) => c.includes('https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/scripts/lib.sh'))).toBe(true)
+    expect(r.out).not.toContain('GitHub CLI')
     await untouched(sb)
   })
 
@@ -92,7 +103,8 @@ describe('install.sh --dry-run', () => {
     const src = await sb.clone(['--dry-run', '--from-source'], rel)
     expect(src.out).toMatch(/Release\s+--from-source\s+build from source/)
     await sb.clone(['--dry-run', '--version', '0.2.0'], rel)
-    expect((await sb.calls()).some((c) => c.startsWith('gh release view v0.2.0 --repo altoption/ai-task-tracking'))).toBe(true)
+    expect((await sb.calls()).some((c) => c.includes('https://api.github.com/repos/altoption/ai-task-tracking/releases/tags/v0.2.0'))).toBe(true)
+    expect((await sb.calls()).filter((c) => c.includes('/releases/latest'))).toHaveLength(1) // --from-source doesn't look
     await untouched(sb)
   })
 
@@ -123,7 +135,7 @@ describe('install.sh when piped', () => {
   test('--version fetches lib.sh at that ref', async () => {
     const sb = await sandbox()
     expect((await sb.piped(['--dry-run', '--version', '0.2.0'])).code).toBe(0)
-    expect(await sb.calls()).toContain('gh api repos/altoption/ai-task-tracking/contents/scripts/lib.sh?ref=v0.2.0 --jq .content')
+    expect((await sb.calls()).some((c) => c.includes('https://raw.githubusercontent.com/altoption/ai-task-tracking/v0.2.0/scripts/lib.sh'))).toBe(true)
   })
 })
 
@@ -136,15 +148,19 @@ describe('install.sh stops before changing anything', () => {
     await untouched(sb)
   })
 
-  test('piped, with gh signed out or without access to the repo: a clear blocker (exit 1)', async () => {
+  test('piped, without a connection to GitHub: a clear error (exit 1)', async () => {
     const sb = await sandbox()
-    const out = await sb.piped(['--yes'], { GH_AUTH_EXIT: '1' })
-    expect(out.code).toBe(1)
-    expect(out.out).toContain('✗ Sign the GitHub CLI in: gh auth login')
-    const noRepo = await sb.piped(['--yes'], { GH_NO_REPO: '1' })
-    expect(noRepo.code).toBe(1)
-    expect(noRepo.out).toContain("can't read altoption/ai-task-tracking; ask for access")
+    const r = await sb.piped(['--yes'], { STUB_OFFLINE: '1' })
+    expect(r.code).toBe(1)
+    expect(r.out).toContain('✗ Could not download scripts/lib.sh from github.com/altoption/ai-task-tracking; check your connection')
     await untouched(sb)
+  })
+
+  test('from a clone, offline: no release found, so it plans to build this checkout', async () => {
+    const sb = await sandbox()
+    const r = await sb.clone(['--dry-run'], { STUB_OFFLINE: '1' })
+    expect(r.code).toBe(0)
+    expect(r.out).toMatch(/Release\s+no release\s+build from source/)
   })
 
   test('unknown options and a --version without a tag exit 2', async () => {
@@ -156,25 +172,12 @@ describe('install.sh stops before changing anything', () => {
 
 /**
  * Whole installs through the release path, with nothing built: the "release" is a zip of a small ad hoc signed
- * bundle (a signed copy of /bin/sleep as the app, a wrapper around this checkout's CLI as aitt). gh, spctl,
+ * bundle (a signed copy of /bin/sleep as the app, a wrapper around this checkout's CLI as aitt). curl, spctl,
  * osascript, defaults, claude, lsregister and bun are stubs; "running apps" are stand-in processes at temp paths.
  */
 const CLI = join(ROOT, 'src/cli.ts')
 const E2E_STUBS: Record<string, string> = {
-  gh: `#!/bin/bash
-echo "gh $*" >> "$STUB_LOG"
-case "$1 $2" in
-  "auth status") exit 0 ;;
-  "api repos/altoption/ai-task-tracking") echo altoption/ai-task-tracking ;;
-  "release view") echo "v0.1.0 AI-Task-Tracking-0.1.0-macos.zip" ;;
-  "release download")
-    pat=""; dir=""; prev=""
-    for a in "$@"; do [ "$prev" = "--pattern" ] && pat="$a"; [ "$prev" = "--dir" ] && dir="$a"; prev="$a"; done
-    [ -f "$STUB_ASSETS/$pat" ] || exit 1
-    cp "$STUB_ASSETS/$pat" "$dir/" ;;
-  *) exit 1 ;;
-esac
-`,
+  curl: CURL,
   spctl: '#!/bin/bash\necho "spctl $*" >> "$STUB_LOG"\nexit "${SPCTL_EXIT:-0}"\n',
   osascript: `#!/bin/bash
 if [ "$1" = "-l" ]; then
@@ -241,6 +244,7 @@ async function e2e(opts: { appsInHome?: boolean } = {}) {
   await writeFile(log, '')
   const env: Record<string, string> = {
     HOME: home, AITT_APP_DIR: apps, PATH: `${stubs}:/usr/bin:/bin:/usr/sbin:/sbin`, STUB_LOG: log, STUB_ASSETS: assets,
+    STUB_RELEASE: 'v0.1.0 AI-Task-Tracking-0.1.0-macos.zip', STUB_LIB: join(ROOT, 'scripts/lib.sh'),
     AITT_LSREGISTER: join(stubs, 'lsregister'), TMPDIR: tmp, LANG: 'en_US.UTF-8',
   }
   const install = async (args: string[], extra: Record<string, string> = {}) => {

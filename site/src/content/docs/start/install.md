@@ -10,7 +10,6 @@ sidebar:
 | | |
 |---|---|
 | macOS | 13 (Ventura) or later, Apple Silicon or Intel |
-| GitHub CLI | `gh`, signed in (`gh auth login`) with access to `altoption/ai-task-tracking`. The installer offers to install it with Homebrew. |
 | To build from source | Xcode Command Line Tools and Bun 1.4 or later. Only needed when no release is available, it fails verification, or with `--from-source`. The installer shows what's missing; it starts the Command Line Tools install and installs Bun from bun.sh (asking first unless `--yes`). The build includes these docs (their packages are downloaded too); if the docs fail to build, the installer warns and installs the app without them. |
 | Backup (optional) | `gh` signed in to the GitHub account that will own the private backup repo |
 | CI status (optional) | `gh` signed in with read access to the repos whose PRs your issues link. Without it, issues simply show no [CI status](/docs/use/daily-use/#ci-status-on-pull-requests). |
@@ -18,7 +17,7 @@ sidebar:
 ## One-line install
 
 ```sh
-gh api repos/altoption/ai-task-tracking/contents/install.sh --jq .content | base64 -d | bash
+curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
 ```
 
 The installer checks this Mac, shows what it will do and asks once. It installs the latest notarized release into
@@ -29,7 +28,7 @@ download or build leaves the installed app as it was.
 
 ## Options
 
-Options go after `bash -s --` when the script is piped, e.g. `… | base64 -d | bash -s -- --yes`:
+Options go after `bash -s --` when the script is piped, e.g. `… | bash -s -- --yes`:
 
 | Option | |
 |---|---|
@@ -53,7 +52,7 @@ Options go after `bash -s --` when the script is piped, e.g. `… | base64 -d | 
 From a clone of the repo, run the same installer:
 
 ```sh
-gh repo clone altoption/ai-task-tracking && cd ai-task-tracking
+git clone https://github.com/altoption/ai-task-tracking.git && cd ai-task-tracking
 ./install.sh
 ```
 

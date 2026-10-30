@@ -139,7 +139,7 @@ echo "  app $(lipo -archs "$APP/Contents/MacOS/AITaskTracking"), engine $(lipo -
 
 if [ "$PUBLISH" = 1 ]; then
   gh release create "$TAG" "$ZIP" "$ZIP.sha256" --repo "$AITT_REPO" --target "$COMMIT" --title "AI Task Tracking $VERSION" \
-    --notes "Install or upgrade: gh api repos/$AITT_REPO/contents/install.sh --jq .content | base64 -d | bash"
+    --notes "Install or upgrade: curl -fsSL https://raw.githubusercontent.com/$AITT_REPO/HEAD/install.sh | bash"
   echo "✓ published $TAG on $AITT_REPO"
 else
   echo "not published (--no-publish)"
