@@ -27,7 +27,8 @@ Build and test details for engineers working on AI Task Tracking. The workflow (
 | `tests/` | `bun test` suites, mirroring `src/` |
 
 ## Gates
-- `bun run check`: typecheck, UI build, `bun test`, `bash -n` + `shellcheck` on every shell script. CI runs it.
+- `bun run check`: typecheck, UI build, `bun test`, `bash -n` + `shellcheck` on every shell script. CI runs it with
+  `SKIP_PERF=1`: the 10k-issue perf test's time budgets only hold on a real Mac, so it runs locally only.
 - `bun run check:app`: Swift release build + `swift test` in `app/`. CI runs it.
 - One test file: `bun test tests/engine/store.test.ts`.
 
