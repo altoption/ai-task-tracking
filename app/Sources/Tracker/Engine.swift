@@ -41,6 +41,8 @@ struct Health {
     let rules: NoteRules?
     /// The "Show CI status" setting as the engine last heard it (`ci.setting`); nil from an engine without CI status.
     let ciSetting: Bool?
+    /// The theme the engine shows and its theme list (`theme`); nil from an engine without themes.
+    let theme: ThemeState?
 }
 
 /// One row of GET /api/needs-you.
@@ -140,6 +142,20 @@ struct EngineAPI {
         post("api/ci", body: ["enabled": on], timeout: 2) { _ in }
     }
 
+    /// POST /api/theme: the theme picked in Settings; the reply's status as a ThemeSync.Outcome (2xx confirmed, 400
+    /// refused, anything else or no reply: retried on the next poll).
+    func setTheme(_ id: String, _ completion: @escaping (ThemeSync.Outcome) -> Void) {
+        var req = URLRequest(url: base.appendingPathComponent("api/theme"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 2)
+        req.httpMethod = "POST"
+        req.setValue("1", forHTTPHeaderField: "X-Tracker")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["theme": id])
+        URLSession.shared.dataTask(with: req) { _, response, _ in
+            let outcome = ThemeSync.Outcome(status: (response as? HTTPURLResponse)?.statusCode)
+            DispatchQueue.main.async { completion(outcome) }
+        }.resume()
+    }
+
     /// GET /api/needs-you (light: id, title, why); without `stalled`, stalled-only rows are left out by the engine.
     func needsYou(stalled: Bool = true, _ completion: @escaping ([NeedsYouItem]?) -> Void) {
         let url = URL(string: StalledFilter.needsYouPath(showStalled: stalled), relativeTo: base) ?? base
@@ -169,7 +185,8 @@ struct EngineAPI {
                                     stalled: o["stalled"] as? [String] ?? [], stalledAll: o["stalledAll"] as? [String] ?? [],
                                     git: GitState(json: git),
                                     rules: (o["rules"] as? [String: Any]).map(NoteRules.init(json:)),
-                                    ciSetting: (o["ci"] as? [String: Any])?["setting"] as? Bool)))
+                                    ciSetting: (o["ci"] as? [String: Any])?["setting"] as? Bool,
+                                    theme: (o["theme"] as? [String: Any]).flatMap(ThemeState.init(json:)))))
         }
     }
 }

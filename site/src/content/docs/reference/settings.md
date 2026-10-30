@@ -24,6 +24,12 @@ stored in the app's UserDefaults domain under its key: `defaults read io.github.
 | Show stalled work in Needs you | on | `showStalledInNeedsYou` |
 | Show CI status | on | `showCIStatus` |
 
+## Appearance
+
+| Setting | Default | Key |
+|---|---|---|
+| Theme | Dark (also Light, Match macOS, Midnight, Paper, High contrast and your theme files; saved as `theme` in config.yml) | `theme` |
+
 ## Notifications
 
 | Setting | Default | Key |
