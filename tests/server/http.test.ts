@@ -71,6 +71,8 @@ describe('http api', () => {
         needsYouStatuses: ['Waiting', 'In Review'], needsYouLabels: ['Needs decision', 'Needs review'], doneStatuses: ['Done'],
         stalled: { idleHours: 0, windowDays: 7, reopens: 2, sessions: 3 },
       },
+      // For the app's window and Settings popup: the theme shown and each theme's base and background.
+      theme: { selected: 'dark', effective: 'dark', themes: expect.arrayContaining([{ id: 'dark', name: 'Dark', base: 'dark', bg: '#101012' }, { id: 'system', name: 'Match macOS', base: 'system' }]) },
     })
     const h: any = await (await fetch(`${base}/api/home`)).json()
     expect(body.needsYou).toBe(h.needsYou.length)

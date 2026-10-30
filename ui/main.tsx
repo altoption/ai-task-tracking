@@ -13,6 +13,7 @@ import { NewIssueDialog } from './views/NewIssue'
 import { Palette, type PaletteMode } from './views/Palette'
 import { ProjectPage } from './views/ProjectPage'
 import { Sidebar } from './views/Sidebar'
+import { applyCachedTheme, useThemeEffect } from './theme'
 
 function Placeholder({ title, note }: { title: string; note: string }) {
   return (
@@ -43,6 +44,12 @@ function Page({ route }: { route: Route }): ReactNode {
     case 'new': return null
     case 'notFound': return <Placeholder title="Not found" note={`Nothing at ${route.path}.`} />
   }
+}
+
+/** Applies the chosen theme; its own component so a snapshot re-renders only this. */
+function ThemeSync() {
+  useThemeEffect(useTracker().themes)
+  return null
 }
 
 function App() {
@@ -88,6 +95,7 @@ function App() {
   const closeNew = () => navigate(background.current.name === 'new' ? { name: 'home' } : background.current)
   return (
     <div className={`app${sidebar.collapsed ? ' collapsed' : ''}`}>
+      <ThemeSync />
       <Sidebar route={background.current} onSearch={() => setPalette('root')} collapsed={sidebar.collapsed} onToggle={toggleSidebar} />
       <main className="main">
         <Page route={background.current} />
@@ -98,6 +106,7 @@ function App() {
   )
 }
 
+applyCachedTheme()
 startLive()
 if (!location.hash) history.replaceState(history.state, '', href({ name: 'home' }))
 trackHistory()

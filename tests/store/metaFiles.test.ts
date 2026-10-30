@@ -145,13 +145,13 @@ describe('metaFiles', () => {
     await writeLabels(root, labels)
     expect(await readLabels(root)).toEqual(labels)
 
-    await Bun.write(join(root, 'config.yml'), 'port: 7477\ntheme: dark\nnextNumber: {Q: 1}\n')
+    await Bun.write(join(root, 'config.yml'), 'port: 7477\neditor: vim\nnextNumber: {Q: 1}\n')
     const c = await readConfig(root)
-    expect(c.extra).toEqual({ theme: 'dark' })
+    expect(c.extra).toEqual({ editor: 'vim' })
     c.nextNumber = { Q: 2 }
     await writeConfig(root, c)
     const c2 = await readConfig(root)
-    expect(c2.extra).toEqual({ theme: 'dark' })
+    expect(c2.extra).toEqual({ editor: 'vim' })
     expect(c2.nextNumber).toEqual({ Q: 2 })
   })
 

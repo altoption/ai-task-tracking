@@ -7,6 +7,7 @@ import type { Config, LabelDef, Milestone, Project, StatusDef, View } from '../m
 import { atomicWrite, GITIGNORE_LINES } from './atomic'
 import { DEFAULT_STALLED, normalizeStalled } from '../engine/stalled'
 import { DEFAULT_CI, normalizeCi } from '../engine/ci'
+import { DEFAULT_THEME } from '../engine/themes'
 
 export const DEFAULT_STATUSES: StatusDef[] = [
   { name: 'Backlog', type: 'backlog', color: '#bec2c8' },
@@ -27,6 +28,7 @@ export function defaultConfig(): Config {
     stalled: { ...DEFAULT_STALLED },
     ci: { ...DEFAULT_CI },
     nextNumber: {},
+    theme: DEFAULT_THEME,
   }
 }
 
@@ -184,7 +186,7 @@ async function patchYamlFile(path: string, obj: Record<string, unknown>, default
 
 // ---------- config ----------
 
-const CONFIG_KEYS = ['port', 'statuses', 'workspaces', 'needsYou', 'stalled', 'ci', 'nextNumber']
+const CONFIG_KEYS = ['port', 'statuses', 'workspaces', 'needsYou', 'stalled', 'ci', 'nextNumber', 'theme']
 
 export async function readConfig(root: string): Promise<Config> {
   const d = defaultConfig()
@@ -198,6 +200,7 @@ export async function readConfig(root: string): Promise<Config> {
     stalled: normalizeStalled(raw.stalled),
     ci: normalizeCi(raw.ci),
     nextNumber: raw.nextNumber ?? d.nextNumber,
+    theme: typeof raw.theme === 'string' && raw.theme.trim() ? raw.theme.trim() : d.theme,
     ...(extra ? { extra } : {}),
   }
 }

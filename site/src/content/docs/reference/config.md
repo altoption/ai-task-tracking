@@ -22,6 +22,7 @@ The data folder's `config.yml`. A missing key takes its default; unknown top-lev
 | `stalled` | {"idleHours":24,"windowDays":7,"reopens":2,"sessions":3} | When open work counts as stalled and joins Needs you. `idleHours`: In Progress with no edit or comment for this long. `windowDays`, `reopens`, `sessions`: in that many days, reopened (back to In Progress from Done, Canceled, Duplicate, Todo or Backlog; never from Waiting) at least `reopens` times, or more than `sessions` agent sessions since it was last Done. 0 turns a rule off. |
 | `ci` | {"enabled":true,"refreshMinutes":2} | CI status on linked GitHub PRs, fetched in the background with your `gh`. `enabled`: false turns it off (no `gh` calls, no badges, nothing in Needs you). `refreshMinutes`: how often an open PR is re-checked; merged and closed PRs are checked until their checks settle, then never again. |
 | `nextNumber` | {} | Project key → the next issue number. Maintained by the engine. |
+| `theme` | "dark" | The UI theme, the same in the browser and the app window: `dark`, `light`, `system` (Match macOS), `midnight`, `paper`, `high-contrast`, or the id of a theme file in `themes/` (`themes/ocean.yml` is `ocean`). An unknown id shows Dark. Set it from the app's Settings or ⌘K ▸ Theme; see the Themes guide. |
 
 ## Default statuses
 
@@ -45,4 +46,5 @@ needsYou: {"statuses":["Waiting","In Review"],"labels":["Needs decision","Needs 
 stalled: {"idleHours":24,"windowDays":7,"reopens":2,"sessions":3}
 ci: {"enabled":true,"refreshMinutes":2}
 nextNumber: {}
+theme: "dark"
 ```

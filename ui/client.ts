@@ -10,11 +10,14 @@ import { useSyncExternalStore } from 'react'
 import type { Actor, CiBadge, CiStatus, Config, IssueSummary, LabelDef, Project, View } from '../src/model'
 import type { FeedEvent } from '../src/engine/eventlog'
 import type { AttemptOut } from '../src/engine/attempts'
+import type { ThemeOut } from '../src/engine/themes'
 
 export type { FeedEvent }
 /** `favorite: true` in a view's yml (unknown keys pass through the engine's view loader). */
 export type ViewDef = View & { favorite?: boolean }
 export interface FileError { path: string; message: string }
+/** The theme list and the chosen id (`theme` in config.yml); src/server/http.ts `themesOut`. */
+export interface ThemesInfo { selected: string; effective?: string; list: ThemeOut[] }
 
 /** Wire form of the engine's ChangeEvent (src/server/http.ts `wireEvent`). */
 export type WireEvent =
@@ -27,6 +30,7 @@ export type WireEvent =
 
 export interface Snapshot {
   issues: IssueSummary[]; config: Config | null; labels: LabelDef[]; projects: Project[]; views: ViewDef[]; errors: FileError[]
+  themes?: ThemesInfo
 }
 
 export interface TrackerState {
@@ -36,6 +40,8 @@ export interface TrackerState {
   projects: Project[]
   views: ViewDef[]
   errors: FileError[]
+  /** Null until a snapshot (from an engine that has themes) arrives. */
+  themes: ThemesInfo | null
   /** Newest first. */
   feed: FeedEvent[]
   /** A snapshot has been applied. */
@@ -49,13 +55,13 @@ export interface TrackerState {
 export const FEED_LIMIT = 200
 
 export function emptyState(): TrackerState {
-  return { issues: new Map(), config: null, labels: [], projects: [], views: [], errors: [], feed: [], ready: false, needsSnapshot: false, connected: false }
+  return { issues: new Map(), config: null, labels: [], projects: [], views: [], errors: [], themes: null, feed: [], ready: false, needsSnapshot: false, connected: false }
 }
 
 export function fromSnapshot(s: Snapshot, feed: FeedEvent[] = []): TrackerState {
   return {
     issues: new Map(s.issues.map((i) => [i.id, i])),
-    config: s.config, labels: s.labels, projects: s.projects, views: s.views, errors: s.errors,
+    config: s.config, labels: s.labels, projects: s.projects, views: s.views, errors: s.errors, themes: s.themes ?? null,
     feed: feed.slice(0, FEED_LIMIT), ready: true, needsSnapshot: false, connected: false,
   }
 }
@@ -191,6 +197,14 @@ export async function callTool<T = unknown>(name: string, args: Record<string, u
   const body = (await r.json().catch(() => ({}))) as T & { error?: string }
   if (!r.ok) throw new Error(body.error ?? `${name} failed (${r.status})`)
   return body
+}
+
+/** Choose the UI theme (POST /api/theme, the owner's). Every open UI follows through the `meta` event. */
+export async function setTheme(id: string): Promise<void> {
+  const r = await fetch('/api/theme', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify({ theme: id }),
+  })
+  if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `setting the theme failed (${r.status})`)
 }
 
 export interface ActivityEntry { at: string; actor: string; workspace?: string; branch?: string; body: string }

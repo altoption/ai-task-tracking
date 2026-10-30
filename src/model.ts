@@ -63,5 +63,7 @@ export interface StalledRules { idleHours: number; windowDays: number; reopens: 
 export interface Config {
   port: number; statuses: StatusDef[]; workspaces: Record<string, string> // workspace -> project slug
   needsYou: { statuses: string[]; labels: string[] }; stalled: StalledRules; ci: CiRules; nextNumber: Record<string, number>
+  /** The UI theme (src/engine/themes.ts): a built-in id (dark, light, system, …) or a themes/<id>.yml file. */
+  theme: string
   extra?: Record<string, unknown> // unknown top-level keys, preserved
 }
