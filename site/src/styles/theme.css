@@ -1,0 +1,20 @@
+/*
+ * Accent: the app icon's mint (#00FFAE -> #009E73, app/Resources/source/app-icon.svg).
+ * Starlight's own styles live in cascade layers, so these unlayered rules win.
+ * Contrast (WCAG): dark text accent on the page 14.7:1, dark buttons 9.8:1;
+ * light text accent on white 5.4:1, white on light buttons 5.4:1.
+ */
+
+/* Dark mode (Starlight's default :root) */
+:root {
+  --sl-color-accent-low: #00402f;
+  --sl-color-accent: #00c98a;
+  --sl-color-accent-high: #8cffd8;
+}
+
+/* Light mode: the bright mint is too light on white, so text uses a deeper green. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #cff7ea;
+  --sl-color-accent: #007a59;
+  --sl-color-accent-high: #004a36;
+}

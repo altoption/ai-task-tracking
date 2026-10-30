@@ -1,0 +1,19 @@
+port: 7477
+statuses:
+  - {name: Backlog, type: backlog, color: "#bec2c8"}
+  - {name: Todo, type: unstarted, color: "#e2e2e2"}
+  - {name: In Progress, type: started, color: "#f2c94c"}
+  - {name: Waiting, type: started, color: "#f2994a"}
+  - {name: Done, type: completed, color: "#5e6ad2"}
+  - {name: Canceled, type: canceled, color: "#95a2b3"}
+  - {name: Duplicate, type: duplicate, color: "#95a2b3"}
+workspaces:
+  web-app: support
+needsYou:
+  statuses: [Waiting, In Review]
+  labels: [Needs decision, Needs review]
+# The fixture's dates are fixed, so "idle" would depend on today's date; stalled tests turn it on.
+stalled:
+  idleHours: 0
+nextNumber:
+  Q: 7

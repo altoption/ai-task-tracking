@@ -1,0 +1,831 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`tool list snapshot: changes to the tool list are reviewed deliberately (bun test -u to accept) 1`] = `
+[
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "What to work on next",
+    },
+    "description": "What to work on, in buckets: needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace's. Use it at the start of a session when no issue is named.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object",
+    },
+    "name": "whats_next",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get issue",
+    },
+    "description": "One issue in full (In Progress ones lead with handoff: where the last session stopped): description, links (PRs with ci: state, checks, failing), children, blockers, ancestors, the last 30 activity entries (list_comments has all), attempts (agent sessions so far) and stalled (why) if it stalled. For an epic's whole subtree use get_tree. Example: get_issue({ id: "ENG-27" })",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "Issue id, e.g. "ENG-27".",
+          "type": "string",
+        },
+      },
+      "required": [
+        "id",
+      ],
+      "type": "object",
+    },
+    "name": "get_issue",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get issue tree",
+    },
+    "description": "An issue and all its descendants with status, blockers and done/total progress; use it to check an epic. Example: get_tree({ id: "ENG-10" })",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "Issue id, e.g. "ENG-27".",
+          "type": "string",
+        },
+      },
+      "required": [
+        "id",
+      ],
+      "type": "object",
+    },
+    "name": "get_tree",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Search issues",
+    },
+    "description": "Find issues by words in title, description and comments, closed ones included. Every word must match (prefixes count), so use 1-3 distinctive words. Search before creating an issue so you don't duplicate one. Example: search({ query: "login timeout" })",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Max results, 1-250 (default 20).",
+          "maximum": 250,
+          "minimum": 1,
+          "type": "integer",
+        },
+        "query": {
+          "description": "Words to find.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+    "name": "search",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List issues",
+    },
+    "description": "Issues matching filters, most recently updated first. Open issues only unless state names a closed status or includeArchived is true. To find by words use search. Example: list_issues({ project: "Website", state: "In Progress" })",
+    "inputSchema": {
+      "properties": {
+        "cursor": {
+          "description": "nextCursor from the previous page.",
+          "type": "string",
+        },
+        "includeArchived": {
+          "description": "Include Done, Canceled and Duplicate issues.",
+          "type": "boolean",
+        },
+        "label": {
+          "description": "Label name; bare names match group labels.",
+          "type": "string",
+        },
+        "limit": {
+          "description": "Page size, 1-250 (default 50).",
+          "maximum": 250,
+          "minimum": 1,
+          "type": "integer",
+        },
+        "parentId": {
+          "description": "Only children of this issue id.",
+          "type": "string",
+        },
+        "project": {
+          "description": "Project name or slug.",
+          "type": "string",
+        },
+        "query": {
+          "description": "Words to match in title, description and comments.",
+          "type": "string",
+        },
+        "state": {
+          "description": "Status name, case-insensitive.",
+          "type": "string",
+        },
+        "updatedAt": {
+          "description": "Updated after this ISO date/time, or within a duration like "-P7D".",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "list_issues",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List comments",
+    },
+    "description": "All of an issue's comments and activity, oldest first (get_issue shows only the last 30). Example: list_comments({ issueId: "ENG-27" })",
+    "inputSchema": {
+      "properties": {
+        "issueId": {
+          "description": "Issue id, e.g. "ENG-27".",
+          "type": "string",
+        },
+      },
+      "required": [
+        "issueId",
+      ],
+      "type": "object",
+    },
+    "name": "list_comments",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Save issue",
+    },
+    "description": "Create or update one issue. Create: title and labels (project defaults to your repo's). Update: id and only the fields to change. For several issues at once (an epic and its steps) use save_issues. Example: save_issue({ id: "ENG-27", state: "Done", comment: "Shipped in PR #12" })",
+    "inputSchema": {
+      "properties": {
+        "addBlockedBy": {
+          "description": "Blocker ids to add.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "addLabels": {
+          "description": "Labels to add.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "addRelatedTo": {
+          "description": "Related ids to add.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "baseDescription": {
+          "description": "The text you edited from; the save is refused if it changed since.",
+          "type": "string",
+        },
+        "blockedBy": {
+          "description": "Ids of blocking issues; replaces the list ([] clears). In save_issues also "ref:<ref>".",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "comment": {
+          "description": "Comment saved with the change. Required for Done, Canceled, Duplicate, Waiting: what shipped or what it waits on. GitHub PR/commit URLs in it become issue links.",
+          "type": "string",
+        },
+        "description": {
+          "description": "Markdown; replaces the whole description.",
+          "type": "string",
+        },
+        "dueDate": {
+          "description": "YYYY-MM-DD; null clears it.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "id": {
+          "description": "Issue to update, e.g. "ENG-27"; omit to create.",
+          "type": "string",
+        },
+        "labels": {
+          "description": "Replaces all labels; creating needs one. Bare names match group labels ("Web" = "Scope/Web"); new names are created.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "links": {
+          "description": "Links to add: [{ url, title }].",
+          "items": {
+            "properties": {
+              "title": {
+                "description": "Text.",
+                "type": "string",
+              },
+              "url": {
+                "description": "URL.",
+                "type": "string",
+              },
+            },
+            "required": [
+              "url",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "milestone": {
+          "description": "Milestone name in the project; null clears it.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "type": "string",
+            },
+            {
+              "type": "null",
+            },
+          ],
+          "description": "Parent issue id; null removes it. In save_issues also "ref:<ref>".",
+        },
+        "priority": {
+          "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low.",
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer",
+        },
+        "project": {
+          "description": "Project name or slug; on create, defaults to your repo's project.",
+          "type": "string",
+        },
+        "relatedTo": {
+          "description": "Related issue ids; replaces the list (set on both issues).",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "removeBlockedBy": {
+          "description": "Blocker ids to remove.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "removeLabels": {
+          "description": "Labels to remove.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "removeLinks": {
+          "description": "Link URLs to remove.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "removeRelatedTo": {
+          "description": "Related ids to remove.",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "state": {
+          "description": "Status name, e.g. Todo, In Progress, Waiting, Done, Canceled (see list_issue_statuses). Done, Canceled, Duplicate and Waiting need comment.",
+          "type": "string",
+        },
+        "title": {
+          "description": "Required to create.",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "save_issue",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Save issues (batch)",
+    },
+    "description": "Create or update several issues in one call; every item is checked before any is written. Use it for an epic and its steps. Example: save_issues({ issues: [{ ref: "epic", title: "Epic: import", labels: ["Feature"] }, { ref: "s1", parentId: "ref:epic", title: "Step 1: parse", labels: ["Task"] }, { parentId: "ref:epic", title: "Step 2: load", labels: ["Task"], blockedBy: ["ref:s1"] }] })",
+    "inputSchema": {
+      "properties": {
+        "issues": {
+          "description": "Items in order. Each takes the save_issue arguments (same names and meanings) plus ref.",
+          "items": {
+            "properties": {
+              "addBlockedBy": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "addLabels": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "addRelatedTo": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "baseDescription": {
+                "type": "string",
+              },
+              "blockedBy": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "comment": {
+                "type": "string",
+              },
+              "description": {
+                "type": "string",
+              },
+              "dueDate": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "id": {
+                "type": "string",
+              },
+              "labels": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "links": {
+                "items": {
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                    },
+                    "url": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "url",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "milestone": {
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "parentId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                  },
+                  {
+                    "type": "null",
+                  },
+                ],
+              },
+              "priority": {
+                "maximum": 4,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "project": {
+                "type": "string",
+              },
+              "ref": {
+                "description": "Name for this item; later items refer to it as "ref:<name>" in parentId or blockedBy.",
+                "type": "string",
+              },
+              "relatedTo": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "removeBlockedBy": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "removeLabels": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "removeLinks": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "removeRelatedTo": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "state": {
+                "type": "string",
+              },
+              "title": {
+                "type": "string",
+              },
+            },
+            "type": "object",
+          },
+          "minItems": 1,
+          "type": "array",
+        },
+      },
+      "required": [
+        "issues",
+      ],
+      "type": "object",
+    },
+    "name": "save_issues",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Add comment",
+    },
+    "description": "Add a comment to an issue: findings, decisions, PR links (GitHub PR/commit URLs are also added to its links). When you also change the status, pass comment to save_issue instead. Example: save_comment({ issueId: "ENG-27", body: "Root cause: stale cache." })",
+    "inputSchema": {
+      "properties": {
+        "body": {
+          "description": "Markdown text.",
+          "type": "string",
+        },
+        "issueId": {
+          "description": "Issue id, e.g. "ENG-27".",
+          "type": "string",
+        },
+      },
+      "required": [
+        "issueId",
+        "body",
+      ],
+      "type": "object",
+    },
+    "name": "save_comment",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Tick checklist item",
+    },
+    "description": "Tick or untick one "- [ ]" checklist item in an issue description without rewriting it. Example: toggle_task({ id: "ENG-42", index: 0, line: "- [ ] Write the migration" })",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "Issue id, e.g. "ENG-27".",
+          "type": "string",
+        },
+        "index": {
+          "description": "Position among the description's checklist lines, from 0 (code blocks skipped).",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer",
+        },
+        "line": {
+          "description": "The item's current line; refused if it no longer matches.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "id",
+        "index",
+        "line",
+      ],
+      "type": "object",
+    },
+    "name": "toggle_task",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "title": "Put issue in Now",
+    },
+    "description": "Put an issue in the user's Now slot. Agents may only set "now" (moving to In Progress does it too); Next and Later belong to the user. Example: set_plan({ id: "ENG-27", plan: "now" })",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "Issue id, e.g. "ENG-27".",
+          "type": "string",
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "enum": [
+                "now",
+                "next",
+                "later",
+              ],
+              "type": "string",
+            },
+            {
+              "type": "null",
+            },
+          ],
+          "description": ""now". (next, later and null are for the user.)",
+        },
+      },
+      "required": [
+        "id",
+        "plan",
+      ],
+      "type": "object",
+    },
+    "name": "set_plan",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List projects",
+    },
+    "description": "All projects with their issue-id key, status and open/total issue counts.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object",
+    },
+    "name": "list_projects",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get project",
+    },
+    "description": "One project: description, milestones with progress, document ids and mapped repos. Example: get_project({ query: "Website" })",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Project name or slug.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+    "name": "get_project",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Save project",
+    },
+    "description": "Create a project (name), or update one (id). Its issue-id key comes from the name at creation and never changes. Example: save_project({ name: "Website", description: "Marketing site" })",
+    "inputSchema": {
+      "properties": {
+        "baseDescription": {
+          "description": "The text you edited from; the save is refused if it changed since.",
+          "type": "string",
+        },
+        "description": {
+          "description": "Markdown; replaces the current description.",
+          "type": "string",
+        },
+        "id": {
+          "description": "Slug of the project to update; omit to create.",
+          "type": "string",
+        },
+        "name": {
+          "description": "Required to create; on update it renames.",
+          "type": "string",
+        },
+        "state": {
+          "description": "Project status, e.g. Planned, Active, Completed.",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "save_project",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List milestones",
+    },
+    "description": "A project's milestones with target dates and progress. Example: list_milestones({ project: "Website" })",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "description": "Project name or slug.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "project",
+      ],
+      "type": "object",
+    },
+    "name": "list_milestones",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "title": "Save milestone",
+    },
+    "description": "Create a milestone in a project, or update the one with that name. Only for a release or date the user named; assign issues with save_issue's milestone. Example: save_milestone({ project: "Website", name: "Beta", targetDate: "2027-02-01" })",
+    "inputSchema": {
+      "properties": {
+        "description": {
+          "description": "Markdown.",
+          "type": "string",
+        },
+        "name": {
+          "description": "Milestone name; matches an existing one case-insensitively.",
+          "type": "string",
+        },
+        "project": {
+          "description": "Project name or slug.",
+          "type": "string",
+        },
+        "targetDate": {
+          "description": "YYYY-MM-DD.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "project",
+        "name",
+      ],
+      "type": "object",
+    },
+    "name": "save_milestone",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Get document",
+    },
+    "description": "A project document by id or exact title (get_project lists a project's documents). Example: get_document({ id: "website/architecture" })",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "Document id "<project>/<doc>", or its title.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "id",
+      ],
+      "type": "object",
+    },
+    "name": "get_document",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "title": "Save document",
+    },
+    "description": "Create a markdown document in a project, or replace one by id. Example: save_document({ project: "Website", title: "Architecture", content: "# Overview" })",
+    "inputSchema": {
+      "properties": {
+        "baseContent": {
+          "description": "The text you edited from; the save is refused if it changed since.",
+          "type": "string",
+        },
+        "content": {
+          "description": "Markdown; replaces the whole document.",
+          "type": "string",
+        },
+        "id": {
+          "description": "Document id "<project>/<doc>" to replace; omit to create.",
+          "type": "string",
+        },
+        "project": {
+          "description": "Project name or slug.",
+          "type": "string",
+        },
+        "title": {
+          "description": "Document title.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "project",
+        "title",
+        "content",
+      ],
+      "type": "object",
+    },
+    "name": "save_document",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List statuses",
+    },
+    "description": "The statuses save_issue's state accepts, with their type (backlog, unstarted, started, completed, canceled, duplicate).",
+    "inputSchema": {
+      "properties": {},
+      "type": "object",
+    },
+    "name": "list_issue_statuses",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List labels",
+    },
+    "description": "All labels; grouped ones have full names like "Scope/Web".",
+    "inputSchema": {
+      "properties": {},
+      "type": "object",
+    },
+    "name": "list_issue_labels",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "title": "Save label",
+    },
+    "description": "Create a label in a group, or change a label's color. save_issue creates plain labels on the fly, so use this only for groups or colors. Example: save_issue_label({ name: "Web", parent: "Scope" })",
+    "inputSchema": {
+      "properties": {
+        "color": {
+          "description": "Hex color, e.g. "#4ea7fc".",
+          "type": "string",
+        },
+        "name": {
+          "description": "Label name, or the full "Group/Name".",
+          "type": "string",
+        },
+        "parent": {
+          "description": "Group name; the label becomes "<parent>/<name>".",
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+      ],
+      "type": "object",
+    },
+    "name": "save_issue_label",
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List ID prefixes (teams)",
+    },
+    "description": "Issue-id keys (e.g. "ENG") and the projects using each. Projects are the main unit; prefer list_projects.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object",
+    },
+    "name": "list_teams",
+  },
+]
+`;

@@ -1,0 +1,12 @@
+labels:
+  - {name: Bug, color: "#eb5757"}
+  - {name: Feature, color: "#bb87fc"}
+  - {name: Improvement, color: "#4ea7fc"}
+  - {name: Task, color: "#95a2b3"}
+  - {name: Needs decision, color: "#f2994a"}
+  - {name: Blocked, color: "#eb5757"}
+  - {name: Scope/App, color: "#26b5ce"}
+  - {name: Scope/Support, color: "#4cb782"}
+  - {name: Scope/Platform, color: "#f2c94c"}
+  - {name: Env/Prod, color: "#eb5757"}
+  - {name: Env/Staging, color: "#f2994a"}

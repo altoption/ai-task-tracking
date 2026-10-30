@@ -1,0 +1,43 @@
+# Deterministic gates for every push to main and every pull request. No secrets: signing and notarizing stay
+# with the maintainer (scripts/release.sh). The job names (check, check-app) are the required status checks in
+# docs/setup/repo-settings.md; rename them there too.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4 # keep in step with the Bun the maintainers use (bun --version)
+      - name: Install shellcheck
+        run: command -v shellcheck || brew install shellcheck
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+
+  check-app:
+    name: check-app
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: swift --version
+      - run: bun run check:app # no bun install: this script needs only Swift

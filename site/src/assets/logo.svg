@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="1024" height="1024" viewBox="0 0 1024 1024">
+<title>AI Task Tracking — Flow Check</title>
+<defs>
+<linearGradient id="mint" x1="0" y1="0" x2="0.85" y2="1"><stop stop-color="#00FFAE"/><stop offset="1" stop-color="#009E73"/></linearGradient>
+<linearGradient id="inner-highlight" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".3"/><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#006B50" stop-opacity=".12"/></linearGradient>
+<clipPath id="body-clip"><path d="M 512 100 C 690 100 776 100 850 174 C 924 248 924 334 924 512 C 924 690 924 776 850 850 C 776 924 690 924 512 924 C 334 924 248 924 174 850 C 100 776 100 690 100 512 C 100 334 100 248 174 174 C 248 100 334 100 512 100 Z"/></clipPath>
+</defs>
+<g id="background" inkscape:groupmode="layer" inkscape:label="Background">
+<path d="M 512 100 C 690 100 776 100 850 174 C 924 248 924 334 924 512 C 924 690 924 776 850 850 C 776 924 690 924 512 924 C 334 924 248 924 174 850 C 100 776 100 690 100 512 C 100 334 100 248 174 174 C 248 100 334 100 512 100 Z" fill="url(#mint)"/>
+<path d="M 512 100 C 690 100 776 100 850 174 C 924 248 924 334 924 512 C 924 690 924 776 850 850 C 776 924 690 924 512 924 C 334 924 248 924 174 850 C 100 776 100 690 100 512 C 100 334 100 248 174 174 C 248 100 334 100 512 100 Z" fill="none" stroke="url(#inner-highlight)" stroke-width="6" clip-path="url(#body-clip)"/>
+</g>
+<g id="foreground" inkscape:groupmode="layer" inkscape:label="Flow check" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round" stroke-linejoin="round">
+<path id="step-one" d="M 290 650 V 566"/>
+<path id="step-two" d="M 429 650 V 468"/>
+<path id="completion" d="M 558 570 L 628 644 L 755 348"/>
+</g></svg>
