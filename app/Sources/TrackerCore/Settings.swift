@@ -17,10 +17,15 @@ public enum SettingKey {
     public static let openWindowHotKeyPreset = "openWindowHotKeyPreset"
     public static let quickCaptureHotKey = "quickCaptureHotKey"
     public static let quickCaptureHotKeyPreset = "quickCaptureHotKeyPreset"
+    // Appearance: the theme id; the engine owns it (`theme` in config.yml), the app mirrors it (ThemeSetting)
+    public static let theme = "theme"
     // Backup
     public static let backupBeforeQuit = "backupBeforeQuit"
     // Quick capture state (not shown in Settings)
     public static let lastCaptureProject = "lastCaptureProject"
+    // Theme sync state (not shown in Settings): a choice made in Settings not yet sent, and the engine's theme list
+    public static let themePending = "themePending"
+    public static let themeList = "themeList"
 }
 
 public enum SettingDefaults {
@@ -37,6 +42,7 @@ public enum SettingDefaults {
         SettingKey.openWindowHotKeyPreset: "optCmdI",
         SettingKey.quickCaptureHotKey: true,
         SettingKey.quickCaptureHotKeyPreset: "optCmdN",
+        SettingKey.theme: "dark",
         SettingKey.backupBeforeQuit: true,
     ]
 

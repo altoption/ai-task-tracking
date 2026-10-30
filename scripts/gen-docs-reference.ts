@@ -17,6 +17,7 @@ import { SETUP_USAGE } from '../src/setup/setup'
 import { UNINSTALL_USAGE } from '../src/setup/uninstall'
 import { agentTools } from '../src/mcp/surface'
 import { defaultConfig } from '../src/store/metaFiles'
+import { builtinThemes } from '../src/engine/themes'
 
 const ROOT = join(import.meta.dir, '..')
 export const OUT_DIR = join(ROOT, 'site', 'src', 'content', 'docs', 'reference')
@@ -323,7 +324,7 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
   const rows: SettingRow[] = []
   const labelled = new Set<string>()
   let section = ''
-  const token = /section\(stack, "([^"]+)"\)|addArrangedSubview\(loginCheck\)|(?:check\(|\()SettingKey\.(\w+), "([^"]+)"\)|popup\(SettingKey\.(\w+), HotKeyPreset\.(\w+)\)/g
+  const token = /section\(stack, "([^"]+)"\)|addArrangedSubview\(loginCheck\)|(?:check\(|\()SettingKey\.(\w+), "([^"]+)"\)|popup\(SettingKey\.(\w+), HotKeyPreset\.(\w+)\)|themePopup\(SettingKey\.(\w+), "([^"]+)"\)/g
   let lastToggle = ''
   for (const m of init.matchAll(token)) {
     if (m[1]) { section = m[1]; continue }
@@ -352,6 +353,18 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
       if (!chosen) throw new Error(`${SETTINGS_SWIFT}: SettingKey.${name} default "${d}" isn't a HotKeyPreset.${m[5]} id`)
       const others = list.filter((p) => p !== chosen).map((p) => p.label)
       rows.push({ section, label: `${lastToggle}: shortcut`, key, def: `${chosen.label} (also ${others.join(', ')})` })
+      labelled.add(name)
+      continue
+    }
+    if (m[6]) {
+      // The Theme popup lists the engine's themes; the choice is `theme` in config.yml, mirrored in this key.
+      const name = m[6], key = keys.get(name)
+      if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
+      const d = /^"([^"]+)"$/.exec(defaults.get(name) ?? '')?.[1]
+      const t = builtinThemes().find((x) => x.id === d)
+      if (!t) throw new Error(`${SETTINGS_SWIFT}: SettingKey.${name} default "${d}" isn't a built-in theme`)
+      const others = builtinThemes().filter((x) => x.id !== t.id).map((x) => x.name)
+      rows.push({ section, label: m[7]!, key, def: `${t.name} (also ${others.join(', ')} and your theme files; saved as \`theme\` in config.yml)` })
       labelled.add(name)
     }
   }

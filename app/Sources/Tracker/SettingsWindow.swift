@@ -9,6 +9,11 @@ final class SettingsWindow: NSWindow {
     private let defaults = UserDefaults.standard
     private var checks: [String: NSButton] = [:]
     private var popups: [String: (NSPopUpButton, [HotKeyPreset])] = [:]
+    /// The Theme popup: the engine's themes (UserDefaults `themeList`), each item carrying its id. It follows changes
+    /// while the window is open (a theme file added, ⌘K in the browser); `themeShown` is what it was built from.
+    private let themeMenu = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var themeShown: ([ThemeEntry], String?)?
+    private var defaultsObserver: NSObjectProtocol?
     private let loginCheck = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
     private var perKindNotifications: [NSButton] = []
 
@@ -37,6 +42,11 @@ final class SettingsWindow: NSWindow {
         stack.addArrangedSubview(note("Checks of linked GitHub PRs, fetched in the background with your gh. "
             + "When off, the engine stops running gh: no badges, and failing checks don't join Needs you."))
 
+        section(stack, "Appearance")
+        stack.addArrangedSubview(themePopup(SettingKey.theme, "Theme"))
+        stack.addArrangedSubview(note("The same theme as the browser UI (⌘K ▸ Theme), saved as theme in config.yml. "
+            + "Add your own as themes/<name>.yml in the data folder."))
+
         section(stack, "Notifications")
         stack.addArrangedSubview(check(SettingKey.notifications, "Notify me about agent activity"))
         for (key, title) in [(SettingKey.notifyNeedsYou, "An agent needs me (Waiting, Needs decision/review, stalled)"),
@@ -59,6 +69,9 @@ final class SettingsWindow: NSWindow {
         stack.addArrangedSubview(note("When off, quitting still commits your changes; it just doesn't wait for the push."))
 
         contentView = stack
+        defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshThemeMenu() }
+        }
         setContentSize(stack.fittingSize)
         center()
     }
@@ -74,9 +87,25 @@ final class SettingsWindow: NSWindow {
         for (key, (p, presets)) in popups {
             p.selectItem(at: presets.firstIndex { $0.id == defaults.string(forKey: key) } ?? 0)
         }
+        refreshThemeMenu()
         loginCheck.state = SMAppService.mainApp.status == .enabled ? .on : .off
         let notificationsOn = defaults.bool(forKey: SettingKey.notifications)
         perKindNotifications.forEach { $0.isEnabled = notificationsOn }
+    }
+
+    /// Rebuild the Theme popup when the list or the chosen theme changed. Items are built one by one (addItems(withTitles:)
+    /// drops repeated titles) and carry their theme id.
+    private func refreshThemeMenu() {
+        let themes = ThemeSetting.storedList(defaults), chosen = defaults.string(forKey: SettingKey.theme)
+        if let shown = themeShown, shown.0 == themes, shown.1 == chosen { return }
+        themeShown = (themes, chosen)
+        themeMenu.removeAllItems()
+        for t in themes {
+            let item = NSMenuItem(title: t.name, action: nil, keyEquivalent: "")
+            item.representedObject = t.id
+            themeMenu.menu?.addItem(item)
+        }
+        themeMenu.selectItem(at: themes.firstIndex { $0.id == chosen } ?? 0)
     }
 
     // MARK: building blocks
@@ -103,6 +132,13 @@ final class SettingsWindow: NSWindow {
         p.action = #selector(picked(_:))
         popups[key] = (p, presets)
         return p
+    }
+
+    private func themePopup(_ key: String, _ title: String) -> NSStackView {
+        themeMenu.identifier = NSUserInterfaceItemIdentifier(key)
+        themeMenu.target = self
+        themeMenu.action = #selector(pickedTheme(_:))
+        return row(NSTextField(labelWithString: "\(title):"), themeMenu)
     }
 
     private func row(_ views: NSView...) -> NSStackView {
@@ -138,6 +174,12 @@ final class SettingsWindow: NSWindow {
         guard let key = sender.identifier?.rawValue, let (_, presets) = popups[key],
               presets.indices.contains(sender.indexOfSelectedItem) else { return }
         defaults.set(presets[sender.indexOfSelectedItem].id, forKey: key)
+    }
+
+    /// The app sends a pending choice to the engine straight away (AppDelegate.applySettings), or on the next poll.
+    @objc private func pickedTheme(_ sender: NSPopUpButton) {
+        guard let id = sender.selectedItem?.representedObject as? String else { return }
+        ThemeSetting.pick(id, defaults: defaults)
     }
 
     @objc private func toggleLogin(_ sender: NSButton) {

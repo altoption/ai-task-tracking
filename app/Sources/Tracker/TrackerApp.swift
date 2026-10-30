@@ -38,6 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var git = GitState()
     private var notifier: Notifier?
     private var settings: SettingsWindow?
+    /// The Theme setting's sync with the engine (TrackerCore.ThemeSync); set up before the first applySettings.
+    private var themeSync: ThemeSync!
     private var capture: QuickCapturePanel?
     /// Set while the data folder waits for `aitt setup` (the engine isn't started until it finishes).
     private var firstRun: FirstRunWindow?
@@ -65,6 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = Self.mainMenu()
         engine = EngineSupervisor(config: EngineConfig.load())
         engine.onChange = { [weak self] in self?.render() }
+        let api = engine.api
+        themeSync = ThemeSync(defaults: .standard) { id, done in api.setTheme(id, done) }
         notifier = Notifier(api: engine.api) { [weak self] route in self?.showWindow(route: route) }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -214,9 +218,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: settings
 
-    /// Re-applied on every UserDefaults change (cheap and idempotent): hotkeys, notifications.
+    /// The window's appearance and background follow the theme (no light flash in a dark theme, and the reverse).
+    private func applyThemeLook() {
+        window?.apply(currentThemeLook)
+    }
+
+    private var currentThemeLook: WindowLook {
+        let d = UserDefaults.standard
+        return ThemeSetting.look(selected: d.string(forKey: SettingKey.theme) ?? "dark", themes: ThemeSetting.storedList(d))
+    }
+
+    /// Re-applied on every UserDefaults change (cheap and idempotent): hotkeys, notifications, the theme.
     private func applySettings() {
         let d = UserDefaults.standard
+        themeSync.pushIfPending() // a theme picked in Settings goes to the engine straight away
+        applyThemeLook()
         // Dock icon (and app switcher) or menu bar only; the Info.plist starts as LSUIElement so login launches with
         // the setting off never flash a Dock icon.
         let policy: NSApplication.ActivationPolicy = d.bool(forKey: SettingKey.showInDock) ? .regular : .accessory
@@ -258,6 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: polling
 
     private func refresh() {
+        let probeNumber = themeSync.beginProbe()
         engine.api.probe(home: engine.config.home) { [weak self] probe in
             guard let self else { return }
             var h: Health?
@@ -270,6 +287,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let rules = h?.rules { self.notifier?.rules = rules }
             let showCI = UserDefaults.standard.bool(forKey: SettingKey.showCIStatus)
             if CIStatusSetting.needsSync(engine: h?.ciSetting, wanted: showCI) { self.engine.api.setCIStatus(showCI) }
+            self.themeSync.sync(h?.theme, probe: probeNumber)
+            self.applyThemeLook()
             if h == nil { self.engine.engineUnreachable() }
             self.render()
         }
@@ -481,6 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let firstRun { return firstRun.show() }
         let w = window ?? TrackerWindow(base: engine.api.base)
         window = w
+        w.apply(currentThemeLook)
         w.show(route: route)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -530,6 +550,7 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
     private let base: URL
     private var loaded = false
     private var mouseMonitor: Any?
+    private var look: WindowLook?
 
     init(base: URL) {
         self.base = base
@@ -543,6 +564,12 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
         isReleasedWhenClosed = false
         minSize = NSSize(width: 640, height: 400)
         contentView = web
+        // The window's background (the theme's, see apply) shows until the page paints, instead of the web view's own
+        // (white, or #1e1e1e in dark mode). A private key, on purpose: the public underPageBackgroundColor (macOS 12+)
+        // doesn't change what the view paints before the first page; checked 2026-10-30 by rendering a fresh web view's
+        // layer on macOS 26: same gray with it set, transparent only with drawsBackground off.
+        // Guarded: a WebKit without the key costs a gray first paint, not an NSUnknownKeyException.
+        if web.responds(to: NSSelectorFromString("_setDrawsBackground:")) { web.setValue(false, forKey: "drawsBackground") }
         web.navigationDelegate = self
         web.uiDelegate = self
         delegate = self
@@ -556,6 +583,18 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
             case 4: self.web.goForward(); return nil
             default: return e
             }
+        }
+    }
+
+    /// Appearance (title bar, scroll bars) and background from the theme; Match macOS follows the system.
+    func apply(_ look: WindowLook) {
+        guard look != self.look else { return }
+        self.look = look
+        appearance = look.appearance.flatMap { NSAppearance(named: $0 == "light" ? .aqua : .darkAqua) }
+        let dark = look.darkBackground, light = look.lightBackground
+        backgroundColor = NSColor(name: nil) { a in
+            let c = a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: c.a)
         }
     }
 

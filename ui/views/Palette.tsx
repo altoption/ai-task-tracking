@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { IssueSummary } from '../../src/model'
-import { listedProjects, searchIssues, useTracker } from '../client'
+import { listedProjects, searchIssues, setTheme, useTracker, type ThemesInfo } from '../client'
 import { navigate } from '../router'
 import { Icon, StatusIcon } from '../components/icons'
 
@@ -22,12 +22,60 @@ export function matchIssues(issues: Iterable<IssueSummary>, q: string, limit = 8
   return scored.sort((a, b) => a.s - b.s || b.i.updated.localeCompare(a.i.updated)).slice(0, limit).map((x) => x.i)
 }
 
+/** Pure: "Theme: <name>" commands matching the query (all of them for "theme"); the current one is marked. */
+export function themeCommands(themes: ThemesInfo | null, q: string): { id: string; label: string; current: boolean }[] {
+  const needle = q.trim().toLowerCase()
+  if (!themes || !needle) return []
+  return themes.list
+    .map((t) => ({ id: t.id, label: `Theme: ${t.name}`, current: t.id === (themes.effective ?? themes.selected) }))
+    .filter((t) => needle.split(/\s+/).every((w) => t.label.toLowerCase().includes(w)))
+}
+
+/**
+ * Pure: the palette's groups in order. A query that starts with "theme" puts the Theme commands first, so
+ * "theme paper" ⏎ switches even when an issue mentions those words; otherwise issues lead and themes follow them.
+ */
+export function orderGroups<T>(q: string, g: { issues: T[]; themes: T[]; actions: T[]; views: T[]; projects: T[] }): T[] {
+  const rest = [...g.actions, ...g.views, ...g.projects]
+  return q.trim().toLowerCase().startsWith('theme') ? [...g.themes, ...g.issues, ...rest] : [...g.issues, ...g.themes, ...rest]
+}
+
+export interface ThemePickUi {
+  /** False once the bar that asked is gone (closed, or closed and reopened): its reply is then dropped. */
+  alive(): boolean
+  pending(id: string | null): void
+  done(): void
+  fail(message: string): void
+}
+
+/** One theme request at a time (a second pick while one is out is ignored); a reply after the bar is gone does nothing. */
+export function makeThemePick(send: (id: string) => Promise<void>, ui: ThemePickUi): (id: string) => boolean {
+  let busy = false
+  return (id) => {
+    if (busy) return false
+    busy = true
+    ui.pending(id)
+    const settle = (fn: () => void) => { busy = false; if (ui.alive()) { ui.pending(null); fn() } }
+    send(id).then(() => settle(() => ui.done()), (e: unknown) => settle(() => ui.fail(e instanceof Error ? e.message : String(e))))
+    return true
+  }
+}
+
 export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onClose: () => void }) {
   const state = useTracker()
   const [q, setQ] = useState('')
   const [mode, setMode] = useState<PaletteMode>(initialMode)
   const [active, setActive] = useState(0)
   const [remote, setRemote] = useState<IssueSummary[]>([])
+  const [error, setError] = useState('')
+  const [pendingTheme, setPendingTheme] = useState<string | null>(null)
+  const mounted = useRef(true)
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const pickTheme = useMemo(() => makeThemePick(setTheme, {
+    alive: () => mounted.current, pending: setPendingTheme, done: () => close.current(), fail: setError,
+  }), [])
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
 
@@ -70,8 +118,13 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
           run: go(() => navigate({ name: 'project', slug: p.slug })),
         }))
       : []
-    return [...out, ...actions, ...(needle ? views : []), ...projects]
-  }, [q, mode, remote, state.issues, state.views, state.projects, state.config])
+    const themes = themeCommands(state.themes, q).map<Item>((t) => ({
+      key: `theme:${t.id}`, group: 'Themes', label: t.label, hint: pendingTheme === t.id ? 'Switching…' : t.current ? 'Current' : undefined, icon: <Icon name="display" />,
+      // Stays open until the engine answers, so a refusal shows here.
+      run: () => { setError(''); pickTheme(t.id) },
+    }))
+    return orderGroups(q, { issues: out, themes, actions, views: needle ? views : [], projects })
+  }, [q, mode, remote, state.issues, state.views, state.projects, state.config, state.themes, pendingTheme, pickTheme])
 
   const current = Math.min(active, Math.max(0, items.length - 1))
   useEffect(() => { list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }) }, [current])
@@ -90,11 +143,12 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
       <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette">
         <div className="palette-input">
           {mode === 'views' && <span className="chip">Views</span>}
-          <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setActive(0) }} onKeyDown={onKey}
+          <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setActive(0); setError('') }} onKeyDown={onKey}
             placeholder={mode === 'views' ? 'Go to view…' : 'Type a command or search issues…'}
             role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={items[current]?.key} />
         </div>
         <div className="palette-list" id="palette-list" role="listbox" ref={list}>
+          {error && <div className="form-error palette-error" role="alert">{error}</div>}
           {items.length === 0 && <div className="palette-empty">No results</div>}
           {items.map((it, k) => {
             const heading = it.group !== lastGroup ? <div className="palette-group" key={`g:${it.group}`}>{it.group}</div> : null
