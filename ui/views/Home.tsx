@@ -154,7 +154,7 @@ export function Home() {
               <Section color="var(--warn)" title="Needs you" items={home.needsYou.map((i) => (
                 <HomeRow key={i.id} issue={i} right={<NeedsYouWhy state={state} issue={i} now={now} />} />
               ))} />
-              <Section color="#e3b341" title="In progress" items={home.inProgress.map((i) => (
+              <Section color="var(--in-progress)" title="In progress" items={home.inProgress.map((i) => (
                 <HomeRow key={i.id} issue={i} right={i.touchedBy?.actor === 'agent'
                   ? <span className="pill">{i.touchedBy.workspace ?? 'agent'} · {relTime(i.updated, now)}</span> : undefined} />
               ))} />

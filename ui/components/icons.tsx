@@ -32,7 +32,7 @@ export const PRIORITIES = ['No priority', 'Urgent', 'High', 'Medium', 'Low'] as 
 /** Priority glyph: three bars filled by level, an exclamation box for urgent, a dash for none. */
 export function PriorityIcon({ priority, size = 14 }: { priority: number; size?: number }) {
   const common = { width: size, height: size, viewBox: '0 0 14 14', 'aria-label': PRIORITIES[priority] ?? 'Priority', role: 'img' as const }
-  if (priority === 1) return <svg {...common}><rect x="1" y="1" width="12" height="12" rx="3" fill="#f2994a" /><path d="M7 3.5v4.2M7 9.8v.4" stroke="var(--bg)" strokeWidth="1.6" strokeLinecap="round" /></svg>
+  if (priority === 1) return <svg {...common}><rect x="1" y="1" width="12" height="12" rx="3" fill="var(--urgent)" /><path d="M7 3.5v4.2M7 9.8v.4" stroke="var(--bg)" strokeWidth="1.6" strokeLinecap="round" /></svg>
   if (!priority) return <svg {...common}><path d="M3 7h1.5M6.25 7h1.5M9.5 7H11" stroke="var(--muted)" strokeWidth="1.4" strokeLinecap="round" /></svg>
   const on = 5 - priority // high 3 bars, medium 2, low 1
   return (
