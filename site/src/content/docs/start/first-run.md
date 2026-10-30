@@ -37,4 +37,5 @@ Every step has a flag. `aitt setup --help` prints this list:
 | `--binary <path>` | `aitt` binary to register (default: this one, when it is the app's) |
 
 After setup, **restart your agent sessions**: a session only loads MCP servers when it starts. Then see
-[Daily use](/docs/use/daily-use/).
+[Daily use](/docs/use/daily-use/). Coming from another issue tracker? See
+[Data model and importing](/docs/use/data-model/).

@@ -33,6 +33,12 @@ export default defineConfig({
           description: 'A local, agent-first issue tracker for macOS: a menu-bar app, the aitt CLI and the ai-task-tracking MCP server for Claude Code, Codex, Cursor and other agents.',
           promote: ['index*', 'start/**', 'use/**'],
           demote: ['reference/**', 'contributing'],
+          // Listed on its own in llms.txt: what an agent needs to bring issues over from another tool.
+          customSets: [{
+            label: 'Data model and importing',
+            paths: ['use/data-model'],
+            description: 'the data folder, the issue file format and config.yml, and how to import issues from another tool safely',
+          }],
         }),
       ],
       sidebar: [
@@ -50,6 +56,7 @@ export default defineConfig({
             { slug: 'use/daily-use' },
             { slug: 'use/agent-tools' },
             { slug: 'use/backup' },
+            { slug: 'use/data-model' },
           ],
         },
         {

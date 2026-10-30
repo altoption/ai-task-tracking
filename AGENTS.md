@@ -5,6 +5,11 @@ A local issue tracker for agents: Bun/TypeScript engine, MCP proxy and CLI (`src
 Swift menu-bar app (`app/`). Workflow and review rules: [CONTRIBUTING.md](CONTRIBUTING.md). Repo layout, dev
 loop, releases: [docs/setup/development.md](docs/setup/development.md).
 
+Bringing issues over from another tool (Jira, GitHub Issues, Trello, a spreadsheet, …): read
+[Data model and importing](site/src/content/docs/use/data-model.md) first. It describes the data folder, the issue
+file format and `config.yml`, and the safe way to import (`save_issues` in batches, or files written with the app
+stopped).
+
 ## Gates
 - `bun run check`: typecheck, UI build, `bun test`, `bash -n` + shellcheck. Green before every commit.
 - `bun run check:app`: Swift build + tests. Green before every commit that touches `app/`.

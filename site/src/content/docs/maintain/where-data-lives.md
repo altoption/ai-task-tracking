@@ -8,7 +8,7 @@ sidebar:
 ## Data folder
 
 Default `~/AITaskTracking`. Plain text and a git repo: you can read and edit it with any editor, and the app picks up
-changes.
+changes. Every file and key is described in [Data model and importing](/docs/use/data-model/).
 
 | Path | What |
 |---|---|

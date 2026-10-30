@@ -157,6 +157,15 @@ before quitting (Settings ▸ Back up to GitHub before quitting). The menu shows
 To restore on another Mac: clone the backup repo, then install with the clone as the data folder:
 `git clone <backup repo> ~/AITaskTracking`, then run the installer with `AITT_HOME=~/AITaskTracking`.
 
+## Bringing issues over from another tool
+
+There is no built-in importer. Instead, your own AI agent moves the issues: export them from the old tool (CSV,
+JSON, an API, or that tool's MCP server) and ask the agent to bring them over. The
+[Data model and importing](site/src/content/docs/use/data-model.md) guide tells it everything it needs: the folder
+layout, the issue file format, `config.yml`, and the safe way to import (`save_issues` in batches while the app runs,
+or writing the files directly with the app stopped). Point the agent at that page, or at the repo's `AGENTS.md`,
+which links it.
+
 ## Upgrade
 
 Run the install command again. It quits the app, replaces it and runs setup; your data folder and settings stay.
@@ -192,7 +201,8 @@ app installed elsewhere. **Your data folder is kept**; the output says where it 
   `config.yml` (port, statuses, which statuses and labels count as *Needs you* under `needsYou:`, when work counts
   as stalled under `stalled:`, repo → project mapping under `workspaces:`), `labels.yml`, `AGENTS.md` (the rules
   agents get), `projects/<slug>/project.md` and `projects/<slug>/issues/*.md`, `views/`. Plain text, a git repo;
-  you can read and edit it with any editor, and the app picks up changes.
+  you can read and edit it with any editor, and the app picks up changes. The file format:
+  [Data model and importing](site/src/content/docs/use/data-model.md).
 - **App**: `~/Applications/AI Task Tracking.app`; the CLI is `~/.local/bin/aitt`, a link into it.
 - **App settings**: `defaults read io.github.altoption.ai-task-tracking`.
 - **Agent configs**: the files in the table above, plus `~/.claude/skills/ai-task-tracking`.

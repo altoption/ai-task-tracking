@@ -94,3 +94,4 @@ Rules for agents (also in [CLAUDE.md](CLAUDE.md)):
 - Agent connection and rules: [docs/setup/agent-usage.md](docs/setup/agent-usage.md),
   [docs/setup/other-agent-tools.md](docs/setup/other-agent-tools.md).
 - Build, dev loop, releases: [docs/setup/development.md](docs/setup/development.md).
+- The data folder and issue file format: [site/src/content/docs/use/data-model.md](site/src/content/docs/use/data-model.md).
