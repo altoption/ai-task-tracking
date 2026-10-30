@@ -209,3 +209,7 @@ app installed elsewhere. **Your data folder is kept**; the output says where it 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/setup/development.md](docs/setup/development.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Nick Tulip
