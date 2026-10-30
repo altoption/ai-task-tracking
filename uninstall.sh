@@ -1,7 +1,7 @@
 #!/bin/bash
 # Uninstall AI Task Tracking from this Mac. Your data folder is kept (the output says where it is).
 #
-#   gh api repos/altoption/ai-task-tracking/contents/uninstall.sh --jq .content | base64 -d | bash
+#   curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/uninstall.sh | bash
 #   ./uninstall.sh [--yes]            (from a clone)
 #
 # Runs `aitt uninstall` from the installed app (it keeps your data folder). See --help.
@@ -14,7 +14,7 @@ usage() {
   cat <<'USAGE'
 Uninstall AI Task Tracking from this Mac. Your data folder is kept (the output says where it is).
 
-  gh api repos/altoption/ai-task-tracking/contents/uninstall.sh --jq .content | base64 -d | bash
+  curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/uninstall.sh | bash
   … | bash -s -- --yes              (options when piped)
   ./uninstall.sh [--yes]            (from a clone)
 

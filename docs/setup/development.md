@@ -22,7 +22,7 @@ Build and test details for engineers working on AI Task Tracking. The workflow (
 | `ui/` | the web UI (React), built to `ui/dist` and embedded in the compiled binary |
 | `app/` | the menu-bar app (Swift package): `Sources/Tracker` (AppKit), `Sources/TrackerCore` (pure, tested), `build.sh` |
 | `skills/ai-task-tracking/` | the agent skill; its workflow section is the guidance for every agent tool |
-| `install.sh`, `uninstall.sh` | the user installer and uninstaller (repo root, fetched with `gh api`) |
+| `install.sh`, `uninstall.sh` | the user installer and uninstaller (repo root, fetched with `curl` from raw.githubusercontent.com) |
 | `scripts/` | `lib.sh` (shared build/install functions), `install.sh` (developer installer), `release.sh`, `agent-eval.sh`, `dev-setup.sh` |
 | `tests/` | `bun test` suites, mirroring `src/` |
 

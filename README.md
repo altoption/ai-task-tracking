@@ -14,14 +14,13 @@ YAML files in a folder on your Mac (a git repo), optionally backed up to a priva
 | | |
 |---|---|
 | macOS | 13 (Ventura) or later, Apple Silicon or Intel |
-| GitHub CLI | `gh`, signed in (`gh auth login`) with access to `altoption/ai-task-tracking`. The installer offers to install it with Homebrew. |
 | To build from source | Xcode Command Line Tools and Bun 1.4 or later. Only needed when no release is available, it fails verification, or with `--from-source`. The installer shows what's missing; it starts the Command Line Tools install and installs Bun from bun.sh (asking first unless `--yes`). The build includes these docs (their packages are downloaded too); if the docs fail to build, the installer warns and installs the app without them. |
 | Backup (optional) | `gh` signed in to the GitHub account that will own the private backup repo |
 
 ## Install
 
 ```sh
-gh api repos/altoption/ai-task-tracking/contents/install.sh --jq .content | base64 -d | bash
+curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
 ```
 
 The installer checks this Mac, shows what it will do and asks once. It installs the latest notarized release into
@@ -30,7 +29,7 @@ source if any check fails or there is no release), links `~/.local/bin/aitt`, ru
 The new app is prepared next to the old one and swapped in only when it is complete, so a failed download or build
 leaves the installed app as it was. From a clone, run `./install.sh`.
 
-Options go after `bash -s --` when the script is piped, e.g. `… | base64 -d | bash -s -- --yes`:
+Options go after `bash -s --` when the script is piped, e.g. `… | bash -s -- --yes`:
 
 | Option | |
 |---|---|
@@ -174,7 +173,7 @@ Run the install command again. It quits the app, replaces it and runs setup; you
 ## Uninstall
 
 ```sh
-gh api repos/altoption/ai-task-tracking/contents/uninstall.sh --jq .content | base64 -d | bash
+curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/uninstall.sh | bash
 ```
 
 Add `bash -s -- --yes` instead of `bash` to skip the question; from a clone, `./uninstall.sh [--yes]`; or run
@@ -190,7 +189,7 @@ app installed elsewhere. **Your data folder is kept**; the output says where it 
 | Menu shows "Another engine is using port 7477" | Another copy of the engine (e.g. a terminal `aitt serve`) holds the port. Stop it, or set a different `port:` in the data folder's `config.yml` and restart the app. |
 | A tool says "AI Task Tracking isn't running" | Open the app from the menu bar, Launchpad or `open -a "AI Task Tracking"`. Settings ▸ Launch at login keeps it running. |
 | No `ai-task-tracking` tools in a Claude Code session | Restart the session. `claude mcp get ai-task-tracking` shows the entry; a project-scope entry with the same name hides the user-scope one. Run `aitt setup` if it's missing. |
-| Installer: "needs the GitHub CLI" or can't read the repo | `brew install gh && gh auth login`, and make sure your account has access to `altoption/ai-task-tracking` (`gh repo view altoption/ai-task-tracking`). |
+| Installer: "Could not download scripts/lib.sh" | The installer couldn't reach GitHub. Check that `curl -fsSI https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh` works (a proxy or firewall may block it), then run it again. |
 | Backup fails | `gh auth status`; the backup repo must exist and your account must be able to push to it. Back Up Now retries. |
 | Gatekeeper rejects the app | The installer checks the release's `.sha256`, `codesign` and `spctl` before installing and builds from source if any check fails. If a downloaded copy is blocked, run the installer again rather than opening the zip by hand. |
 | `aitt: command not found` | Add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` and open a new terminal. |

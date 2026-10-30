@@ -83,11 +83,10 @@ Each tool's own description carries its full arguments.
 
 ## When AI Task Tracking isn't installed
 
-Tell the user, then offer the install command (macOS 13+, needs the GitHub CLI `gh` signed in with
-access to the repo):
+Tell the user, then offer the install command (macOS 13+):
 
 ```
-gh api repos/altoption/ai-task-tracking/contents/install.sh --jq .content | base64 -d | bash
+curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
 ```
 
 It installs the app, puts `aitt` on the PATH and runs `aitt setup`, which registers the MCP server

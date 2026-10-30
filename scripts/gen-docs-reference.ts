@@ -147,7 +147,7 @@ function cliPage(): string {
 // ---------- installers ----------
 
 const SCRIPTS = [
-  { path: 'install.sh', title: 'install.sh (users)', intro: 'The user installer at the repo root. Piped from `gh api`, or `./install.sh` from a clone.' },
+  { path: 'install.sh', title: 'install.sh (users)', intro: 'The user installer at the repo root. Piped from `curl`, or `./install.sh` from a clone.' },
   { path: 'uninstall.sh', title: 'uninstall.sh (users)', intro: 'The user uninstaller at the repo root. It runs `aitt uninstall` from the installed app.' },
   { path: 'scripts/install.sh', title: 'scripts/install.sh (developers)', intro: 'The developer installer: rebuilds this checkout into the app folder.' },
 ]
