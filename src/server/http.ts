@@ -5,6 +5,7 @@ import { readFeed } from '../engine/eventlog'
 import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
+import { allThemes, selectedTheme } from '../engine/themes'
 import { ancestors, home, needsYouCount, needsYouList, progress, search, writerWorkspaces } from '../engine/queries'
 import type { ChangeEvent, Store } from '../engine/store'
 import { callTool, issueOut, ToolError, type ToolCtx } from '../tools/handlers'
@@ -69,6 +70,28 @@ export function buildSnapshot(s: Store) {
     projects: [...s.projects.values()],
     views: s.views,
     errors: [...s.errors].map(([path, message]) => ({ path, message })),
+    themes: themesOut(s),
+  }
+}
+
+/**
+ * The theme list (built-ins, then `themes/*.yml`), the chosen id as configured (`theme` in config.yml) and the one
+ * actually shown (`effective`: an unknown id, such as a deleted theme file, shows Dark).
+ */
+export function themesOut(s: Store) {
+  const list = allThemes(s.themes)
+  return { selected: s.config.theme, effective: selectedTheme(list, s.config.theme).id, list }
+}
+
+/**
+ * For the app (in /api/health): `selected` and `effective` as in the snapshot (themesOut), and per theme what its
+ * window needs: id, name, base (`system` follows macOS) and background color.
+ */
+function themeHealth(s: Store) {
+  const { selected, effective, list } = themesOut(s)
+  return {
+    selected, effective,
+    themes: list.map((t) => ({ id: t.id, name: t.name, base: t.base, ...(t.base === 'system' ? {} : { bg: t.colors.bg }) })),
   }
 }
 
@@ -231,6 +254,20 @@ async function ciRoute(ci: ServerOpts['ci'], req: Request): Promise<Response> {
   return json(ci.health())
 }
 
+/** `POST /api/theme` `{ "theme": "light" }` — choose the UI theme (the owner only: the app's Settings and ⌘K). */
+async function themeRoute(store: Store, req: Request): Promise<Response> {
+  if (req.headers.get('x-tracker-agent') === '1') return fail(403, 'agents cannot change the theme')
+  let body: { theme?: unknown }
+  try { body = await req.json() as typeof body } catch { return fail(400, 'Request body must be JSON: { "theme": "<id>" }') }
+  if (typeof body?.theme !== 'string' || !body.theme) return fail(400, 'Request body must be JSON: { "theme": "<id>" }')
+  try {
+    await store.setTheme(body.theme)
+  } catch (e) {
+    return fail(400, e instanceof Error ? e.message : String(e))
+  }
+  return json(themeHealth(store))
+}
+
 /** `POST /api/sync` — commit now, then push unless the body says `{ "push": false }`. */
 async function syncRoute(git: ServerOpts['git'], req: Request): Promise<Response> {
   if (req.headers.get('x-tracker-agent') === '1') return fail(403, 'agents cannot run a sync; the engine commits and pushes on its own')
@@ -279,6 +316,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
               git, rules: rules(store),
               // CI status: on/off, the app's setting as last heard, and a one-line reason when off or failing ("gh not signed in").
               ...(opts.ci ? { ci: opts.ci.health() } : {}),
+              theme: themeHealth(store),
             })
           }
           if (p === '/api/snapshot') return json(buildSnapshot(store))
@@ -334,6 +372,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
           }
           if (p === '/api/sync') return await syncRoute(opts.git, req)
           if (p === '/api/ci') return await ciRoute(opts.ci, req)
+          if (p === '/api/theme') return await themeRoute(store, req)
           return fail(404, 'not found')
         }
         return fail(405, 'method not allowed')

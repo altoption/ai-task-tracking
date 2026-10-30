@@ -11,6 +11,7 @@ import { appendEvent, feedPath, type FeedEvent } from './eventlog'
 import { IssueHistory, workingStatus, type Attempt, type HistoryEntry } from './stalled'
 import { SearchIndex } from './searchIndex'
 import type { CiLookup } from './ci'
+import { allThemes, parseThemeFile, type Theme } from './themes'
 import { aittEnv } from '../shared/env'
 
 export type ChangeEvent =
@@ -71,6 +72,8 @@ export class Store {
   readonly index = new SearchIndex()
   /** CI status of linked PRs, read from memory (the background refresher in src/engine/ci.ts); null when not running. */
   ci: CiLookup | null = null
+  /** Custom themes from `themes/*.yml` that passed the checks (src/engine/themes.ts); broken files are in `errors`. */
+  themes: Theme[] = []
 
   private issues = new Map<string, Issue>()
   private dupOf = new Map<string, string>() // path -> id, for files rejected as duplicate ids
@@ -100,6 +103,7 @@ export class Store {
     await s.loadConfig()
     await s.loadLabels()
     await s.loadViews()
+    await s.loadThemes()
     const projectsDir = join(root, 'projects')
     const slugs = await readdir(projectsDir, { withFileTypes: true }).then(
       (ds) => ds.filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => d.name).sort(),
@@ -425,6 +429,20 @@ export class Store {
     })
   }
 
+  /** Choose the UI theme (`theme` in config.yml): a built-in id or a loaded custom theme. Clients follow the `meta` event. */
+  async setTheme(id: string): Promise<void> {
+    const known = allThemes(this.themes).map((t) => t.id)
+    if (!known.includes(id)) throw new Error(`unknown theme "${id}"; themes: ${known.join(', ')}`)
+    await this.enqueue(this.configPath, async () => {
+      await this.refreshConfig()
+      if (this.config.theme === id) return
+      this.config.theme = id
+      await writeConfig(this.root, this.config)
+      await this.rememberFile(this.configPath)
+      this.emit({ kind: 'meta' })
+    })
+  }
+
   /** Read-modify-write a project's files, serialized with upsertProject (config queue). */
   private mutateProject(slug: string, fn: (p: Project) => Project): Promise<Project> {
     return this.enqueue(this.configPath, async () => {
@@ -455,6 +473,8 @@ export class Store {
     if (key === 'config.yml') return () => this.loadConfig(true)
     if (key === 'labels.yml') return () => this.loadLabels(true)
     if (rel[0] === 'views' && rel.length === 2 && key.endsWith('.yml')) return () => this.loadViews(true)
+    // A theme file, or the themes/ folder itself (created, renamed or deleted as a whole): rescan the folder.
+    if (rel[0] === 'themes' && (rel.length === 1 || (rel.length === 2 && key.endsWith('.yml')))) return () => this.loadThemes(true)
     if (rel[0] === 'projects' && ((rel.length === 3 && rel[2] === 'project.md') || (rel.length === 4 && rel[2] === 'docs'))) {
       return () => this.loadProject(rel[1]!, true)
     }
@@ -474,7 +494,9 @@ export class Store {
       this.emit(gone ? { kind: 'file', path: key, deleted: true } : { kind: 'file', path: key })
       return
     }
-    await this.enqueue(key === 'config.yml' ? this.configPath : path, async () => {
+    // Theme files share one queue: each reload rescans the whole themes/ folder.
+    const queue = key === 'config.yml' ? this.configPath : rel[0] === 'themes' ? join(this.root, 'themes') : path
+    await this.enqueue(queue, async () => {
       const text = await readFile(path, 'utf8').catch(() => null)
       if (text !== null && this.isOwnWrite(path, text)) return
       if (await load()) this.emit({ kind: 'meta' })
@@ -753,6 +775,35 @@ export class Store {
   private loadViews(notify = false) {
     return this.loadMeta(join(this.root, 'views'), async () => { this.views = await readViews(this.root) }, notify)
   }
+  /**
+   * (Re)read every `themes/*.yml`. One bad file is a file error and is skipped; the others still load. Always true
+   * (the caller emits `meta`, so clients refetch the theme list and the cleared errors); new errors also emit `error`.
+   */
+  private async loadThemes(notify = false): Promise<boolean> {
+    const dir = join(this.root, 'themes')
+    const names = await readdir(dir).then((ns) => ns.filter((n) => n.endsWith('.yml') && !n.startsWith('.')).sort(), () => [] as string[])
+    for (const p of [...this.errors.keys()]) if (p.startsWith(dir + sep)) this.errors.delete(p)
+    const themes: Theme[] = []
+    const byName = new Map<string, string>() // lower-case name -> the file that has it (the first by file name wins)
+    for (const n of names) {
+      const path = join(dir, n)
+      try {
+        const t = parseThemeFile(await readFile(path, 'utf8'), n)
+        const taken = byName.get(t.name.toLowerCase())
+        if (taken) throw new Error(`name: "${t.name}" is already the name of themes/${taken}; pick another`)
+        byName.set(t.name.toLowerCase(), n)
+        themes.push(t)
+      } catch (e) {
+        if (isMissing(e)) continue
+        const message = errMsg(e)
+        this.errors.set(path, message)
+        if (notify) this.emit({ kind: 'error', path, message })
+      }
+    }
+    this.themes = themes
+    return true
+  }
+
   /** Fresh parse of the project's files (picks up hand edits the watcher hasn't delivered yet); a broken file throws rather than being overwritten. */
   private async freshProject(known: Project): Promise<Project> {
     try {

@@ -22,6 +22,12 @@ describe('UI colors are tokens', () => {
     expect(found).toEqual([])
   })
 
+  test('color-scheme is set only on :root (the theme sets it on <html>; controls such as date inputs inherit it)', () => {
+    const css = readFileSync(join(UI, 'styles.css'), 'utf8')
+    const root = /:root\s*\{[^}]*\}/.exec(css)![0]
+    expect(css.replace(root, '').match(/color-scheme/g) ?? []).toEqual([])
+  })
+
   test('every token the UI uses is defined', () => {
     const css = readFileSync(join(UI, 'styles.css'), 'utf8')
     const root = /:root\s*\{([^}]*)\}/.exec(css)![1]!
@@ -29,6 +35,7 @@ describe('UI colors are tokens', () => {
     const local = new Set([...css.matchAll(/(--[a-z-]+):/g)].map((m) => m[1])) // e.g. --sidebar-w on .app
     const sources = [css, ...['components', 'views'].flatMap((d) => readdirSync(join(UI, d)).map((f) => readFileSync(join(UI, d, f), 'utf8')))]
     const used = new Set(sources.flatMap((s) => [...s.matchAll(/var\((--[a-z-]+)/g)].map((m) => m[1]!)))
-    expect([...used].filter((v) => !defined.has(v) && !local.has(v))).toEqual([])
+    // --status-<type> is optional (a theme's status override, set by ui/theme.ts), with the status's color as fallback.
+    expect([...used].filter((v) => !defined.has(v) && !local.has(v) && v !== '--status-')).toEqual([])
   })
 })

@@ -43,6 +43,9 @@ export function watchFolder(store: Store): { close(): void } {
       }
     }
     await walk(dir)
+    // Theme files load as a folder: a rescan that covers themes/ (or the folder itself was created, moved or deleted) reloads them.
+    const themes = join(root, 'themes')
+    if (dir === root || dir === themes || dir.startsWith(themes + sep)) await reload(themes)
     const prefix = dir + sep
     for (const issue of store.all()) {
       if (issue.path.startsWith(prefix) && !seen.has(issue.path)) await reload(issue.path)

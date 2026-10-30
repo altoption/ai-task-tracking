@@ -4,7 +4,8 @@ import type { Config, StatusDef } from '../../src/model'
 export function StatusIcon({ status, config, size = 14 }: { status: string; config: Config | null; size?: number }) {
   const statuses = config?.statuses ?? []
   const def: StatusDef = statuses.find((s) => s.name === status) ?? { name: status, type: 'unstarted', color: 'var(--muted)' }
-  const c = def.color
+  // A theme may recolor a status type (--status-<type>, ui/theme.ts); otherwise the status's own color.
+  const c = `var(--status-${def.type}, ${def.color})`
   const common = { width: size, height: size, viewBox: '0 0 14 14', 'aria-label': status, role: 'img' as const, className: 'status-icon' }
   switch (def.type) {
     case 'backlog':

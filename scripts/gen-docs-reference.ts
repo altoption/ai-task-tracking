@@ -392,6 +392,7 @@ const CONFIG_DOCS: Record<string, string> = {
   stalled: 'When open work counts as stalled and joins Needs you. `idleHours`: In Progress with no edit or comment for this long. `windowDays`, `reopens`, `sessions`: in that many days, reopened (back to In Progress from Done, Canceled, Duplicate, Todo or Backlog; never from Waiting) at least `reopens` times, or more than `sessions` agent sessions since it was last Done. 0 turns a rule off.',
   ci: 'CI status on linked GitHub PRs, fetched in the background with your `gh`. `enabled`: false turns it off (no `gh` calls, no badges, nothing in Needs you). `refreshMinutes`: how often an open PR is re-checked; merged and closed PRs are checked until their checks settle, then never again.',
   nextNumber: 'Project key → the next issue number. Maintained by the engine.',
+  theme: 'The UI theme, the same in the browser and the app window: `dark`, `light`, `system` (Match macOS), `midnight`, `paper`, `high-contrast`, or the id of a theme file in `themes/` (`themes/ocean.yml` is `ocean`). An unknown id shows Dark. Set it from the app\'s Settings or ⌘K ▸ Theme; see the Themes guide.',
 }
 
 function configPage(): string {
