@@ -28,7 +28,10 @@ jobs:
       - name: Install shellcheck
         run: command -v shellcheck || brew install shellcheck
       - run: bun install --frozen-lockfile
+      # Shared runners vary too much for the perf test's wall-clock budgets; it runs in every local bun run check.
       - run: bun run check
+        env:
+          SKIP_PERF: '1'
 
   check-app:
     name: check-app
