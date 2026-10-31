@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listedProjects, setScope, useScope, useTracker, type Scope, type TrackerState } from '../client'
+import { listedProjects, setScope, setTheme, useScope, useTracker, type Scope, type TrackerState } from '../client'
 import { appHref, href, inTrackerApp, navigate, useHistoryPosition, type Route } from '../router'
 import { TOGGLE_SHORTCUT } from '../sidebarState'
 import { ConceptIcon, Icon, type Concept } from '../components/icons'
+import { makeThemePick } from './Palette'
 
 const CLOSED = new Set(['completed', 'canceled', 'duplicate'])
+/** The app's Settings window (app/Sources/TrackerCore/DeepLink.swift). */
+export const SETTINGS_HREF = 'aitt://settings'
 /** The user docs, served by the engine (src/server/http.ts serveDocs). */
 export const DOCS_HREF = '/docs/'
 
@@ -88,6 +91,62 @@ function ScopeSwitcher({ collapsed }: { collapsed: boolean }) {
           {projects.map((p) => (
             <button key={p.slug} role="menuitemradio" aria-checked={is({ kind: 'project', slug: p.slug })} onClick={() => pick({ kind: 'project', slug: p.slug })}>{p.name}</button>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The theme icon: a menu of every theme, opening upward from the bottom of the sidebar. */
+function ThemeMenu() {
+  const themes = useTracker().themes
+  const [at, setAt] = useState<{ left: number; bottom: number } | null>(null)
+  const [error, setError] = useState('')
+  const box = useRef<HTMLDivElement>(null)
+  const open = at !== null
+  const close = () => setAt(null)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const pick = useMemo(() => makeThemePick(setTheme, {
+    alive: () => mounted.current, pending: () => {}, done: () => setAt(null), fail: setError,
+  }), [])
+  const button = () => box.current?.querySelector<HTMLButtonElement>('.icon-button')
+  useEffect(() => {
+    if (!open) return
+    const items = () => [...(box.current?.querySelectorAll<HTMLButtonElement>('[role=menuitemradio]') ?? [])]
+    ;(items().find((i) => i.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus()
+    const onDown = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) close() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); button()?.focus() }
+      if (e.key === 'Tab') close()
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+      e.preventDefault()
+      const all = items()
+      const step = e.key === 'ArrowDown' ? 1 : -1
+      all[(all.indexOf(document.activeElement as HTMLButtonElement) + step + all.length) % all.length]?.focus()
+    }
+    addEventListener('mousedown', onDown)
+    addEventListener('keydown', onKey, true)
+    return () => { removeEventListener('mousedown', onDown); removeEventListener('keydown', onKey, true) }
+  }, [open])
+  if (!themes) return null
+  const current = themes.effective ?? themes.selected
+  const toggle = () => {
+    const r = button()?.getBoundingClientRect()
+    setError('')
+    setAt(open || !r ? null : { left: r.left, bottom: innerHeight - r.top + 6 })
+  }
+  return (
+    <div className="theme-menu" ref={box}>
+      <button className="icon-button" onClick={toggle} title="Theme" aria-label="Theme" aria-haspopup="menu" aria-expanded={open}>
+        <ConceptIcon concept="theme" />
+      </button>
+      {at && (
+        <div className="menu" role="menu" aria-label="Theme" style={{ position: 'fixed', top: 'auto', ...at }}>
+          {themes.list.map((t) => (
+            <button key={t.id} role="menuitemradio" aria-checked={t.id === current} onClick={() => { setError(''); pick(t.id) }}>{t.name}</button>
+          ))}
+          {error && <div className="menu-heading" role="alert">{error}</div>}
         </div>
       )}
     </div>
@@ -196,8 +255,14 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
         {!collapsed && <OpenInApp route={route} />}
         {/* The docs site the engine serves; same origin, so the app's window shows it too. */}
         <NavItem to={DOCS_HREF} active={false} icon="docs" label="Docs" collapsed={collapsed} />
-        <div className={`conn ${state.connected ? 'on' : 'off'}`} title={state.connected ? 'Live' : 'Reconnecting…'}>
-          <span className="conn-dot" /> <span className="label">{state.connected ? 'Live' : state.ready ? 'Reconnecting…' : 'Connecting…'}</span>
+        <div className="sidebar-tools">
+          <div className={`conn ${state.connected ? 'on' : 'off'}`} title={state.connected ? 'Live' : 'Reconnecting…'}>
+            <span className="conn-dot" /> <span className="label">{state.connected ? 'Live' : state.ready ? 'Reconnecting…' : 'Connecting…'}</span>
+          </div>
+          <span className="spacer" />
+          <ThemeMenu />
+          {/* Settings is the app's window: the app's web view opens it directly, a browser hands the link to the app. */}
+          <a className="icon-button" href={SETTINGS_HREF} title="Settings" aria-label="Settings"><ConceptIcon concept="settings" /></a>
         </div>
       </div>
     </nav>

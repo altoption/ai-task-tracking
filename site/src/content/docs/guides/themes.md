@@ -13,6 +13,7 @@ changes, without a reload.
 
 ## Switching
 
+- **In the sidebar:** the theme icon at the bottom opens a menu of every theme, in the app and the browser.
 - **In the app:** Settings (⌘,) ▸ Appearance ▸ **Theme**. A theme picked while the engine can't be reached is applied once
   it is reachable again, even after the app restarts.
 - **In any window:** press ⌘K, type `theme`, and pick one. A query that starts with `theme` lists the themes first,

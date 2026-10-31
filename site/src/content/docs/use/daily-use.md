@@ -33,7 +33,7 @@ Change them or turn them off in Settings.
 
 ## Settings
 
-Open with ⌘, or **Settings…** in the menu. Every change applies straight away.
+Open with ⌘, **Settings…** in the menu, or the gear at the bottom of the sidebar. Every change applies straight away.
 
 - **General**: Launch at login; Show in the Dock; Show Needs-you issues in the menu; Show stalled work in Needs you
   (see [Stalled work](#stalled-work)); Show CI status (see [CI status](#ci-status-on-pull-requests)).

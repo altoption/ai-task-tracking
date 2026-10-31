@@ -49,6 +49,12 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertNil(DeepLink.route(for: URL(string: "https://example.com/issue/Q-1")!))
     }
 
+    func testSettingsLink() {
+        XCTAssertTrue(DeepLink.isSettings(URL(string: "aitt://settings")!))
+        XCTAssertFalse(DeepLink.isSettings(URL(string: "aitt://home")!))
+        XCTAssertFalse(DeepLink.isSettings(URL(string: "https://settings")!))
+    }
+
     func testEncodesOddSegments() {
         XCTAssertEqual(DeepLink.route(for: URL(string: "aitt://project/a%3Fb")!), "#/project/a%3Fb")
     }
