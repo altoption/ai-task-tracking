@@ -192,6 +192,10 @@ describe('queries', () => {
     expect(needsYouRequest(s, s.get('Q-3')!).waitingSince).toBeUndefined()
     const bare = await s.createIssue({ title: 'Bare', project: 'support', status: 'Waiting' }, agent)
     expect(needsYouRequest(s, bare).request).toBeUndefined()
+    expect(needsYouRequest(s, bare).waitingSince).toBe(bare.created)
+    // The log begins after the issue was created (it was reset): the wait is unknown, not the issue's whole age.
+    ;(s as unknown as { feedStart: number }).feedStart = Date.parse(bare.created) + 3_600_000
+    expect(needsYouRequest(s, bare).waitingSince).toBeUndefined()
   })
 })
 
