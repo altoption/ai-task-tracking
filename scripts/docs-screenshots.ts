@@ -148,16 +148,20 @@ async function seed(engine: Engine): Promise<void> {
 
   await call('save_project', { name: 'Website', description: 'The marketing site and docs.' })
   await call('save_project', { name: 'Mobile app', description: 'The iOS and Android app.' })
+  // A milestone with the pricing epic and its steps (1 of 4 done), so the project page shows its progress ring.
+  // No clock step: the timestamps of everything after it stay as they were.
+  const launch = 'Pricing launch'
+  await call('save_milestone', { project: 'Website', name: launch, targetDate: '2026-03-27' }, undefined, 0)
 
   const epic = await call('save_issues', { issues: [
-    { ref: 'epic', title: 'Epic: New pricing page', project: 'Website', labels: ['Feature'], priority: 2, state: 'In Progress',
+    { ref: 'epic', title: 'Epic: New pricing page', project: 'Website', milestone: launch, labels: ['Feature'], priority: 2, state: 'In Progress',
       description: 'Replace the pricing table with plan cards, a comparison table and an FAQ.' },
-    { ref: 's1', parentId: 'ref:epic', title: 'Step 1: Plan cards with monthly / yearly toggle', project: 'Website', labels: ['Task'], priority: 2, state: 'Done', comment: 'Shipped in PR #41.',
+    { ref: 's1', parentId: 'ref:epic', title: 'Step 1: Plan cards with monthly / yearly toggle', project: 'Website', milestone: launch, labels: ['Task'], priority: 2, state: 'Done', comment: 'Shipped in PR #41.',
       links: [{ url: PR(41), title: 'PR #41' }] },
-    { ref: 's2', parentId: 'ref:epic', title: 'Step 2: Feature comparison table', project: 'Website', labels: ['Task'], priority: 2, state: 'In Progress', blockedBy: ['ref:s1'],
+    { ref: 's2', parentId: 'ref:epic', title: 'Step 2: Feature comparison table', project: 'Website', milestone: launch, labels: ['Task'], priority: 2, state: 'In Progress', blockedBy: ['ref:s1'],
       links: [{ url: PR(57), title: 'PR #57' }],
       description: 'A table under the plan cards that compares the three plans feature by feature.\n\n- [x] Rows from the plans config\n- [ ] Sticky header while scrolling\n- [ ] Tooltips for the less obvious limits' },
-    { ref: 's3', parentId: 'ref:epic', title: 'Step 3: Pricing FAQ', project: 'Website', labels: ['Task'], priority: 3, blockedBy: ['ref:s2'] },
+    { ref: 's3', parentId: 'ref:epic', title: 'Step 3: Pricing FAQ', project: 'Website', milestone: launch, labels: ['Task'], priority: 3, blockedBy: ['ref:s2'] },
   ] }, web) as { issues?: { id: string }[] }
   const [epicId, , step2] = (epic.issues ?? []).map((i) => i.id)
 
