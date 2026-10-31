@@ -140,6 +140,10 @@ describe('Needs you: why and stalled', () => {
     expect(stalledOnly).toContain('<span class="ov-status">Stalled</span>')
     expect(stalledOnly).toContain('<p>idle 31 h in In Progress</p>')
     expect(stalledOnly).not.toContain('pill stalled') // the reason is already the summary
+    const stalledWithComment = html(item({ request: 'Reproduced it.', stalled: 'idle 31 h in In Progress' }))
+    expect(stalledWithComment).toContain('<span class="ov-status">Stalled</span>')
+    expect(stalledWithComment).toContain('<p class="stalled-why">idle 31 h in In Progress</p>')
+    expect(stalledWithComment).not.toContain('pill stalled') // the status already says it
     const both = html(item({ status: 'Waiting', request: 'Which plan?', stalled: 'reopened 2× in 7 days' }), true)
     expect(both).toContain('<p>Which plan?</p>')
     expect(both).toContain('<span class="pill stalled">stalled</span>reopened 2× in 7 days')

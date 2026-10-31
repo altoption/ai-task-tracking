@@ -68,7 +68,7 @@ export function NeedsYouRequest({ issue, card, featured, project }: { issue: Nee
       </div>
       <h3 id={`ny-${issue.id}`}><a href={href({ name: 'issue', id: issue.id })}>{issue.title}</a></h3>
       {card.summary && <p>{card.summary}</p>}
-      {card.stalled && card.summary !== card.stalled && <p className="stalled-why"><span className="pill stalled">stalled</span>{card.stalled}</p>}
+      {card.stalled && card.summary !== card.stalled && <p className="stalled-why">{card.status !== 'Stalled' && <span className="pill stalled">stalled</span>}{card.stalled}</p>}
       <div className="ov-action-line">
         <span className="ov-subtle">{card.age}</span>
         <button type="button" className={`ov-action${featured ? ' primary' : ''}`} onClick={open}
