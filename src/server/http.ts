@@ -10,7 +10,7 @@ import { allThemes, selectedTheme } from '../engine/themes'
 import {
   feedVisibleTest, hiddenHealth, hiddenProjectsOut, hiddenSlugs, inHiddenFolder, visibleNextNumber, visibleParts, visibleTest,
 } from '../engine/hidden'
-import { ancestors, home, needsYouCount, needsYouList, progress, search, writerWorkspaces } from '../engine/queries'
+import { ancestors, home, needsYouCount, needsYouList, needsYouRequest, progress, search, writerWorkspaces } from '../engine/queries'
 import type { ChangeEvent, Store } from '../engine/store'
 import { callTool, issueOut, ToolError, type ToolCtx } from '../tools/handlers'
 import { toolSchemas } from '../tools/schemas'
@@ -50,7 +50,8 @@ export interface HiddenStub { id: string; hidden: true }
 
 /**
  * `/api/home` with summaries (cheap, and carries `workspaces` for the switcher); Needs-you items carry
- * `stalled: <reason>` and `ciReason: "CI failing on PR #12"` when those apply.
+ * `stalled: <reason>` and `ciReason: "CI failing on PR #12"` when those apply, plus `request` (the newest comment, one
+ * line) and `waitingSince` (when it moved into its Needs-you status) when known (needsYouRequest).
  */
 function homeOut(s: Store) {
   const visible = visibleTest(s)
@@ -60,7 +61,7 @@ function homeOut(s: Store) {
     needsYou: h.needsYou.map((i) => {
       const reason = h.stalled.get(i.id)
       const ci = h.ci.get(i.id)
-      return { ...sum(i), ...(reason ? { stalled: reason } : {}), ...(ci ? { ciReason: ci } : {}) }
+      return { ...sum(i), ...(reason ? { stalled: reason } : {}), ...(ci ? { ciReason: ci } : {}), ...needsYouRequest(s, i) }
     }),
     inProgress: h.inProgress.map(sum),
     readyNext: h.readyNext.map((x) => ({ issue: sum(x.issue), unblocks: x.unblocks })),

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Actor } from '../../src/model'
-import { ancestors, filterIssues, home, needsYouCount, needsYouList, progress, search, stalledOf, subtree, unblocks } from '../../src/engine/queries'
+import { ancestors, filterIssues, home, needsYouCount, needsYouList, needsYouRequest, progress, REQUEST_MAX, search, stalledOf, subtree, unblocks } from '../../src/engine/queries'
 import { feedPath } from '../../src/engine/eventlog'
 import { DEFAULT_STALLED } from '../../src/engine/stalled'
 import { Store } from '../../src/engine/store'
@@ -168,6 +168,25 @@ describe('queries', () => {
     await s.updateIssue('Q-3', { title: 'Parse blower tables' }, agent)
     expect(ids(search(s, 'fan'))).toEqual([])
     expect(ids(search(s, 'blower'))).toEqual(['Q-3'])
+  })
+
+  test('needsYouRequest: the newest comment on one line, and when it moved into its Needs-you status', async () => {
+    const s = await Store.open(await miniCopy())
+    await s.updateIssue('Q-2', { status: 'In Progress' }, agent)
+    const before = Date.now()
+    await s.updateIssue('Q-2', { status: 'Waiting' }, agent)
+    await s.addComment('Q-2', 'Older note', agent)
+    await s.addComment('Q-2', '## Needs\n\n**Your** Apple `app-specific` password\n> to notarize', agent)
+    const r = needsYouRequest(s, s.get('Q-2')!)
+    expect(r.request).toBe('Needs Your Apple app-specific password to notarize')
+    expect(Date.parse(r.waitingSince!)).toBeGreaterThanOrEqual(before - 1000)
+    // Long notes are shortened; a label-only item has no waitingSince; no comments, no request.
+    await s.addComment('Q-2', 'x'.repeat(500), agent)
+    expect(needsYouRequest(s, s.get('Q-2')!).request).toBe(`${'x'.repeat(REQUEST_MAX - 1)}…`)
+    await s.updateIssue('Q-3', { labels: ['Needs review'] }, agent)
+    expect(needsYouRequest(s, s.get('Q-3')!).waitingSince).toBeUndefined()
+    const bare = await s.createIssue({ title: 'Bare', project: 'support', status: 'Waiting' }, agent)
+    expect(needsYouRequest(s, bare).request).toBeUndefined()
   })
 })
 
