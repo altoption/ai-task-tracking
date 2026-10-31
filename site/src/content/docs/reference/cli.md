@@ -23,6 +23,7 @@ Usage: aitt <command>   (AI Task Tracking)
   guidance         print the agent instructions for other tools (--cursor: as a .cursor/rules/*.mdc file)
   uninstall        remove the app, its login item, link, skill and MCP entries; keeps the data (--yes: don't ask)
   bench <n>        time open/snapshot/search on n synthetic issues
+  --version        print the version
 ```
 
 ## aitt serve
@@ -125,4 +126,12 @@ Time open/snapshot/search on n synthetic issues.
 
 ```text
 usage: aitt bench <n>
+```
+
+## aitt --version
+
+Print the version.
+
+```sh
+aitt --version
 ```

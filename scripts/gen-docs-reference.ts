@@ -109,6 +109,7 @@ const COMMAND_USAGE: Record<string, string | null> = {
   guidance: GUIDANCE_USAGE,
   uninstall: UNINSTALL_USAGE,
   bench: BENCH_USAGE,
+  '--version': null,
 }
 
 function cliPage(): string {
