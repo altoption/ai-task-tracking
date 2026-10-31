@@ -171,7 +171,7 @@ describe('counts and filters', () => {
   const waiting = waitingOnYou(events, needsYou, { needsYou: ctx.needsYou! }, TODAY)
 
   test('waits on you: issues that entered a Needs-you status in the range, with the latest agent note as the question', () => {
-    expect(waiting).toEqual([{ id: 'W-1', title: 'Title of W-1', status: 'Waiting', at: at(60), who: 'Claude Code', note: 'Which provider should I use?' }])
+    expect(waiting).toEqual([{ id: 'W-1', title: 'Title of W-1', status: 'Waiting', at: at(60) }])
     // Waiting since before the range: Home's Needs you has it; the strip doesn't.
     expect(waitingOnYou(events, needsYou, { needsYou: ctx.needsYou! }, NOW - 30 * 60_000)).toEqual([])
   })
@@ -303,6 +303,28 @@ describe('agent-written data stays inert (security review)', () => {
 })
 
 describe('dayOverview (Home, ATT-53)', () => {
+  test('started in one session and finished in another counts as finished only', () => {
+    const events = [ev(CC, 60, 'B-1', 'status', { from: 'Todo', to: 'In Progress' }), ev(CX, 30, 'B-1', 'status', { from: 'In Progress', to: 'Done' })].reverse()
+    expect(dayOverview(buildActivity(events, ctx, TODAY).cards)).toMatchObject({ finished: 1, started: 0 })
+  })
+
+  test('a row\'s kind follows its last move: finished then reopened is started, not finished', () => {
+    const events = [
+      ev(CC, 60, 'B-1', 'status', { from: 'Todo', to: 'In Progress' }), ev(CC, 40, 'B-1', 'status', { from: 'In Progress', to: 'Done' }),
+      ev(CC, 20, 'B-1', 'status', { from: 'Done', to: 'In Progress' }),
+    ].reverse()
+    const o = dayOverview(buildActivity(events, ctx, TODAY).cards)
+    expect(o).toMatchObject({ finished: 0, started: 1 })
+    expect(o.recent).toEqual([])
+  })
+
+  test('moved on then parked: asking and being put back count for what it is now', () => {
+    const asked = [ev(CC, 60, 'B-1', 'status', { from: 'Todo', to: 'In Progress' }), ev(CC, 40, 'B-1', 'status', { from: 'In Progress', to: 'Waiting' })].reverse()
+    expect(buildActivity(asked, ctx, TODAY).cards[0]!.rows[0]!.kinds).toEqual(['needs'])
+    const parked = [ev(CC, 60, 'B-1', 'status', { from: 'Todo', to: 'In Progress' }), ev(CC, 40, 'B-1', 'status', { from: 'In Progress', to: 'Todo' })].reverse()
+    expect(buildActivity(parked, ctx, TODAY).cards[0]!.rows[0]!.kinds).toEqual([])
+  })
+
   test('counts, the live session and what it wrote last, and what finished, newest first', () => {
     const events: FeedEvent[] = [
       ev(CX, 300, 'A-3', 'status', { from: 'In Progress', to: 'Done' }),

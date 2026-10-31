@@ -169,6 +169,7 @@ function buildRow(id: string, evs: FeedEvent[], ctx: Ctx): ActivityRow | null {
   let note: string | undefined
   let created: string | undefined
   let lastTo: string | undefined
+  let moved: RowKind | undefined
   let folded = 0
   let addedLinks = false
   let detail: string | undefined
@@ -186,9 +187,7 @@ function buildRow(id: string, evs: FeedEvent[], ctx: Ctx): ActivityRow | null {
         if (e.to) {
           push(e.to); lastTo = e.to
           const t = type(e.to)
-          if (t === 'completed') kinds.add('done')
-          else if (needs.has(e.to)) kinds.add('needs')
-          else if (t === 'started') kinds.add('started')
+          moved = t === 'completed' ? 'done' : needs.has(e.to) ? 'needs' : t === 'started' ? 'started' : undefined
         }
         break
       case 'comment':
@@ -211,8 +210,8 @@ function buildRow(id: string, evs: FeedEvent[], ctx: Ctx): ActivityRow | null {
       }
     }
   }
-  // Started and finished in the same session counts as finished only.
-  if (kinds.has('done')) kinds.delete('started')
+  // What the row is follows its last move: finished then reopened is started, started then finished is finished.
+  if (moved) kinds.add(moved)
   if (!path.length && edits.size) detail = `edited ${[...edits].join(', ')}`
   // Nothing the owner would care about: the whole row folds away (its writes still count on the card).
   if (!path.length && !detail && note === undefined) return null
@@ -325,6 +324,8 @@ export function activityCounts(cards: SessionCard[], waiting: number): { finishe
     }
     if (c.agentKey) { agents.add(c.agentKey); if (c.live) live.add(c.agentKey) }
   }
+  // Started in one session and finished in another: finished.
+  for (const id of done) started.delete(id)
   return { finished: done.size, started: started.size, waiting, agents: agents.size, live: live.size }
 }
 
@@ -361,15 +362,14 @@ export function rhythm(events: FeedEvent[], range: Range, now: number, skip?: (i
   return buckets
 }
 
-export interface WaitingItem { id: string; title: string; status: string; at: string; who: string; note?: string }
+export interface WaitingItem { id: string; title: string; status: string; at: string }
 
 /**
- * The "waits on you" strip: issues an agent handed back within the range that still need the owner for a Needs-you
+ * What the Needs you chip in Session details shows: issues an agent handed back within the range that still need the owner for a Needs-you
  * status or label (Home's Needs you list; stalled-only and CI-only items stay in that list). Handed back means an
  * agent's write that entered Needs you: a move to a Needs-you status, creating it there, or a labels change that
  * added a Needs-you label (the feed doesn't keep the old labels, so: the labels changed and the issue now carries
- * one, and it wasn't already waiting in a Needs-you status). The owner's own writes never count. The question is the
- * latest agent note in the range on it.
+ * one, and it wasn't already waiting in a Needs-you status). The owner's own writes never count.
  */
 export function waitingOnYou(
   events: FeedEvent[], needsYou: (IssueSummary & { stalled?: string; ciReason?: string })[], config: Pick<Config, 'needsYou'> | null,
@@ -387,9 +387,7 @@ export function waitingOnYou(
       && !statuses.has(statusBefore(mine, e, i.status))
     const entered = mine.find((e) => isAgent(e) && ((e.kind === 'status' && !!e.to && statuses.has(e.to)) || e.kind === 'created' || labelEntry(e)))
     if (!entered) continue
-    const note = mine.find((e) => e.kind === 'comment' && isAgent(e))?.text ?? mine.find((e) => e.kind === 'comment')?.text
-    const who = isAgent(entered) ? toolOf(entered.actor.client, entered.actor.workspace).name : 'You'
-    out.push({ id: i.id, title: i.title, status: i.status, at: entered.at, who, ...(note ? { note } : {}) })
+    out.push({ id: i.id, title: i.title, status: i.status, at: entered.at })
   }
   return out.sort((a, b) => desc(a.at, b.at))
 }
