@@ -103,8 +103,8 @@ The engine checks every open issue each time Home, the menu bar or an agent asks
 
 - **Idle**: it is *In Progress* and nothing changed on it (no edit and no comment, by anyone) for 24 hours or more.
   An epic's work happens in its children, so for an issue with sub-issues a change to any of them, at any depth,
-  counts too. An epic whose open sub-issues all need you (Waiting, or a Needs-you label) or are blocked is waiting
-  on them, not idle.
+  counts too. An epic whose open sub-issues all need you (Waiting, or a Needs-you label), are blocked, or are epics
+  waiting the same way, is waiting on them, not idle.
 - **Churning**: in the last 7 days it was reopened (back to *In Progress* from Done, Canceled, Duplicate, Todo or
   Backlog, after having been in progress before) 2 times or more, or more than 3 different agent sessions worked on it
   since it was last Done. Going to *Waiting* (or another Needs-you status) and back is an agent asking you, and never

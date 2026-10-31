@@ -79,11 +79,17 @@ export function stalledOf(s: Store, now = Date.now()): (i: Issue) => string | nu
   const isOpen = openTest(s)
   const isBlocked = blockedTest(isOpen)
   const needsYou = needsYouOf(s)
+  // Waiting on its sub-issues: it has open ones, and each needs the owner, is blocked, or is itself waiting on its own.
+  const waiting = (i: Issue, seen: Set<string>): boolean => {
+    if (seen.has(i.id)) return false // a parent cycle
+    seen.add(i.id)
+    const open = s.children(i.id).filter((c) => isOpen(c))
+    return open.length > 0 && open.every((c) => needsYou(c) || isBlocked(c) || waiting(c, seen))
+  }
   const activeAt = (i: Issue): number => {
     // Only the working status can be idle; skip the walk for everything else.
     if (i.status !== ctx.working) return s.lastChange(i)
-    const open = s.children(i.id).filter((c) => isOpen(c))
-    if (open.length && open.every((c) => needsYou(c) || isBlocked(c))) return now
+    if (waiting(i, new Set())) return now
     let t = s.lastChange(i)
     const seen = new Set([i.id])
     const stack = s.children(i.id)
