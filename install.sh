@@ -14,7 +14,7 @@ MIN_MACOS=13
 MIN_BUN=1.4
 
 YES=0 DRY=0 FROM_SOURCE=0 LAUNCH=1 VERSION="" CONNECT=""
-CLONE="" TMP_DIRS=()
+CLONE="" TMP_DIRS=() APP="" SWAP_OLD="" WAS_RUNNING=""
 
 # The help text lives here (not only in comments) so --help also works when the script is piped into bash.
 usage() {
@@ -45,7 +45,23 @@ Environment:
                       no Claude Code MCP entry, no aitt link and no other agent tools (unless --connect).
 USAGE
 }
-cleanup() { local d; for d in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do rm -rf "$d"; done; }
+# On every exit, signals included. Between the swap's two renames the old app sits in the stage folder: it goes back
+# before that folder is removed, and if it can't, the folder stays so the old app isn't lost. /bin/mv: nothing on PATH
+# gets a say in the last rename.
+cleanup() {
+  local d keep=""
+  if [ -n "$SWAP_OLD" ] && [ -e "$SWAP_OLD" ] && [ ! -e "$APP" ]; then
+    if /bin/mv "$SWAP_OLD" "$APP"; then
+      reopen_kept
+    else
+      keep="$(dirname "$SWAP_OLD")"
+      aitt_warn "the old app could not be put back; it is at $SWAP_OLD. Move it to $APP."
+    fi
+  fi
+  for d in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do
+    if [ "$d" != "$keep" ]; then rm -rf "$d"; fi
+  done
+}
 # new_tmp: a temp folder in $NEW_TMP, removed on exit. (Not through $(…): the list must live in this shell.)
 new_tmp() {
   local t="${TMPDIR:-/tmp}"
@@ -218,15 +234,26 @@ ensure_source_prereqs() {
   export PATH
 }
 
+# reopen_kept: a failure after quitting: the kept app goes back to running, unless --no-launch.
+reopen_kept() {
+  if [ -n "$WAS_RUNNING" ] && [ "$LAUNCH" = 1 ] && [ -d "$APP" ]; then open "$APP" || true; fi
+}
+
 # swap_in NEW_APP: NEW_APP is a complete bundle in a stage folder inside APP_DIR. Quit only the copies in APP_DIR,
 # then rename: the old app aside, the new one in place (the old one comes back if that fails), the old one removed.
 swap_in() {
   local new="$1" old
+  WAS_RUNNING="$(app_pids "$APP")"
   quit_app "$APP" || exit 1
   old="$(dirname "$new")/previous.app"
-  if [ -e "$APP" ]; then mv "$APP" "$old" || aitt_die "could not move the old app aside; it was kept"; fi
+  SWAP_OLD="$old"
+  if [ -e "$APP" ] && ! mv "$APP" "$old"; then
+    reopen_kept
+    aitt_die "could not move the old app aside; it was kept"
+  fi
   if ! mv "$new" "$APP"; then
     if [ -e "$old" ]; then mv "$old" "$APP"; fi
+    reopen_kept
     aitt_die "could not move the new app into place; the old one was kept"
   fi
   rm -rf "$old"
@@ -310,6 +337,8 @@ post_install() {
 
 main() {
   trap cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM HUP
   parse_args "$@"
   load_lib
   APP_DIR="${AITT_APP_DIR:-$HOME/Applications}"

@@ -195,6 +195,21 @@ case "$1" in read) exit 1 ;; export) exit 0 ;; esac
   lsregister: '#!/bin/bash\necho "lsregister $*" >> "$STUB_LOG"\n',
   gemini: '#!/bin/bash\necho "gemini $*" >> "$STUB_LOG"\n', // a detected agent tool
   bun: '#!/bin/bash\n[ "$1" = "--version" ] && { echo 1.4.4; exit 0; }\necho "bun $*" >> "$STUB_LOG"\nexit 1\n',
+  open: '#!/bin/bash\necho "open $*" >> "$STUB_LOG"\n', // never the real one
+  // The swap's renames, on request. MV_FAIL=aside|new refuses one; MV_SIGNAL=<name> signals the installer between the
+  // two (old app aside, new one not in yet), with MV_READONLY=1 also making the restore impossible. Else the real mv.
+  mv: `#!/bin/bash
+last="\${@: -1}"
+if [ "$MV_FAIL" = aside ] && [[ "$last" = */previous.app ]]; then echo "mv: refused" >&2; exit 1; fi
+if [ "$last" = "$MV_APP" ] && [[ "$1" != */previous.app ]]; then
+  if [ "$MV_FAIL" = new ]; then echo "mv: refused" >&2; exit 1; fi
+  if [ -n "$MV_SIGNAL" ]; then
+    [ -z "$MV_READONLY" ] || chmod a-w "$(dirname "$MV_APP")"
+    kill -"$MV_SIGNAL" "$PPID"; sleep 0.2; exit 1
+  fi
+fi
+exec /bin/mv "$@"
+`,
 }
 const procs: { kill(): void; pid: number }[] = []
 afterAll(() => { for (const p of procs) p.kill() })
@@ -323,5 +338,48 @@ describe('install.sh release path (end to end, nothing built)', () => {
     expect(r.out).toContain('building from source instead')
     expect(await exists(t.app)).toBe(false)
     expect(await t.leftovers()).toEqual([])
+  })
+
+  test.each([['TERM', 143], ['INT', 130], ['HUP', 143]])('%s between the renames: the old app goes back and is reopened', async (sig, code) => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    await running(t.app)
+    const r = await t.install(['--yes'], { MV_SIGNAL: String(sig), MV_APP: t.app })
+    expect(r.code).toBe(code as number)
+    expect(await t.version()).toBe('0.0.9')
+    expect(await t.calls()).toContain(`open ${t.app}`)
+    expect(await t.leftovers()).toEqual([])
+  })
+
+  test('interrupted and the old app cannot be put back: it is kept and the output says where', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    const r = await t.install(['--yes', '--no-launch'], { MV_SIGNAL: 'TERM', MV_READONLY: '1', MV_APP: t.app })
+    await chmod(t.apps, 0o755)
+    const stage = (await readdir(t.apps)).find((f) => f.startsWith('.aitt-install.'))
+    expect(stage).toBeDefined()
+    const kept = join(t.apps, stage!, 'previous.app')
+    expect(await exists(join(kept, 'Contents/Info.plist'))).toBe(true)
+    expect(r.out).toContain(kept)
+    expect(await exists(t.app)).toBe(false)
+  })
+
+  test.each(['aside', 'new'])('the %s rename fails after quitting: the old app stays and is reopened', async (fail) => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    const old = await running(t.app)
+    const r = await t.install(['--yes'], { MV_FAIL: fail, MV_APP: t.app })
+    expect(r.code).toBe(1)
+    expect(await old.exited).toBe(143)
+    expect(await t.version()).toBe('0.0.9')
+    expect(await t.calls()).toContain(`open ${t.app}`)
+  })
+
+  test('a failed rename with --no-launch does not reopen the app', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    await running(t.app)
+    expect((await t.install(['--yes', '--no-launch'], { MV_FAIL: 'new', MV_APP: t.app })).code).toBe(1)
+    expect((await t.calls()).some((c) => c.startsWith('open'))).toBe(false)
   })
 })
