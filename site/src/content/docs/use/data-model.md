@@ -22,6 +22,7 @@ app uses. It is plain text and a git repo.
 ├── AGENTS.md                   the rules agents get as the MCP server's instructions
 ├── .gitignore                  written by the app
 ├── views/<slug>.yml            saved views (the app writes these)
+├── themes/<name>.yml           your own themes (optional; see the Themes guide)
 ├── projects/
 │   └── <project-slug>/
 │       ├── project.md          name, key, status, milestones; body = description
@@ -203,7 +204,7 @@ nextNumber:
 - `workspaces`: repo (or folder) name → project slug. An agent's new issue goes to the project mapped to its repo
   when it doesn't name one.
 - `nextNumber`: the next issue number per project key (see [Issue ids](#issue-ids-and-project-keys)).
-- `needsYou`, `stalled`, `ci` and `port`: see the [config.yml reference](/docs/reference/config/). Leave keys you
+- `needsYou`, `stalled`, `ci`, `theme` and `port`: see the [config.yml reference](/docs/reference/config/). Leave keys you
   don't need out; missing keys take their defaults. Comments and unknown keys are kept when the app rewrites the
   file.
 

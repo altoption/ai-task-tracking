@@ -81,10 +81,13 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   back.
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
   a badge on the issue page, a dot on rows, and failing checks in Needs you. Without `gh` nothing shows.
+- **Themes.** Dark (the default), Light, Match macOS, Midnight, Paper and High contrast, or your own theme file
+  (`themes/<name>.yml` in the data folder). Pick one in Settings ▸ Theme or with ⌘K ▸ "Theme: …"; the browser and the
+  app window switch together. See [Themes](site/src/content/docs/guides/themes.md).
 - **Attempts and handoff.** The issue page counts the agent sessions that worked on an issue ("3 attempts · 2
   tools"); when an agent opens In Progress work, `get_issue` leads with where the last session stopped.
 - **Settings** (⌘,): launch at login; show in the Dock; show Needs-you issues in the menu; show stalled work in
-  Needs you (the menu-bar number, menu and notifications); show CI status; notify me about agent activity, and for which events: an agent needs you, finishes an issue, or creates one (off by default); the two
+  Needs you (the menu-bar number, menu and notifications); show CI status; the theme; notify me about agent activity, and for which events: an agent needs you, finishes an issue, or creates one (off by default); the two
   shortcuts; back up to GitHub before quitting. Every setting and its default:
   [the Settings reference](site/src/content/docs/reference/settings.md).
 - **Docs.** The app serves these docs at `http://127.0.0.1:7477/docs/`: Docs in the sidebar, Help in the menus
@@ -199,8 +202,8 @@ app installed elsewhere. **Your data folder is kept**; the output says where it 
 - **Data folder** (default `~/AITaskTracking`):
   `config.yml` (port, statuses, which statuses and labels count as *Needs you* under `needsYou:`, when work counts
   as stalled under `stalled:`, repo → project mapping under `workspaces:`), `labels.yml`, `AGENTS.md` (the rules
-  agents get), `projects/<slug>/project.md` and `projects/<slug>/issues/*.md`, `views/`. Plain text, a git repo;
-  you can read and edit it with any editor, and the app picks up changes. The file format:
+  agents get), `projects/<slug>/project.md` and `projects/<slug>/issues/*.md`, `views/`, `themes/` (your own themes). Plain text, a git
+  repo; you can read and edit it with any editor, and the app picks up changes. The file format:
   [Data model and importing](site/src/content/docs/use/data-model.md).
 - **App**: `~/Applications/AI Task Tracking.app`; the CLI is `~/.local/bin/aitt`, a link into it.
 - **App settings**: `defaults read io.github.altoption.ai-task-tracking`.

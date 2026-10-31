@@ -17,6 +17,7 @@
  * engine starts, checked "2 minutes ago" and not due again for a year.
  *
  * The issue shot opens its attempts list: two agent sessions (two tools), the second pausing with a handoff comment.
+ * home-light.png is Home in the Light theme (POST /api/theme around that shot; the others are Dark, the default).
  *
  * Browser: Playwright's own Chromium when installed (bunx playwright-core install chromium), else Google Chrome.
  */
@@ -210,19 +211,26 @@ async function launch(): Promise<Browser> {
   return chromium.launch({ channel: 'chrome' })
 }
 
-interface Shot { file: string; route: string; prepare?: (page: Page) => Promise<void> }
+interface Shot { file: string; route: string; prepare?: (page: Page) => Promise<void>; theme?: string }
+
+/** Choose the engine's theme (every open page follows it). */
+async function setTheme(base: string, theme: string): Promise<void> {
+  const r = await fetch(`${base}/api/theme`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-tracker': '1' }, body: JSON.stringify({ theme }) })
+  if (!r.ok) throw new Error(`theme ${theme}: ${await r.text()}`)
+}
 
 async function capture(base: string, shots: Shot[]): Promise<Map<string, Buffer>> {
   const browser = await launch()
   const out = new Map<string, Buffer>()
   try {
-    // Fixed locale and time zone: the issue page shows absolute dates. The UI is dark-only.
+    // Fixed locale and time zone: the issue page shows absolute dates. Dark unless a shot names a theme.
     const context = await browser.newContext({
       viewport: VIEWPORT, deviceScaleFactor: 2, colorScheme: 'dark', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
     })
     // As in the app's window: no "Open in AI Task Tracking" link (the UI's own dismiss flag).
     await context.addInitScript(() => { try { localStorage.setItem('tracker.hideOpenInApp', '1') } catch { /* none */ } })
     for (const s of shots) {
+      if (s.theme) await setTheme(base, s.theme)
       const page = await context.newPage()
       await page.clock.setFixedTime(SHOT_TIME)
       await page.goto(`${base}/${s.route}`)
@@ -233,6 +241,7 @@ async function capture(base: string, shots: Shot[]): Promise<Map<string, Buffer>
       await page.waitForTimeout(300)
       out.set(s.file, await page.screenshot({ animations: 'disabled', caret: 'hide' }))
       await page.close()
+      if (s.theme) await setTheme(base, 'dark')
     }
   } finally {
     await browser.close()
@@ -274,6 +283,7 @@ async function main(): Promise<void> {
           await page.waitForTimeout(400)
         },
       },
+      { file: 'home-light.png', route: '#/', theme: 'light' },
       // Last: the collapsed state is saved in the context's localStorage and would carry into later shots.
       { file: 'sidebar-collapsed.png', route: `#/project/${website}`, prepare: (page) => page.click('[aria-label="Collapse sidebar"]') },
     ]

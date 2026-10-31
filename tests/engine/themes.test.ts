@@ -38,6 +38,13 @@ describe('built-in themes', () => {
     }
   })
 
+  test('the Themes guide lists every token and every built-in id', async () => {
+    const guide = await readFile(join(import.meta.dir, '../../site/src/content/docs/guides/themes.md'), 'utf8')
+    const listed = [...guide.matchAll(/^\| `([a-z-]+)` \|/gm)].map((m) => m[1])
+    expect(listed).toEqual([...THEME_TOKENS])
+    for (const t of builtinThemes()) expect(guide).toContain(`| ${t.name} | \`${t.id}\` |`)
+  })
+
   test('picker order: Dark, Light, Match macOS, then the presets (one high-contrast)', () => {
     expect(builtinThemes().map((t) => t.id)).toEqual(['dark', 'light', 'system', 'midnight', 'paper', 'high-contrast'])
   })

@@ -18,6 +18,7 @@ changes. Every file and key is described in [Data model and importing](/docs/use
 | `projects/<slug>/project.md` | a project |
 | `projects/<slug>/issues/*.md` | its issues |
 | `views/` | saved views |
+| `themes/` | your own themes, one `<name>.yml` each (optional; see [Themes](/docs/guides/themes/)) |
 | `.tracker/` | this Mac's caches, never backed up (git-ignored): the activity log `events.jsonl` and the PR CI status `ci.json` |
 
 ## App and CLI
