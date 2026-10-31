@@ -8,7 +8,7 @@ import { useAppSettings, type AppSettingsApi } from '../appSettings'
 import { getHealth, listedProjects, NO_PROJECT, setProjectHidden, setTheme, useTracker, type TrackerState } from '../client'
 import { replaceRoute } from '../router'
 import {
-  agentStatus, APP_GROUPS, backupStatus, engineStatus, nextSettingsTab, SETTINGS_TABS, type AppRow, type HealthInfo, type SettingsTab, type StatusLine,
+  agentStatus, APP_GROUPS, backupStatus, CHECKING, engineStatus, nextSettingsTab, SETTINGS_TABS, type AppRow, type HealthInfo, type SettingsTab, type StatusLine,
 } from '../settingsModel'
 import { makeThemePick } from './Palette'
 import { DOCS_HREF, isOpen } from './Sidebar'
@@ -54,12 +54,13 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function Row({ name, desc, swatch, children }: { name: string; desc?: ReactNode; swatch?: string; children?: ReactNode }) {
+function Row({ name, desc, swatch, problem, children }: { name: string; desc?: ReactNode; swatch?: string; problem?: string; children?: ReactNode }) {
   return (
     <div className="settings-row">
       <div className="settings-row-text">
         <div className="settings-row-name">{swatch && <span className="swatch" style={{ background: swatch }} />}{name}</div>
         {desc && <div className="settings-row-desc">{desc}</div>}
+        {problem && <div className="settings-row-problem" role="alert">{problem}</div>}
       </div>
       {children}
     </div>
@@ -99,7 +100,7 @@ function AppSettingRow({ row, app }: { row: AppRow; app: AppSettingsApi | null }
   }
   const allowed = !row.needs || app.state?.values[row.needs] === true
   return (
-    <Row name={row.label} desc={row.desc}>
+    <Row name={row.label} desc={row.desc} problem={app.state?.problems?.[row.key]}>
       <Switch label={row.label} on={value === true} disabled={!app.state || !allowed} onFlip={() => app.set(row.key, value !== true)} />
     </Row>
   )
@@ -116,7 +117,7 @@ function StatusItem({ name, line }: { name: string; line: StatusLine }) {
 
 /** The General tab's strip. Polls /api/health while it shows; the feed and the connection are already live. */
 function StatusStrip({ state }: { state: TrackerState }) {
-  const [health, setHealth] = useState<HealthInfo | null>(null)
+  const [health, setHealth] = useState<HealthInfo | null | undefined>(undefined)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     let live = true
@@ -129,9 +130,10 @@ function StatusStrip({ state }: { state: TrackerState }) {
   }, [])
   return (
     <div className="settings-status">
-      <StatusItem name="Engine" line={engineStatus(health, state.connected)} />
+      {/* Until the first snapshot the live connection hasn't had its chance yet. */}
+      <StatusItem name="Engine" line={engineStatus(health, state.connected || !state.ready)} />
       <StatusItem name="Backup" line={backupStatus(health, now)} />
-      <StatusItem name="Agents" line={agentStatus(state.feed, now)} />
+      <StatusItem name="Agents" line={state.ready ? agentStatus(state.feed, now) : CHECKING} />
     </div>
   )
 }

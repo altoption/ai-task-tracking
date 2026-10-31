@@ -816,6 +816,7 @@ span.tree-toggle { transform: none; }
 .settings-row-text { flex: 1 1 280px; min-width: 0; }
 .settings-row-name { display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .settings-row-desc { margin-top: 1px; color: var(--muted); font-size: 12px; }
+.settings-row-problem { margin-top: 2px; color: var(--danger); font-size: 12px; }
 .settings-only { color: var(--muted); font-size: 12px; }
 .settings-error { padding: 8px 16px; }
 .settings-select, .settings-btn { min-height: 32px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }

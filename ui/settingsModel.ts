@@ -126,13 +126,19 @@ export function relativeAge(at: string, now: number): string {
   return `${Math.floor(s / 86_400)} days ago`
 }
 
-export function engineStatus(health: HealthInfo | null, connected: boolean): StatusLine {
+/** Before the first health reply: not a failure, just not known yet. */
+export const CHECKING: StatusLine = { text: 'Checking…', tone: 'off' }
+
+/** `health`: undefined until the first reply, null when the last poll failed. */
+export function engineStatus(health: HealthInfo | null | undefined, connected: boolean): StatusLine {
+  if (health === undefined) return CHECKING
   if (!health || !connected) return { text: 'Not reachable', tone: 'danger' }
   return { text: health.home ? `Running · data in ${health.home}` : 'Running', tone: 'ok' }
 }
 
 /** The app menu's backup line (BackupText.line). */
-export function backupStatus(health: HealthInfo | null, now: number): StatusLine {
+export function backupStatus(health: HealthInfo | null | undefined, now: number): StatusLine {
+  if (health === undefined) return CHECKING
   const g = health?.git
   if (!g) return { text: 'Status unavailable', tone: 'off' }
   if (g.commitError) return { text: 'Can\'t commit your changes', tone: 'danger' }
@@ -145,10 +151,10 @@ export function backupStatus(health: HealthInfo | null, now: number): StatusLine
 
 /**
  * The engine doesn't know which agents are connected (each tool starts its own MCP proxy), so this says only what it
- * does know: the last agent write it recorded. `feed` is newest first.
+ * does know: the last agent write among the recent events the page holds. `feed` is newest first.
  */
 export function agentStatus(feed: readonly { at: string; actor: { actor: string; client?: string } }[], now: number): StatusLine {
   const last = feed.find((e) => e.actor.actor === 'agent')
-  if (!last) return { text: 'No agent activity yet', tone: 'off' }
+  if (!last) return { text: 'No recent agent activity', tone: 'off' }
   return { text: `Last write ${relativeAge(last.at, now)}${last.actor.client ? ` · ${last.actor.client}` : ''}`, tone: 'ok' }
 }
