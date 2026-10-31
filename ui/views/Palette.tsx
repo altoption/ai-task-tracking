@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import type { IssueSummary } from '../../src/model'
 import { listedProjects, searchIssues, setTheme, useTracker, type ThemesInfo } from '../client'
 import { navigate } from '../router'
-import { Icon, StatusIcon } from '../components/icons'
+import { ConceptIcon, StatusIcon } from '../components/icons'
 
 interface Item { key: string; group: string; label: string; hint?: string; icon: ReactNode; run: () => void }
 export type PaletteMode = 'root' | 'views'
@@ -94,7 +94,7 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
     const needle = q.trim().toLowerCase()
     const has = (s: string) => !needle || s.toLowerCase().includes(needle)
     const views = state.views.filter((v) => has(v.name)).map<Item>((v) => ({
-      key: `view:${v.slug}`, group: 'Views', label: v.name, icon: <Icon name={v.favorite ? 'star' : 'view'} />, run: go(() => navigate({ name: 'view', slug: v.slug })),
+      key: `view:${v.slug}`, group: 'Views', label: v.name, icon: <ConceptIcon concept={v.favorite ? 'favorite' : 'views'} />, run: go(() => navigate({ name: 'view', slug: v.slug })),
     }))
     if (mode === 'views') return views
 
@@ -106,12 +106,12 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
       out.push({ key: `issue:${i.id}`, group: 'Issues', label: i.title, hint: i.id, icon: <StatusIcon status={i.status} config={state.config} />, run: go(() => navigate({ name: 'issue', id: i.id })) })
     }
     const actions: Item[] = [
-      { key: 'a:new', group: 'Actions', label: 'New issue', hint: 'C', icon: <Icon name="new" />, run: go(() => navigate({ name: 'new' })) },
-      { key: 'a:home', group: 'Actions', label: 'Go to Home', hint: 'G H', icon: <Icon name="home" />, run: go(() => navigate({ name: 'home' })) },
-      { key: 'a:issues', group: 'Actions', label: 'Go to All issues', hint: 'G I', icon: <Icon name="issues" />, run: go(() => navigate({ name: 'issues' })) },
-      { key: 'a:views', group: 'Actions', label: 'Go to view…', icon: <Icon name="view" />, run: () => { setMode('views'); setQ(''); setActive(0) } },
+      { key: 'a:new', group: 'Actions', label: 'New issue', hint: 'C', icon: <ConceptIcon concept="newIssue" />, run: go(() => navigate({ name: 'new' })) },
+      { key: 'a:home', group: 'Actions', label: 'Go to Home', hint: 'G H', icon: <ConceptIcon concept="home" />, run: go(() => navigate({ name: 'home' })) },
+      { key: 'a:issues', group: 'Actions', label: 'Go to All issues', hint: 'G I', icon: <ConceptIcon concept="issues" />, run: go(() => navigate({ name: 'issues' })) },
+      { key: 'a:views', group: 'Actions', label: 'Go to view…', icon: <ConceptIcon concept="views" />, run: () => { setMode('views'); setQ(''); setActive(0) } },
     ].filter((a) => has(a.label))
-    if (needle) actions.unshift({ key: 'a:search', group: 'Actions', label: `Search for “${q.trim()}”`, icon: <Icon name="search" />, run: go(() => navigate({ name: 'search', q: q.trim() })) })
+    if (needle) actions.unshift({ key: 'a:search', group: 'Actions', label: `Search for “${q.trim()}”`, icon: <ConceptIcon concept="search" />, run: go(() => navigate({ name: 'search', q: q.trim() })) })
     const projects = needle
       ? listedProjects(state.projects).filter((p) => has(p.name)).map<Item>((p) => ({
           key: `project:${p.slug}`, group: 'Projects', label: p.name, icon: <span className="swatch" style={{ background: p.color ?? 'var(--muted)' }} />,
@@ -119,7 +119,7 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
         }))
       : []
     const themes = themeCommands(state.themes, q).map<Item>((t) => ({
-      key: `theme:${t.id}`, group: 'Themes', label: t.label, hint: pendingTheme === t.id ? 'Switching…' : t.current ? 'Current' : undefined, icon: <Icon name="display" />,
+      key: `theme:${t.id}`, group: 'Themes', label: t.label, hint: pendingTheme === t.id ? 'Switching…' : t.current ? 'Current' : undefined, icon: <ConceptIcon concept="theme" />,
       // Stays open until the engine answers, so a refusal shows here.
       run: () => { setError(''); pickTheme(t.id) },
     }))

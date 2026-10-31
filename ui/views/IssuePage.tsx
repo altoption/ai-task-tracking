@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import { callTool, getIssue, getIssueFeed, NO_PROJECT, useTracker, type IssueDetail } from '../client'
-import { Icon, ProgressPill, StatusIcon } from '../components/icons'
+import { ConceptIcon, Icon, ProgressPill, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { buildTree, treeProgress, type TreeNode } from '../issuePage'
 import { taskAt, type MdContext } from '../markdown'
@@ -300,7 +300,7 @@ export function IssuePage({ id }: { id: string }) {
     <section className="issue-page">
       <header className="page-head issue-head">
         <nav className="crumbs" aria-label="Breadcrumb">
-          {project && detail.project !== NO_PROJECT && <><a href={href({ name: 'project', slug: project.slug })}><Icon name="project" /> {project.name}</a><span className="sep">›</span></>}
+          {project && detail.project !== NO_PROJECT && <><a href={href({ name: 'project', slug: project.slug })}><ConceptIcon concept="project" /> {project.name}</a><span className="sep">›</span></>}
           {[...detail.ancestors].reverse().map((a) => (
             <span key={a.id} className="crumb"><a href={href({ name: 'issue', id: a.id })} title={a.title}><span className="id">{a.id}</span> <span className="t">{a.title}</span></a><span className="sep">›</span></span>
           ))}

@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Filter, IssueSummary } from '../../src/model'
 import { callTool, inScope, setScope, useScope, useTracker, type ViewDef } from '../client'
-import { Icon } from '../components/icons'
+import { ConceptIcon } from '../components/icons'
 import { Popover } from '../components/Popover'
 import { navigate, replaceRoute, type Route } from '../router'
 import { applyView, DEFAULT_DISPLAY, dropPatch, sameView, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../viewModel'
@@ -98,11 +98,11 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
     <section className="view-screen">
       <header className="page-head view-head">
         <div className="crumbs">
-          {icon ?? <Icon name={saved ? 'view' : 'issues'} />}
+          {icon ?? <ConceptIcon concept={saved ? 'views' : 'issues'} />}
           <h1>{title}</h1>
           {saved && (
             <button className={`icon-button star${saved.favorite ? ' on' : ''}`} aria-pressed={!!saved.favorite} aria-label={saved.favorite ? 'Remove from favorites' : 'Add to favorites'} onClick={toggleFavorite}>
-              <Icon name="star" />
+              <ConceptIcon concept="favorite" />
             </button>
           )}
           <span className="muted count-label">{result.total} {result.total === 1 ? 'issue' : 'issues'}</span>

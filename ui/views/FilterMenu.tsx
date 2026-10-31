@@ -5,27 +5,28 @@
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Filter, IssueSummary } from '../../src/model'
-import { Icon, PriorityIcon, PRIORITIES, StatusIcon } from '../components/icons'
+import { ConceptIcon, Icon, PriorityIcon, PRIORITIES, StatusIcon, type Concept } from '../components/icons'
 import { Popover } from '../components/Popover'
 import { listedProjects, type TrackerState } from '../client'
 import { byIssueNumber } from '../issuePage'
 
 type Key = keyof Filter
 interface Opt { value: string; label: string; icon?: ReactNode; hint?: string }
-interface Category { id: string; label: string; icon: string; keys: Key[] }
+/** A filter category. Its id is its concept, so its icon is `CONCEPT_ICON[id]` (ui/components/icons.tsx). */
+export interface Category { id: Concept; label: string; keys: Key[] }
 
-const CATEGORIES: Category[] = [
-  { id: 'status', label: 'Status', icon: 'issues', keys: ['status'] },
-  { id: 'priority', label: 'Priority', icon: 'filter', keys: ['priority'] },
-  { id: 'labels', label: 'Labels', icon: 'view', keys: ['labels'] },
-  { id: 'relations', label: 'Relations', icon: 'link', keys: ['blocked', 'blocking', 'hasRelated'] },
-  { id: 'dates', label: 'Dates', icon: 'calendar', keys: ['createdAfter', 'updatedAfter'] },
-  { id: 'project', label: 'Project', icon: 'project', keys: ['project'] },
-  { id: 'milestone', label: 'Milestone', icon: 'milestone', keys: ['milestone'] },
-  { id: 'parent', label: 'Parent issue', icon: 'issues', keys: ['parent'] },
-  { id: 'content', label: 'Content', icon: 'search', keys: ['query'] },
-  { id: 'links', label: 'Links', icon: 'link', keys: ['hasLinks'] },
-  { id: 'workspace', label: 'Workspace', icon: 'home', keys: ['workspace'] },
+export const CATEGORIES: Category[] = [
+  { id: 'status', label: 'Status', keys: ['status'] },
+  { id: 'priority', label: 'Priority', keys: ['priority'] },
+  { id: 'labels', label: 'Labels', keys: ['labels'] },
+  { id: 'relations', label: 'Relations', keys: ['blocked', 'blocking', 'hasRelated'] },
+  { id: 'dates', label: 'Dates', keys: ['createdAfter', 'updatedAfter'] },
+  { id: 'project', label: 'Project', keys: ['project'] },
+  { id: 'milestone', label: 'Milestone', keys: ['milestone'] },
+  { id: 'parent', label: 'Parent issue', keys: ['parent'] },
+  { id: 'content', label: 'Content', keys: ['query'] },
+  { id: 'links', label: 'Links', keys: ['hasLinks'] },
+  { id: 'workspace', label: 'Workspace', keys: ['workspace'] },
 ]
 
 /** Workspaces known to config or seen on issues. */
@@ -60,7 +61,7 @@ export function FilterMenu({ filter, locked = [], state, onChange }: { filter: F
   const cats = CATEGORIES.filter((c) => !c.keys.every((k) => locked.includes(k)))
   const active = activeChips(filter, locked, state).length > 0
   return (
-    <Popover label="Filter" button={<Icon name="filter" />} active={active} className="filter-menu">
+    <Popover label="Filter" button={<ConceptIcon concept="filter" />} active={active} className="filter-menu">
       {() => (
         <div className="fm" onKeyDown={(e) => { if (e.key === 'Backspace' && !q && cat) { setCat(null) } }}>
           <div className="fm-head">
@@ -70,7 +71,7 @@ export function FilterMenu({ filter, locked = [], state, onChange }: { filter: F
           <div className="picker-list">
             {!cat && cats.filter((c) => c.label.toLowerCase().includes(q.toLowerCase())).map((c) => (
               <div key={c.id} role="button" tabIndex={0} className="picker-item" onClick={() => { setCat(c.id); setQ('') }} onKeyDown={(e) => { if (e.key === 'Enter') { setCat(c.id); setQ('') } }}>
-                <Icon name={c.icon} /><span className="label">{c.label}</span><span className="hint">›</span>
+                <ConceptIcon concept={c.id} /><span className="label">{c.label}</span><span className="hint">›</span>
               </div>
             ))}
             {cat && <CategoryPanel cat={cat} q={q} filter={filter} state={state} onChange={onChange} />}

@@ -1,6 +1,6 @@
 /** Display options popover: layout, grouping/columns, rows, ordering, completed issues, toggles, properties. */
 import type { CompletedWindow, LabelDef, ViewDisplay } from '../../src/model'
-import { Icon } from '../components/icons'
+import { ConceptIcon } from '../components/icons'
 import { Popover } from '../components/Popover'
 import { NONE, ORDERINGS, PROPERTIES, ROW_OPTIONS, groupingOptions } from '../viewModel'
 
@@ -48,13 +48,13 @@ export function DisplayMenu({ display, labels, changed, onChange, onReset }: {
     set({ properties: PROPERTIES.map((p) => p.key).filter((p) => on.has(p)) })
   }
   return (
-    <Popover label="Display options" button={<Icon name="display" />} active={changed} className="display-menu">
+    <Popover label="Display options" button={<ConceptIcon concept="display" />} active={changed} className="display-menu">
       {() => (
         <div className="dm">
           <div className="dm-layout" role="radiogroup" aria-label="Layout">
             {(['list', 'board'] as const).map((l) => (
               <button key={l} type="button" role="radio" aria-checked={display.layout === l} className={display.layout === l ? 'on' : ''} onClick={() => set({ layout: l })}>
-                <Icon name={l} /> {l === 'list' ? 'List' : 'Board'}
+                <ConceptIcon concept={l} /> {l === 'list' ? 'List' : 'Board'}
               </button>
             ))}
           </div>

@@ -151,10 +151,32 @@ export function PriorityIcon({ priority, size = 14 }: { priority: number; size?:
   )
 }
 
-/** Small stroke icons for the sidebar and buttons. */
-const paths: Record<string, string> = {
+/** A circle as a path (for the stroke icons, which are one path each). */
+const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`
+
+/**
+ * Small stroke icons for the sidebar, menus and buttons: 16-px viewBox, stroke 1.3, round caps and joins. One shape per
+ * concept; which concept uses which icon is `CONCEPT_ICON` below.
+ */
+export const ICON_PATHS: Record<string, string> = {
   home: 'M2.5 7.2 8 2.8l5.5 4.4V13a.5.5 0 0 1-.5.5H10V10H6v3.5H3a.5.5 0 0 1-.5-.5z',
   issues: 'M3 3.5h10M3 8h10M3 12.5h6',
+  // A ring with a center dot, like the In Progress glyph, in the text color: "status" in general.
+  status: `${circle(8, 8, 5.5)}${circle(8, 8, 1.2)}`,
+  // Three signal bars, PriorityIcon in stroke form.
+  priority: 'M3.5 13v-3M8 13V7M12.5 13V3',
+  // A tag with its hole.
+  label: 'M2.5 3v4.3l6.2 6.2 4.8-4.8-6.2-6.2H3a.5.5 0 0 0-.5.5zM5.4 5.4h.01',
+  // Two nodes joined by a line.
+  relations: `${circle(4.4, 11.6, 2.2)}${circle(11.6, 4.4, 2.2)}M6 10l4-4`,
+  // A parent node with a child branch.
+  parent: `${circle(4.6, 4.2, 2.1)}M4.6 6.3v3.4a2 2 0 0 0 2 2h2.3${circle(11.2, 11.7, 2.1)}`,
+  // A folder.
+  workspace: 'M2 4.5a1 1 0 0 1 1-1h3.1l1.5 1.6H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z',
+  // A page with text lines.
+  content: 'M4 1.8h5.3l3.2 3.2v8.7a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V2.3a.5.5 0 0 1 .5-.5zM9.2 1.8v3.3h3.3M5.8 8h4.4M5.8 10.5h4.4',
+  // A circle half hatched: light and dark, for themes.
+  theme: `${circle(8, 8, 5.5)}M8 2.5v11M8 5.2h4.6M8 8h5.5M8 10.8h4.6`,
   project: 'M8 1.8 13.5 5v6L8 14.2 2.5 11V5zM2.5 5 8 8.2 13.5 5M8 8.2v6',
   view: 'M2 6 8 3l6 3-6 3zM2 9.5 8 12.5l6-3',
   search: 'M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.6 10.6 14 14',
@@ -164,22 +186,42 @@ const paths: Record<string, string> = {
   chevron: 'M4.5 6 8 9.5 11.5 6',
   filter: 'M2.5 4h11M4.5 8h7M6.5 12h3',
   display: 'M2.5 5h11M2.5 11h11M6 3.5v3M10 9.5v3',
-  list: 'M2.5 4h11M2.5 8h11M2.5 12h11',
+  // The list layout: bulleted rows, so it isn't All issues' lines.
+  list: 'M2.5 4h.01M5.5 4h8M2.5 8h.01M5.5 8h8M2.5 12h.01M5.5 12h8',
   board: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
   plus: 'M8 3v10M3 8h10',
   link: 'M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1',
   calendar: 'M2.5 4h11v9.5h-11zM2.5 7h11M5.5 2.5v3M10.5 2.5v3',
-  milestone: 'M8 2.5 13.5 8 8 13.5 2.5 8z',
+  // A flag on a pole.
+  milestone: 'M3.8 14V2.3M3.8 2.8h8.6l-2.2 3.1 2.2 3.1H3.8',
   x: 'M4 4l8 8M12 4l-8 8',
   back: 'M13 8H3.5M7.5 4 3.5 8l4 4',
   forward: 'M3 8h9.5M8.5 4l4 4-4 4',
   sidebar: 'M2.5 3.5h11v9h-11zM6.5 3.5v9',
   help: 'M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM6.2 6.3a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.3M8 11.3v.2',
 }
-export function Icon({ name, size = 14 }: { name: keyof typeof paths | string; size?: number }) {
+
+/**
+ * The icon of each concept, in one place: the sidebar, filter menu, grouping, issue properties, issue page and ⌘K all
+ * pick from here, so one concept never wears two icons and two concepts never share one.
+ */
+export const CONCEPT_ICON = {
+  home: 'home', issues: 'issues', views: 'view', project: 'project', search: 'search', filter: 'filter', display: 'display',
+  status: 'status', priority: 'priority', labels: 'label', relations: 'relations', links: 'link', parent: 'parent',
+  workspace: 'workspace', milestone: 'milestone', content: 'content', dates: 'calendar', theme: 'theme',
+  newIssue: 'new', favorite: 'star', warning: 'warn', docs: 'help', list: 'list', board: 'board',
+} as const satisfies Record<string, keyof typeof ICON_PATHS>
+export type Concept = keyof typeof CONCEPT_ICON
+
+export function Icon({ name, size = 14 }: { name: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="icon">
-      <path d={paths[name] ?? ''} />
+      <path d={ICON_PATHS[name] ?? ''} />
     </svg>
   )
+}
+
+/** The icon of a concept (see `CONCEPT_ICON`). */
+export function ConceptIcon({ concept, size = 14 }: { concept: Concept; size?: number }) {
+  return <Icon name={CONCEPT_ICON[concept]} size={size} />
 }
