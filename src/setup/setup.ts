@@ -12,7 +12,7 @@ import { lstat, mkdir, readdir, readFile, readlink, realpath, rm, symlink, unlin
 import { basename, dirname, join, resolve } from 'node:path'
 import { Store } from '../engine/store'
 import { atomicWrite } from '../store/atomic'
-import { initFolder } from '../store/metaFiles'
+import { initFolder, SETUP_LOCK } from '../store/metaFiles'
 import { aittEnv, DEFAULT_HOME_DIR } from '../shared/env'
 import skillText from '../../skills/ai-task-tracking/SKILL.md' with { type: 'text' }
 import { CLIENT_IDS, CLIENTS, clientStatus, configPath, connectClient, detectClient, type ClientId } from './clients'
@@ -20,8 +20,7 @@ import { backupFile, fileMode } from './files'
 import { isOurMcp, type McpEntry } from './ours'
 export { isOurMcp, OUR_BUNDLE_BINARY, type McpEntry } from './ours'
 
-/** While this exists the app waits instead of starting the engine on a half-written folder. */
-export const SETUP_LOCK = join('.tracker', 'setup.lock')
+export { SETUP_LOCK }
 export const SKILL_TEXT: string = skillText
 export const CLAUDE_MD_LINE =
   'Issue tracking: use AI Task Tracking (its MCP tools; see the `ai-task-tracking` skill). Track every piece of work as an issue; the rules arrive with the MCP server.'

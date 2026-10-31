@@ -18,6 +18,8 @@ export interface GitStatus {
 /** Outcome of `sync()`: `ok` is false when the commit or the push failed (the error is the redacted git message). */
 export interface SyncResult { ok: boolean; committed: boolean; pushed: boolean; commitError?: string; pushError?: string }
 export interface GitHandle {
+  /** Startup is done (repo initialised, leftovers noted): a change made after this gets its own commit message. */
+  ready: Promise<void>
   /** Commit anything pending now, then push if an `origin` remote exists. Never rejects. */
   flush(): Promise<void>
   /**
@@ -258,7 +260,7 @@ export function startGit(store: Store, opts: { commitDelayMs: number; pushDelayM
       }
       case 'issue': noteFallback(e.actor, e.issue.id, `${e.actor.workspace === 'external' ? 'edited' : 'updated'} ${e.issue.id}`); break
       case 'removed': noteFallback(e.actor, e.id, `removed ${e.id}`); break
-      case 'meta': noteFallback(EXTERNAL, '', 'config changed'); break
+      case 'meta': noteFallback(EXTERNAL, '', e.note ?? 'config changed'); break
       case 'file': noteFallback(EXTERNAL, '', `${e.deleted ? 'deleted' : 'edited'} ${e.path}`); break
       default: return
     }
@@ -266,6 +268,7 @@ export function startGit(store: Store, opts: { commitDelayMs: number; pushDelayM
   })
 
   return {
+    ready,
     async flush() {
       clearTimeout(commitTimer)
       clearTimeout(pushTimer)

@@ -117,6 +117,26 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
   **View ▸ Toggle Sidebar** in the app. Collapsed, each icon shows its name when you point at it; projects show their
   initials. The sidebar stays the way you left it, and collapses on its own in a narrow window.
 
+The app adds four saved views to your data folder the first time the engine starts, on a new folder or an existing one:
+
+| View | Shows | Laid out as |
+|---|---|---|
+| **Active by Project** | issues in a started status, leaving out the ones that wait for you (Waiting) | board, by project |
+| **Unblock First** | open issues that block other open issues | list, by priority |
+| **High Priority** | open Urgent and High issues | board, by project |
+| **Shipped This Week** | issues in a completed status, closed in the last 7 days | list, by project |
+
+They use the status names in your `config.yml`, so renamed statuses work. They are ordinary files in `views/`: change
+one and save it, or delete its `.yml` file and it stays deleted. A view you already have with the same file name or the
+same name is left as it is, and that default isn't added. `views/.default-views-offered` lists what has been offered;
+remove a line to be offered that view again at the next start.
+
+**Closed in the last N days** (the filter menu, under **Dates**) is a window that moves with today. It shows only closed
+issues, by when they were closed: a later comment doesn't bring an issue back, and reopening one takes it out. With no
+**Status** filter, canceled and duplicate issues count as closed too. Issues closed before the activity log began, or
+on another Mac, go by their last update unless they were imported with a close date. The **Completed issues** display
+option has no effect on a view with this filter, as on a view that names statuses.
+
 **Docs** at the bottom of the sidebar, **Help ▸ AI Task Tracking Help** (⌘?) in the app's menu and **Help** in the
 menu-bar menu open these docs, which the app serves at `http://127.0.0.1:7477/docs/`; from a terminal, `aitt docs`
 opens them in the browser.

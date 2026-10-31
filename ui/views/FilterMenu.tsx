@@ -20,7 +20,7 @@ export const CATEGORIES: Category[] = [
   { id: 'priority', label: 'Priority', keys: ['priority'] },
   { id: 'labels', label: 'Labels', keys: ['labels'] },
   { id: 'relations', label: 'Relations', keys: ['blocked', 'blocking', 'hasRelated'] },
-  { id: 'dates', label: 'Dates', keys: ['createdAfter', 'updatedAfter'] },
+  { id: 'dates', label: 'Dates', keys: ['createdAfter', 'updatedAfter', 'closedWithinDays'] },
   { id: 'project', label: 'Project', keys: ['project'] },
   { id: 'milestone', label: 'Milestone', keys: ['milestone'] },
   { id: 'parent', label: 'Parent issue', keys: ['parent'] },
@@ -116,6 +116,10 @@ function CategoryPanel({ cat, q, filter, state, onChange }: { cat: string; q: st
             <input type="date" className="date-input" value={filter[k]?.slice(0, 10) ?? ''} onChange={(e) => set({ [k]: e.target.value || undefined })} />
           </label>
         ))}
+        <label className="dm-row"><span className="dm-label">Closed in the last (days)</span>
+          <input type="number" min={1} step={1} className="date-input" value={filter.closedWithinDays ?? ''}
+            onChange={(e) => { const n = Number(e.target.value); set({ closedWithinDays: Number.isInteger(n) && n > 0 ? n : undefined }) }} />
+        </label>
       </div>
     )
   }
@@ -177,6 +181,7 @@ export function activeChips(f: Filter, locked: Key[], state: Pick<TrackerState, 
   if (f.hasRelated !== undefined) add('hasRelated', f.hasRelated ? 'Has related' : 'No related')
   if (f.createdAfter) add('createdAfter', `Created after ${f.createdAfter.slice(0, 10)}`)
   if (f.updatedAfter) add('updatedAfter', `Updated after ${f.updatedAfter.slice(0, 10)}`)
+  if (f.closedWithinDays) add('closedWithinDays', `Closed in the last ${f.closedWithinDays === 1 ? 'day' : `${f.closedWithinDays} days`}`)
   if (f.query) add('query', `Content contains “${f.query}”`)
   if (f.hasLinks !== undefined) add('hasLinks', f.hasLinks ? 'Has links' : 'No links')
   if (f.workspace?.length) add('workspace', anyOf('Workspace', f.workspace))

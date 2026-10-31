@@ -307,6 +307,7 @@ export function filterIssues(s: Store, f: Filter): Issue[] {
     get: (id) => s.get(id),
     workspaces: function* (i) { yield i.touchedBy?.workspace; for (const e of i.activity) yield e.workspace },
     blocks: (i) => s.blocks(i.id),
+    closedAt: (i) => s.closedAt(i),
   })
   const q = f.query?.trim()
   const scores = q ? s.index.query(q) : null

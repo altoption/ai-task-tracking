@@ -58,6 +58,7 @@ const filter = z.object({
   blocked: z.boolean().optional(), query: z.string().optional(), updatedAfter: z.string().optional(), includeDone: z.boolean().optional(),
   milestone: z.array(z.string()).optional(), createdAfter: z.string().optional(),
   blocking: z.boolean().optional(), hasRelated: z.boolean().optional(), hasLinks: z.boolean().optional(),
+  closedWithinDays: z.number().int().positive().optional(),
 })
 const display = z.object({
   layout: z.enum(['list', 'board']), groupBy: z.string(), rowsBy: z.string().optional(), orderBy: z.string(),

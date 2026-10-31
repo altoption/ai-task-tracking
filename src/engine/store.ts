@@ -5,8 +5,10 @@ import type { ActivityEntry, Actor, CiBadge, Config, Issue, LabelDef, Link, Mile
 import { atomicCreate, atomicWrite, removeStaleTemps } from '../store/atomic'
 import { parseIssue, readBackMismatch, serializeIssue } from '../store/issueFile'
 import {
-  defaultConfig, deriveKey, readConfig, readLabels, readProject, readViews, writeConfig, writeLabels, writeProject, writeView,
+  createView, defaultConfig, defaultViews, deriveKey, readConfig, readLabels, readOfferedViews, readProject, readViews, SETUP_LOCK,
+  writeConfig, writeLabels, writeOfferedViews, writeProject, writeView,
 } from '../store/metaFiles'
+import { CLOSED_TYPES } from '../shared/filter'
 import { appendEvent, feedPath, type FeedEvent } from './eventlog'
 import { IssueHistory, workingStatus, type Attempt, type HistoryEntry } from './stalled'
 import { SearchIndex } from './searchIndex'
@@ -20,7 +22,7 @@ export const NO_PROJECT = '_none'
 export type ChangeEvent =
   | { kind: 'issue'; issue: Issue; prev?: Issue; actor: Actor; comment?: ActivityEntry }
   | { kind: 'removed'; id: string; actor: Actor }
-  | { kind: 'meta' } // config/labels/projects/views changed
+  | { kind: 'meta'; note?: string } // config/labels/projects/views changed; `note`: what to call it in the git commit
   | { kind: 'error'; path: string; message: string } // file couldn't be parsed
   | { kind: 'feed'; event: FeedEvent } // appended to the feed log (R3)
   | { kind: 'file'; path: string; deleted?: true } // any other file in the folder changed (AGENTS.md, attachments); `path` is root-relative
@@ -92,6 +94,8 @@ export class Store {
   private feedStart = Infinity
   /** Per issue, from the feed log: when it last moved into a completed status (ms). Never pruned. */
   private doneTimes = new Map<string, number>()
+  /** Per issue, from the feed log: when it last went from open to any closed status (ms); NaN once it has been reopened. */
+  private closedTimes = new Map<string, number>()
 
   /** Issue serializer (a seam so tests can inject a broken one; writes are verified against it). */
   serialize: (issue: Issue) => string = serializeIssue
@@ -159,6 +163,20 @@ export class Store {
   history(id: string): readonly HistoryEntry[] { return this.hist.get(id)?.entries() ?? NO_HISTORY }
   /** When `id` last moved into a completed status (Done), from the feed log; undefined when not logged. */
   doneAt(id: string): number | undefined { return this.doneTimes.get(id) }
+  /**
+   * When a closed issue was closed; undefined while it is open. The logged move, else a close date kept from an import,
+   * else `updated` (issues closed before the log began, or on another Mac: the log isn't synced). Right after a reopen
+   * the next close isn't logged yet when its event goes out, and `updated` is that moment.
+   */
+  closedAt(i: Issue): string | undefined {
+    if (!this.isClosedStatus(i.status)) return undefined
+    const logged = this.closedTimes.get(i.id)
+    if (logged !== undefined && !Number.isNaN(logged)) return new Date(logged).toISOString().replace(/\.\d{3}Z$/, 'Z')
+    if (logged === undefined) {
+      for (const at of [i.extra.completed_at, i.extra.canceled_at]) if (typeof at === 'string' && !Number.isNaN(Date.parse(at))) return at
+    }
+    return i.updated
+  }
   /** Agent sessions that worked on `id` (from the feed log, since it began), oldest first by last write. */
   attempts(id: string): Attempt[] { return this.hist.get(id)?.attempts() ?? [] }
   /** When the feed log begins (Infinity while empty): older issues' moves may be missing from it. */
@@ -437,6 +455,47 @@ export class Store {
     })
   }
 
+  /**
+   * Add the default views this folder hasn't been offered yet, as ordinary files, and record them in the marker so a
+   * deleted one stays deleted. An existing file or view name wins and counts as offered. Never rejects: what fails is
+   * logged and, not being recorded, tried again at the next start. The engine's start calls this, not `open`:
+   * setup and the CLI also open the store, and a folder setup is still writing must not get views yet.
+   */
+  async seedDefaultViews(): Promise<void> {
+    try {
+      if (!existsSync(this.configPath) || existsSync(join(this.root, SETUP_LOCK))) return
+      if (this.errors.has(this.configPath) || this.errors.has(join(this.root, 'views'))) return
+      const offered = await readOfferedViews(this.root)
+      const record = [...offered]
+      const names = new Set(this.views.map((v) => String(v.name).toLowerCase()))
+      let added = false
+      for (const v of defaultViews(this.config)) {
+        if (offered.includes(v.slug)) continue
+        const path = join(this.root, 'views', `${v.slug}.yml`)
+        try {
+          if (!names.has(v.name.toLowerCase())) {
+            await this.enqueue(path, async () => {
+              await createView(this.root, v)
+              await this.rememberFile(path)
+            })
+            added = true
+          }
+          record.push(v.slug)
+        } catch (e) {
+          if ((e as { code?: string })?.code === 'EEXIST') record.push(v.slug)
+          else console.error(`[store] could not add the default view ${v.slug}: ${errMsg(e)}`)
+        }
+      }
+      if (record.length > offered.length) await writeOfferedViews(this.root, record)
+      if (added) {
+        await this.loadViews()
+        this.emit({ kind: 'meta', note: 'add default views' })
+      }
+    } catch (e) {
+      console.error(`[store] could not add the default views: ${errMsg(e)}`)
+    }
+  }
+
   /** Choose the UI theme (`theme` in config.yml): a built-in id or a loaded custom theme. Clients follow the `meta` event. */
   async setTheme(id: string): Promise<void> {
     const known = allThemes(this.themes).map((t) => t.id)
@@ -608,6 +667,10 @@ export class Store {
   // ---------- internals ----------
 
   private get configPath() { return join(this.root, 'config.yml') }
+  private isClosedStatus(name: string): boolean {
+    const type = this.config.statuses.find((x) => x.name === name)?.type
+    return !!type && CLOSED_TYPES.has(type)
+  }
 
   /**
    * Re-read config.yml before patching it (call inside the config queue), so hand edits the
@@ -718,6 +781,7 @@ export class Store {
     this.hist.delete(id)
     this.lastWrite.delete(id)
     this.doneTimes.delete(id)
+    this.closedTimes.delete(id)
   }
 
   private unlinkGraph(old: Issue): void {
@@ -775,6 +839,10 @@ export class Store {
     this.noteFeedStart(e.at)
     this.lastWrite.set(e.id, Math.max(t, this.lastWrite.get(e.id) ?? 0))
     if (e.kind === 'status' && e.to && this.config.statuses.find((x) => x.name === e.to)?.type === 'completed') this.doneTimes.set(e.id, t)
+    if (e.kind === 'status' && e.to) {
+      if (!this.isClosedStatus(e.to)) this.closedTimes.set(e.id, NaN)
+      else if (!e.from || !this.isClosedStatus(e.from)) this.closedTimes.set(e.id, t)
+    }
     const session = e.actor.actor === 'agent' && e.actor.session ? e.actor.session : undefined
     if (e.kind !== 'status' && !session) return
     const h: HistoryEntry = { t }

@@ -151,11 +151,12 @@ export function applyView(issues: IssueSummary[], v: Pick<View, 'filter' | 'disp
   const { filter: f, display: d } = v
   const type = statusTypeOf(ctx.statuses)
   const closed = (i: IssueSummary) => CLOSED_TYPES.has(type(i.status))
-  // Completed-issues window (display) applies when the filter doesn't name statuses itself.
-  const win = !f.status?.length && d.completed ? d.completed : undefined
+  // Completed-issues window (display) applies when the filter doesn't name statuses or its own closed window.
+  const win = !f.status?.length && !f.closedWithinDays && d.completed ? d.completed : undefined
   const showDone = win ? win !== 'none' : !!f.includeDone
   const keep = filterPredicate<IssueSummary>({ ...f, includeDone: showDone }, {
     statuses: ctx.statuses, get: (id) => byId.get(id), workspaces: (i) => i.workspaces, blocks: (i) => i.blocks,
+    closedAt: (i) => i.closedAt, ...(ctx.now !== undefined ? { now: ctx.now } : {}),
   })
   const days = win ? WINDOW_DAYS[win] : undefined
   const cutoff = days ? (ctx.now ?? Date.now()) - days * DAY : NaN
@@ -268,6 +269,7 @@ export function viewToQuery(state: ViewState, base: ViewState): string {
   if (f.parent !== undefined) p.set('parent', f.parent ?? '-')
   for (const [k, q] of FILTER_BOOLS) if (f[k] !== undefined) p.set(q, f[k] ? '1' : '0')
   for (const [k, q] of FILTER_STRINGS) if (f[k]) p.set(q, f[k]!)
+  if (f.closedWithinDays) p.set('closed', String(f.closedWithinDays))
   return p.toString()
 }
 
@@ -298,6 +300,8 @@ export function viewFromQuery(query: string, base: ViewState): ViewState {
   if (parent) filter.parent = parent === '-' ? null : parent // empty = absent
   for (const [k, q] of FILTER_BOOLS) { const b = bool(q); if (b !== undefined) filter[k] = b }
   for (const [k, q] of FILTER_STRINGS) { const s = p.get(q); if (s) filter[k] = s }
+  const closedDays = Number(p.get('closed'))
+  if (Number.isInteger(closedDays) && closedDays > 0) filter.closedWithinDays = closedDays
   return { filter, display }
 }
 

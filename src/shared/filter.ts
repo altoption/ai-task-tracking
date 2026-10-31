@@ -22,6 +22,10 @@ export interface FilterCtx<T> {
   workspaces(i: T): Iterable<string | undefined>
   /** Ids of the issues this one blocks. */
   blocks(i: T): string[]
+  /** When a closed issue was closed, for `closedWithinDays`; defaults to its `updated`. */
+  closedAt?(i: T): string | undefined
+  /** The clock `closedWithinDays` counts back from (ms); defaults to now. */
+  now?: number
 }
 
 /** Status name -> type. Unknown names count as 'backlog' (open). */
@@ -30,7 +34,7 @@ export function statusTypeOf(statuses: StatusDef[]): (name: string) => StatusTyp
   return (name) => m.get(name) ?? 'backlog'
 }
 
-/** Pure: every criterion must match; list criteria match any listed value. Closed issues pass only with `includeDone` or an explicit `status` list. */
+/** Pure: every criterion must match; list criteria match any listed value. Closed issues pass only with `includeDone`, an explicit `status` list or `closedWithinDays`. */
 export function filterPredicate<T extends FilterIssue>(f: Filter, ctx: FilterCtx<T>): (i: T) => boolean {
   const type = statusTypeOf(ctx.statuses)
   const open = (i: T | undefined) => !!i && !CLOSED_TYPES.has(type(i.status))
@@ -39,8 +43,12 @@ export function filterPredicate<T extends FilterIssue>(f: Filter, ctx: FilterCtx
   const workspace = set(f.workspace), priority = set(f.priority), milestone = set(f.milestone)
   const date = (s?: string) => (s ? Date.parse(s) : NaN)
   const updatedAfter = date(f.updatedAfter), createdAfter = date(f.createdAfter)
+  const days = f.closedWithinDays
+  const closedSince = typeof days === 'number' && days > 0 && Number.isFinite(days) ? (ctx.now ?? Date.now()) - days * 86_400_000 : NaN
+  const rolling = !Number.isNaN(closedSince)
   return (i) => {
-    if (status) { if (!status.has(i.status)) return false } else if (!f.includeDone && !open(i)) return false
+    if (status) { if (!status.has(i.status)) return false } else if (!f.includeDone && !rolling && !open(i)) return false
+    if (rolling && (open(i) || !(Date.parse(ctx.closedAt?.(i) ?? i.updated) >= closedSince))) return false
     if (project && !project.has(i.project)) return false
     if (labels && !i.labels.some((l) => labels.has(l))) return false
     if (priority && !priority.has(i.priority)) return false

@@ -22,6 +22,8 @@ export type IssueSummary = Omit<Issue, 'description' | 'activity' | 'extra' | 'p
   workspaces: string[]
   /** The worst CI status over the issue's GitHub PR links (src/engine/ci.ts), when CI status is on and known. */
   ci?: CiBadge
+  /** When a closed issue was closed (`Store.closedAt`); absent on open issues. */
+  closedAt?: string
 }
 
 /** A GitHub PR's state and its checks (from `gh pr view`). */
@@ -48,6 +50,8 @@ export interface Filter {
   /** Blocks at least one open issue. */
   blocking?: boolean
   hasRelated?: boolean; hasLinks?: boolean
+  /** Rolling window: only closed issues, closed at most this many days ago. Open issues never pass. */
+  closedWithinDays?: number
 }
 /** Completed-issues window of a view (display option): none, closed within the past day/week/month, or all. */
 export type CompletedWindow = 'none' | 'day' | 'week' | 'month' | 'all'

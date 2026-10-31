@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import YAML from 'yaml'
 import type { Config, LabelDef, Milestone, Project, StatusDef, View } from '../model'
-import { atomicWrite, GITIGNORE_LINES } from './atomic'
+import { atomicCreate, atomicWrite, GITIGNORE_LINES } from './atomic'
 import { DEFAULT_STALLED, normalizeStalled } from '../engine/stalled'
 import { DEFAULT_CI, normalizeCi } from '../engine/ci'
 import { DEFAULT_THEME } from '../engine/themes'
@@ -317,6 +317,54 @@ export async function writeView(root: string, v: View): Promise<void> {
   await mkdir(join(root, 'views'), { recursive: true })
   const { slug, ...rest } = v
   await atomicWrite(join(root, 'views', `${slug}.yml`), YAML.stringify(rest, YOPTS))
+}
+
+// ---------- default views ----------
+
+/** While this exists the app waits instead of starting the engine on a half-written folder. */
+export const SETUP_LOCK = join('.tracker', 'setup.lock')
+/**
+ * `views/<this>`: the default views already offered to this folder, one slug per line, so a deleted one stays deleted.
+ * A dot file without `.yml`, so it is not read as a view; tracked by the folder's git, so a restore keeps it.
+ */
+export const OFFERED_VIEWS = '.default-views-offered'
+
+/**
+ * The views shipped with the app, with status names from this folder's config (they can be renamed). A view whose
+ * statuses don't exist is left out: an empty status list would mean "every status".
+ */
+export function defaultViews(c: Pick<Config, 'statuses' | 'needsYou'>): View[] {
+  const display = (layout: View['display']['layout'], groupBy: string, orderBy: string): View['display'] => ({
+    layout, groupBy, orderBy, showSubIssues: true, properties: ['id', 'status', 'priority', 'labels', 'project', 'updated'],
+  })
+  const active = c.statuses.filter((s) => s.type === 'started' && !c.needsYou.statuses.includes(s.name)).map((s) => s.name)
+  const completed = c.statuses.filter((s) => s.type === 'completed').map((s) => s.name)
+  return [
+    ...(active.length ? [{ slug: 'active-by-project', name: 'Active by Project', filter: { status: active }, display: display('board', 'project', 'priority') }] : []),
+    { slug: 'unblock-first', name: 'Unblock First', filter: { blocking: true }, display: display('list', 'none', 'priority') },
+    { slug: 'high-priority', name: 'High Priority', filter: { priority: [1, 2] }, display: display('board', 'project', 'priority') },
+    ...(completed.length ? [{ slug: 'shipped-this-week', name: 'Shipped This Week', filter: { status: completed, closedWithinDays: 7 }, display: display('list', 'project', 'updated') }] : []),
+  ]
+}
+
+/** Add a view only if its file doesn't exist; fails with code EEXIST (the file untouched) if it does. */
+export async function createView(root: string, v: View): Promise<void> {
+  await mkdir(join(root, 'views'), { recursive: true })
+  const { slug, ...rest } = v
+  await atomicCreate(join(root, 'views', `${slug}.yml`), YAML.stringify(rest, YOPTS))
+}
+
+/** The slugs in the marker; none if it doesn't exist. Any other failure throws: unknown is not the same as none. */
+export async function readOfferedViews(root: string): Promise<string[]> {
+  const text = await readFile(join(root, 'views', OFFERED_VIEWS), 'utf8').catch((e: { code?: string }) => {
+    if (e.code === 'ENOENT') return ''
+    throw e
+  })
+  return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+}
+
+export async function writeOfferedViews(root: string, slugs: string[]): Promise<void> {
+  await atomicWrite(join(root, 'views', OFFERED_VIEWS), `${slugs.join('\n')}\n`)
 }
 
 // ---------- folder init ----------

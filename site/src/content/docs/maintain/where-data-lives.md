@@ -17,7 +17,7 @@ changes. Every file and key is described in [Data model and importing](/docs/use
 | `AGENTS.md` | the rules agents get; see [Agent rules](/docs/guides/agent-rules/) |
 | `projects/<slug>/project.md` | a project |
 | `projects/<slug>/issues/*.md` | its issues |
-| `views/` | saved views |
+| `views/` | saved views, one `<slug>.yml` each; `.default-views-offered` lists the [default views](/docs/use/daily-use/#in-the-window) already offered, so a deleted one stays deleted |
 | `themes/` | your own themes, one `<name>.yml` each (optional; see [Themes](/docs/guides/themes/)) |
 | `.tracker/` | this Mac's caches, never backed up (git-ignored): the activity log `events.jsonl` and the PR CI status `ci.json` |
 

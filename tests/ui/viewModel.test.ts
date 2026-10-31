@@ -221,3 +221,58 @@ describe('swimlanes', () => {
     expect(swimlanes(p.groups, 'project', { statuses, byId, projects }, 'priority', true).map((l) => [l.key, l.count])).toEqual([['acme-app', 9], ['support', 0]])
   })
 })
+
+describe('rolling closed window (filter.closedWithinDays)', () => {
+  const NOW = Date.parse('2026-10-31T12:00:00Z')
+  const DAY = 86_400_000
+  const iso = (ms: number) => new Date(ms).toISOString()
+  const display = (over: Partial<ViewState['display']> = {}): ViewState['display'] => ({ layout: 'list', groupBy: 'project', orderBy: 'updated', showSubIssues: true, properties: ['id'], ...over })
+  const shipped: ViewState = { filter: { status: ['Done'], closedWithinDays: 7 }, display: display() }
+  const ctx = { statuses, now: NOW }
+  const shownIds = (r: { groups: { issues: { id: string }[] }[] }) => r.groups.flatMap((g) => g.issues.map((i) => i.id)).sort()
+
+  test('only closed issues inside the window, by close time, grouped by project', () => {
+    const set = [
+      mk('A', 'Done', 0, null, { updated: iso(NOW - DAY), closedAt: iso(NOW - DAY) }),
+      mk('B', 'Done', 0, null, { updated: iso(NOW), closedAt: iso(NOW - 8 * DAY), project: 'support' }), // commented on later
+      mk('C', 'Todo', 0, null, { updated: iso(NOW) }), // reopened
+      mk('D', 'Done', 0, null, { updated: iso(NOW - 7 * DAY), closedAt: iso(NOW - 7 * DAY), project: 'support' }), // the boundary
+    ]
+    const r = applyView(set, shipped, ctx)
+    expect(r.total).toBe(2)
+    expect(r.groups.map((g) => g.key).sort()).toEqual(['acme-app', 'support'])
+    expect(shownIds(r)).toEqual(['A', 'D'])
+  })
+
+  test('the window rolls with the clock', () => {
+    const set = [mk('A', 'Done', 0, null, { closedAt: iso(NOW - 6 * DAY) })]
+    expect(applyView(set, shipped, ctx).total).toBe(1)
+    expect(applyView(set, shipped, { ...ctx, now: NOW + 2 * DAY }).total).toBe(0)
+  })
+
+  test('without a status list open issues stay out, whatever display.completed says', () => {
+    const set = [mk('A', 'Canceled', 0, null, { closedAt: iso(NOW) }), mk('C', 'Todo', 0, null, { updated: iso(NOW) })]
+    for (const completed of [undefined, 'none', 'week', 'all'] as const) {
+      expect(shownIds(applyView(set, { filter: { closedWithinDays: 7 }, display: display(completed ? { completed } : {}) }, ctx))).toEqual(['A'])
+    }
+  })
+
+  test('round-trips through the URL', () => {
+    const base: ViewState = { filter: {}, display: display() }
+    const q = viewToQuery(shipped, base)
+    expect(q).toContain('closed=7')
+    expect(viewFromQuery(q, base).filter).toEqual({ status: ['Done'], closedWithinDays: 7 })
+    for (const bad of ['0', '-3', 'x', '1.5']) expect(viewFromQuery(`v=1&closed=${bad}`, base).filter.closedWithinDays).toBeUndefined()
+  })
+
+  test('views without the field behave as before: display.completed goes by updated and keeps open issues', () => {
+    const set = [
+      mk('A', 'Done', 0, null, { updated: iso(NOW - DAY), closedAt: iso(NOW - 30 * DAY) }),
+      mk('B', 'Done', 0, null, { updated: iso(NOW - 8 * DAY), closedAt: iso(NOW) }),
+      mk('C', 'Todo', 0, null, { updated: iso(NOW - 60 * DAY) }),
+    ]
+    expect(shownIds(applyView(set, { filter: {}, display: display({ completed: 'week' }) }, ctx))).toEqual(['A', 'C'])
+    // A status filter still ignores display.completed.
+    expect(applyView(set, { filter: { status: ['Done'] }, display: display({ completed: 'day' }) }, ctx).total).toBe(2)
+  })
+})
