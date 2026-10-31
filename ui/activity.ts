@@ -8,15 +8,20 @@
  */
 import type { FeedEvent } from '../src/engine/eventlog'
 import type { Config, IssueSummary, Link, StatusDef } from '../src/model'
+import { FEED_SINCE_MAX } from '../src/shared/feed'
 import { extractLinks } from '../src/shared/links'
 
 export type Range = 'today' | 'week'
-export type ActivityFilter = 'all' | 'done' | 'started' | 'comments' | 'needs'
+/** `agents`: only agent sessions' cards (the Agents count); the others filter rows. */
+export type ActivityFilter = 'all' | 'done' | 'started' | 'comments' | 'needs' | 'agents'
 export type RowKind = 'done' | 'started' | 'needs' | 'comments'
 
 /** A session wrote within this long ago: its card shows the live dot. */
 export const LIVE_MS = 10 * 60_000
-const HOUR_MS = 3_600_000
+
+/** ISO timestamps compare as strings: oldest first / newest first. */
+const asc = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0)
 
 /** `updated` fields the owner cares about; any other update (plan, links, imported metadata) folds away. */
 const MEANINGFUL_UPDATES = new Set(['title', 'description', 'labels', 'priority', 'due', 'milestone', 'project'])
@@ -135,13 +140,15 @@ const isExternal = (e: FeedEvent) => e.actor.workspace === 'external'
 const isAgent = (e: FeedEvent) => e.actor.actor === 'agent' && !isExternal(e)
 
 /**
- * The card an event belongs to. An agent session is its `session` id; an agent write without one groups by
- * workspace and branch. The owner's own writes (the app, the browser, hand edits) share one "You" card per day:
+ * The card an event belongs to. An agent session is its tool, workspace and `session` id together (the session id is
+ * a process id, which macOS reuses, so it alone could merge two sessions days apart); an agent write without one
+ * groups by workspace and branch. The owner's own writes (the app, the browser, hand edits) share one "You" card per day:
  * they aren't sessions, and a day is how the feed is already divided.
  */
 function cardKey(e: FeedEvent): { key: string; agentKey?: string } {
   if (!isAgent(e)) return { key: 'you' }
-  const k = e.actor.session ? `s:${e.actor.session}` : `w:${e.actor.workspace ?? ''}|${e.actor.branch ?? ''}`
+  const a = e.actor
+  const k = a.session ? `s:${a.client ?? ''}|${a.workspace ?? ''}|${a.session}` : `w:${a.workspace ?? ''}|${a.branch ?? ''}`
   return { key: k, agentKey: k }
 }
 
@@ -204,6 +211,8 @@ function buildRow(id: string, evs: FeedEvent[], ctx: Ctx): ActivityRow | null {
       }
     }
   }
+  // Started and finished in the same session counts as finished only.
+  if (kinds.has('done')) kinds.delete('started')
   if (!path.length && edits.size) detail = `edited ${[...edits].join(', ')}`
   // Nothing the owner would care about: the whole row folds away (its writes still count on the card).
   if (!path.length && !detail && note === undefined) return null
@@ -212,7 +221,7 @@ function buildRow(id: string, evs: FeedEvent[], ctx: Ctx): ActivityRow | null {
     for (const l of sum.links) if (isGithubChange(l.url) && !links.some((x) => x.url === l.url)) links.push(l)
   }
   return {
-    id, title: sum?.title ?? created ?? id, status: sum?.status ?? lastTo ?? '', path, ...(detail ? { detail } : {}),
+    id, title: sum?.title || created || id, status: sum?.status ?? lastTo ?? '', path, ...(detail ? { detail } : {}),
     ...(note !== undefined ? { note } : {}), links, kinds: [...kinds], at: evs[evs.length - 1]!.at, writes: evs.length, folded,
     children: [], ...(sum && sum.progress.total > 0 ? { progress: sum.progress } : {}), gone: !sum, parent: sum?.parent ?? null,
   }
@@ -238,7 +247,7 @@ export function buildActivity(events: FeedEvent[], ctx: Ctx, since: number, skip
   for (const c of cards.values()) {
     // Oldest first. Writes in the same second (created, then moved) keep the feed's order: it is newest first, so
     // reverse before the (stable) sort.
-    const evs = c.evs.reverse().sort((a, b) => a.at.localeCompare(b.at))
+    const evs = c.evs.reverse().sort((a, b) => asc(a.at, b.at))
     const byIssue = new Map<string, FeedEvent[]>()
     for (const e of evs) { const l = byIssue.get(e.id); if (l) l.push(e); else byIssue.set(e.id, [e]) }
     const rows = new Map<string, ActivityRow>()
@@ -251,7 +260,7 @@ export function buildActivity(events: FeedEvent[], ctx: Ctx, since: number, skip
       while (p && !seen.has(p)) { seen.add(p); const h = rows.get(p); if (h) { host = h; break } p = ctx.issue(p)?.parent ?? null }
       if (host) host.children.push(r); else top.push(r)
     }
-    const newest = (a: ActivityRow, b: ActivityRow) => b.at.localeCompare(a.at)
+    const newest = (a: ActivityRow, b: ActivityRow) => desc(a.at, b.at)
     top.sort(newest)
     for (const r of rows.values()) r.children.sort(newest)
     const first = evs[0]!, last = evs[evs.length - 1]!
@@ -265,14 +274,14 @@ export function buildActivity(events: FeedEvent[], ctx: Ctx, since: number, skip
       ...(c.agentKey ? { agentKey: c.agentKey } : {}),
     })
   }
-  out.sort((a, b) => b.end.localeCompare(a.end))
+  out.sort((a, b) => desc(a.end, b.end))
   const days: DayGroup[] = []
   for (const card of out) {
     let d = days.find((x) => x.day === card.day)
     if (!d) { d = { day: card.day, label: dayLabel(card.day, ctx.now), cards: [] }; days.push(d) }
     d.cards.push(card)
   }
-  days.sort((a, b) => b.day.localeCompare(a.day))
+  days.sort((a, b) => desc(a.day, b.day))
   return { days, cards: out }
 }
 
@@ -283,20 +292,27 @@ export function allRows(rows: ActivityRow[]): ActivityRow[] {
 
 /** Does the row match the filter? `waiting`: ids pinned as waiting on you. */
 export function rowMatches(r: ActivityRow, f: ActivityFilter, waiting: ReadonlySet<string>): boolean {
-  if (f === 'all') return true
+  if (f === 'all' || f === 'agents') return true
   if (f === 'needs') return r.kinds.includes('needs') || waiting.has(r.id)
   return r.kinds.includes(f)
 }
 
 /** A card's rows under a filter: an epic stays when it or one of its children matches; children are filtered too. */
 export function filterRows(rows: ActivityRow[], f: ActivityFilter, waiting: ReadonlySet<string>): ActivityRow[] {
-  if (f === 'all') return rows
+  if (f === 'all' || f === 'agents') return rows
   const out: ActivityRow[] = []
   for (const r of rows) {
     const children = filterRows(r.children, f, waiting)
     if (rowMatches(r, f, waiting) || children.length) out.push({ ...r, children })
   }
   return out
+}
+
+/** A card under a filter: its rows, or null when the card drops out (`agents` keeps agent cards whole). */
+export function filterCard(c: SessionCard, f: ActivityFilter, waiting: ReadonlySet<string>): ActivityRow[] | null {
+  if (f === 'agents') return c.kind === 'agent' ? c.rows : null
+  const rows = filterRows(c.rows, f, waiting)
+  return f === 'all' || rows.length ? rows : null
 }
 
 /** The overview: distinct issues finished and started, waiting on you, and agent sessions (how many live). */
@@ -312,35 +328,48 @@ export function activityCounts(cards: SessionCard[], waiting: number): { finishe
   return { finished: done.size, started: started.size, waiting, agents: agents.size, live: live.size }
 }
 
-export interface RhythmHour { start: number; total: number; byTool: Record<string, number>; top: string | null }
+export interface RhythmBucket { start: number; end: number; total: number; byTool: Record<string, number>; top: string | null }
 
-/** Agent writes per hour over the last 24 hours (the current hour last), by tool; `top` is the busiest tool. */
-export function rhythm(events: FeedEvent[], now: number, skip?: (id: string) => boolean): RhythmHour[] {
-  const end = new Date(now); end.setMinutes(0, 0, 0)
-  const first = end.getTime() - 23 * HOUR_MS
-  const hours: RhythmHour[] = Array.from({ length: 24 }, (_, h) => ({ start: first + h * HOUR_MS, total: 0, byTool: {}, top: null }))
+/**
+ * Agent writes in the range, by tool, `top` being the busiest tool: Today in 24 hourly buckets from local midnight
+ * (hours after now stay empty), 7 days in 7 daily buckets. Bucket edges are local clock times, so a DST day has the
+ * right hours.
+ */
+export function rhythm(events: FeedEvent[], range: Range, now: number, skip?: (id: string) => boolean): RhythmBucket[] {
+  const start = rangeStart(range, now)
+  const n = range === 'today' ? 24 : 7
+  const edge = (i: number) => {
+    const d = new Date(start)
+    if (range === 'today') d.setHours(i); else d.setDate(d.getDate() + i)
+    return d.getTime()
+  }
+  const buckets: RhythmBucket[] = Array.from({ length: n }, (_, i) => ({ start: edge(i), end: edge(i + 1), total: 0, byTool: {}, top: null }))
   for (const e of events) {
     if (!isAgent(e) || skip?.(e.id)) continue
     const t = Date.parse(e.at)
-    if (Number.isNaN(t) || t < first || t >= first + 24 * HOUR_MS) continue
-    const h = hours[Math.floor((t - first) / HOUR_MS)]!
+    if (Number.isNaN(t) || t < start || t >= buckets[n - 1]!.end) continue
+    const b = buckets.find((x) => t >= x.start && t < x.end)
+    if (!b) continue
     const k = toolOf(e.actor.client, e.actor.workspace).key
-    h.total++
-    h.byTool[k] = (h.byTool[k] ?? 0) + 1
+    b.total++
+    b.byTool[k] = (b.byTool[k] ?? 0) + 1
   }
-  for (const h of hours) {
+  for (const b of buckets) {
     let best = 0
-    for (const [k, n] of Object.entries(h.byTool)) if (n > best) { best = n; h.top = k }
+    for (const [k, c] of Object.entries(b.byTool)) if (c > best) { best = c; b.top = k }
   }
-  return hours
+  return buckets
 }
 
 export interface WaitingItem { id: string; title: string; status: string; at: string; who: string; note?: string }
 
 /**
- * The "waits on you" strip: issues that still need the owner for a Needs-you status or label (Home's Needs you list;
- * stalled-only and CI-only items stay in that list) and that entered it within the range: moved to a Needs-you
- * status, given labels, or created. The question is the latest agent note in the range on it.
+ * The "waits on you" strip: issues an agent handed back within the range that still need the owner for a Needs-you
+ * status or label (Home's Needs you list; stalled-only and CI-only items stay in that list). Handed back means an
+ * agent's write that entered Needs you: a move to a Needs-you status, creating it there, or a labels change that
+ * added a Needs-you label (the feed doesn't keep the old labels, so: the labels changed and the issue now carries
+ * one, and it wasn't already waiting in a Needs-you status). The owner's own writes never count. The question is the
+ * latest agent note in the range on it.
  */
 export function waitingOnYou(
   events: FeedEvent[], needsYou: (IssueSummary & { stalled?: string; ciReason?: string })[], config: Pick<Config, 'needsYou'> | null,
@@ -351,15 +380,28 @@ export function waitingOnYou(
   const out: WaitingItem[] = []
   for (const i of needsYou) {
     if (!statuses.has(i.status) && !i.labels.some((l) => labels.has(l))) continue
-    const mine = events.filter((e) => e.id === i.id && Date.parse(e.at) >= since).sort((a, b) => b.at.localeCompare(a.at))
-    const entered = mine.find((e) => (e.kind === 'status' && e.to && statuses.has(e.to)) || e.kind === 'created'
-      || (e.kind === 'updated' && (e.text ?? '').split(',').map((f) => f.trim()).includes('labels')))
+    const mine = events.filter((e) => e.id === i.id && Date.parse(e.at) >= since).sort((a, b) => desc(a.at, b.at))
+    const hasLabel = i.labels.some((l) => labels.has(l))
+    const labelEntry = (e: FeedEvent) => e.kind === 'updated' && hasLabel && (e.text ?? '').split(',').map((f) => f.trim()).includes('labels')
+      // Waiting in a Needs-you status from before this write: a label edit then isn't the hand-back.
+      && !statuses.has(statusBefore(mine, e, i.status))
+    const entered = mine.find((e) => isAgent(e) && ((e.kind === 'status' && !!e.to && statuses.has(e.to)) || e.kind === 'created' || labelEntry(e)))
     if (!entered) continue
     const note = mine.find((e) => e.kind === 'comment' && isAgent(e))?.text ?? mine.find((e) => e.kind === 'comment')?.text
     const who = isAgent(entered) ? toolOf(entered.actor.client, entered.actor.workspace).name : 'You'
     out.push({ id: i.id, title: i.title, status: i.status, at: entered.at, who, ...(note ? { note } : {}) })
   }
-  return out.sort((a, b) => b.at.localeCompare(a.at))
+  return out.sort((a, b) => desc(a.at, b.at))
+}
+
+/** The status an issue had just before `e`, from the status moves in `evs` (newest first); with none, `current`. */
+function statusBefore(evs: FeedEvent[], e: FeedEvent, current: string): string {
+  const i = evs.indexOf(e)
+  // The nearest older status move tells where it was; with none, the oldest newer move's `from` does.
+  const older = evs.slice(i + 1).find((x) => x.kind === 'status')
+  if (older) return older.to ?? current
+  const newer = evs.slice(0, i).reverse().find((x) => x.kind === 'status')
+  return newer?.from ?? current
 }
 
 /** "7:10 pm – now", "8:52 – 8:57 pm" style span of a card. */
@@ -370,8 +412,12 @@ export function spanLabel(start: string, end: string, now: number): string {
   return s === e ? s : `${s} – ${e}`
 }
 
-/** Merge fetched events with live ones (both newest first), without duplicates. */
-export function mergeFeeds(fetched: FeedEvent[], live: FeedEvent[], since: number): FeedEvent[] {
+/**
+ * Merge fetched (or already gathered) events with live ones (both newest first), without duplicates, keeping the newest
+ * `max`. Home's activity folds every live update into what it has gathered, so writes stay after the store's live feed
+ * (the newest 200) moves past them.
+ */
+export function mergeFeeds(fetched: FeedEvent[], live: FeedEvent[], since: number, max = FEED_SINCE_MAX): FeedEvent[] {
   const key = (e: FeedEvent) => `${e.at}|${e.id}|${e.kind}|${e.from ?? ''}|${e.to ?? ''}|${e.text ?? ''}`
   const seen = new Set<string>()
   const out: FeedEvent[] = []
@@ -381,6 +427,6 @@ export function mergeFeeds(fetched: FeedEvent[], live: FeedEvent[], since: numbe
     if (seen.has(k)) continue
     seen.add(k); out.push(e)
   }
-  return out.sort((a, b) => b.at.localeCompare(a.at))
+  return out.sort((a, b) => desc(a.at, b.at)).slice(0, max)
 }
 

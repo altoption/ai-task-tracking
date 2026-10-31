@@ -2,6 +2,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import type { Actor, Issue, IssueSummary } from '../model'
 import { readFeed, type FeedEvent } from '../engine/eventlog'
+import { FEED_SINCE_MAX } from '../shared/feed'
 import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
@@ -16,8 +17,7 @@ import { toolSchemas } from '../tools/schemas'
 import { defaultDocs, defaultUi, type UiSource } from './uiAssets'
 
 const HEARTBEAT_MS = 15_000
-/** The most feed entries one `?since=` read returns (7 days of a busy week fit; the UI says when it's cut). */
-export const FEED_SINCE_MAX = 5000
+export { FEED_SINCE_MAX }
 const SSE_QUEUE_LIMIT = 256 // undrained chunks tolerated per client
 const UI_DIST = resolve(import.meta.dir, '../../ui/dist')
 const DOCS_DIST = resolve(import.meta.dir, '../../site/dist/docs')
@@ -425,13 +425,16 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
           }
           if (p === '/api/events') return sseResponse(store, req.signal)
           if (p === '/api/feed') {
-            // `?since=<iso>` (Home's Agent activity: today or the last 7 days) reads back to that time, up to
-            // FEED_SINCE_MAX entries; otherwise up to 1000.
-            const since = Date.parse(url.searchParams.get('since') ?? '')
-            const n = Number(url.searchParams.get('limit') ?? 50)
-            const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), Number.isNaN(since) ? 1000 : FEED_SINCE_MAX) : 50
+            // `?since=<iso>` (Home's Agent activity: today or the last 7 days) reads back to that time, by default and
+            // at most FEED_SINCE_MAX entries; otherwise (and for one issue's history) at most 1000, by default 50.
             const id = url.searchParams.get('id')
-            if (!Number.isNaN(since) && !id) {
+            const since = id ? NaN : Date.parse(url.searchParams.get('since') ?? '')
+            const bySince = !Number.isNaN(since)
+            const n = Number(url.searchParams.get('limit') ?? (bySince ? FEED_SINCE_MAX : 50))
+            const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), bySince ? FEED_SINCE_MAX : 1000) : 50
+            if (bySince) {
+              // Stops at the first entry older than `since`: this assumes events.jsonl is in time order, which holds
+              // because the engine appends each event as it happens (eventlog.ts appendEvent).
               const older = (e: FeedEvent) => Date.parse(e.at) < since
               return json(readFeed(store.root, limit, feedVisibleTest(store), older))
             }

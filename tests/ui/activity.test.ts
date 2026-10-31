@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, StatusDef } from '../../src/model'
 import {
-  activityCounts, allRows, buildActivity, dayLabel, filterRows, isGithubChange, LIVE_MS, localDay, mergeFeeds, rangeStart, rhythm, toolOf,
+  activityCounts, allRows, buildActivity, dayLabel, filterCard, filterRows, isGithubChange, LIVE_MS, localDay, mergeFeeds, rangeStart, rhythm, toolOf,
   waitingOnYou, type Ctx,
 } from '../../ui/activity'
 
@@ -136,7 +136,24 @@ describe('grouping', () => {
     const { cards: c } = buildActivity([ev(CC, 1, 'H-1', 'status', { from: 'Todo', to: 'Done' }), ev(CC, 2, 'B-1', 'comment', { text: 'x' })], ctx, TODAY, skip)
     expect(allRows(c[0]!.rows).map((r) => r.id)).toEqual(['B-1'])
     expect(c[0]!.writes).toBe(1)
-    expect(rhythm([ev(CC, 1, 'H-1', 'comment', { text: 'x' })], NOW, skip).reduce((n, h) => n + h.total, 0)).toBe(0)
+    expect(rhythm([ev(CC, 1, 'H-1', 'comment', { text: 'x' })], 'today', NOW, skip).reduce((n, h) => n + h.total, 0)).toBe(0)
+  })
+
+  test('a session is its tool, workspace and session id together (macOS reuses process ids)', () => {
+    const { cards: c } = buildActivity([
+      ev({ ...CC, session: '7' }, 1, 'B-1', 'comment', { text: 'a' }),
+      ev({ ...CX, session: '7' }, 2, 'B-1', 'comment', { text: 'b' }),
+      ev({ ...CC, workspace: 'other', session: '7' }, 3, 'B-1', 'comment', { text: 'c' }),
+    ], ctx, TODAY)
+    expect(c).toHaveLength(3)
+    expect(activityCounts(c, 0).agents).toBe(3)
+  })
+
+  test('a title falls back past an empty one, and a deleted issue\'s row is marked gone', () => {
+    const { cards: c } = buildActivity([ev(CC, 1, 'D-9', 'created', { text: 'Deleted thing' })], { ...ctx, issue: (id) => (id === 'E-1' ? { ...ISSUES.get('B-1')!, title: '' } : ISSUES.get(id)) }, TODAY)
+    expect(c[0]!.rows[0]).toMatchObject({ id: 'D-9', title: 'Deleted thing', gone: true })
+    const { cards: e } = buildActivity([ev(CC, 1, 'E-1', 'created', { text: 'From the feed' })], { ...ctx, issue: (id) => (id === 'E-1' ? { ...ISSUES.get('B-1')!, title: '' } : undefined) }, TODAY)
+    expect(e[0]!.rows[0]!.title).toBe('From the feed')
   })
 })
 
@@ -163,6 +180,36 @@ describe('counts and filters', () => {
     expect(activityCounts(cards, waiting.length)).toEqual({ finished: 2, started: 1, waiting: 1, agents: 2, live: 1 })
   })
 
+  test('started and finished in one session counts (and filters) as finished only', () => {
+    const { cards: c } = buildActivity([
+      ev(CC, 3, 'A-2', 'status', { from: 'In Progress', to: 'Done' }),
+      ev(CC, 4, 'A-2', 'status', { from: 'Todo', to: 'In Progress' }),
+    ], ctx, TODAY)
+    expect(c[0]!.rows[0]!.path).toEqual(['Todo', 'In Progress', 'Done'])
+    expect(activityCounts(c, 0)).toMatchObject({ finished: 1, started: 0 })
+    expect(filterRows(c[0]!.rows, 'started', new Set())).toEqual([])
+    expect(filterRows(c[0]!.rows, 'done', new Set()).map((r) => r.id)).toEqual(['A-2'])
+  })
+
+  test('waits on you counts only an agent\'s hand-back: not an owner\'s move, not an unrelated label edit', () => {
+    const cfg = { needsYou: ctx.needsYou! }
+    // The owner moved it to Waiting: they know; it isn't a question for them.
+    expect(waitingOnYou([ev({ actor: 'you' }, 5, 'W-1', 'status', { from: 'Todo', to: 'Waiting' })], [ISSUES.get('W-1')!], cfg, TODAY)).toEqual([])
+    // Already Waiting (from before the range), an agent edits an unrelated label: not a hand-back.
+    expect(waitingOnYou([ev(CC, 5, 'W-1', 'updated', { text: 'labels' })], [ISSUES.get('W-1')!], cfg, TODAY)).toEqual([])
+    // Already Waiting and now also labelled Needs decision by an agent: still not new (it was waiting anyway).
+    const labelled = { ...ISSUES.get('W-1')!, labels: ['Needs decision'] }
+    expect(waitingOnYou([ev(CC, 5, 'W-1', 'updated', { text: 'labels' })], [labelled], cfg, TODAY)).toEqual([])
+    // In progress, an agent adds Needs decision: handed back.
+    const asked = { ...ISSUES.get('B-1')!, labels: ['Needs decision'] }
+    expect(waitingOnYou([ev(CC, 5, 'B-1', 'updated', { text: 'labels' })], [asked], cfg, TODAY).map((w) => w.id)).toEqual(['B-1'])
+  })
+
+  test('the Agents count filters to agent cards', () => {
+    const { cards: c } = buildActivity([ev({ actor: 'you' }, 1, 'B-1', 'comment', { text: 'mine' }), ev(CC, 2, 'B-1', 'comment', { text: 'x' })], ctx, TODAY)
+    expect(c.filter((x) => filterCard(x, 'agents', new Set())).map((x) => x.kind)).toEqual(['agent'])
+  })
+
   test('filters keep matching rows; an epic stays for a matching child', () => {
     const ids = (f: Parameters<typeof filterRows>[1]) => cards.flatMap((c) => allRows(filterRows(c.rows, f, new Set(waiting.map((w) => w.id)))).map((r) => r.id)).sort()
     expect(ids('all')).toEqual(['A-1', 'A-2', 'B-1', 'B-1', 'W-1'])
@@ -176,21 +223,51 @@ describe('counts and filters', () => {
 })
 
 describe('rhythm', () => {
-  test('24 hourly buckets ending with the current hour, by tool, with the busiest tool on top; owner writes don\'t count', () => {
-    const h = rhythm([
-      ev(CC, 1, 'B-1', 'comment'), ev(CC, 2, 'B-1', 'comment'), ev(CX, 3, 'B-1', 'comment'),
-      ev(CX, 61, 'B-1', 'comment'), ev({ actor: 'you' }, 1, 'B-1', 'comment'), ev(CC, 25 * 60, 'B-1', 'comment'),
-    ], NOW)
+  const evs = [
+    ev(CC, 1, 'B-1', 'comment'), ev(CC, 2, 'B-1', 'comment'), ev(CX, 3, 'B-1', 'comment'),
+    ev(CX, 61, 'B-1', 'comment'), ev({ actor: 'you' }, 1, 'B-1', 'comment'), ev(CC, 25 * 60, 'B-1', 'comment'),
+  ]
+  test('Today: 24 hourly buckets from local midnight, by tool, the busiest on top; owner writes don\'t count', () => {
+    const h = rhythm(evs, 'today', NOW)
     expect(h).toHaveLength(24)
-    expect(h[23]!.start).toBe(new Date(2026, 9, 30, 21).getTime())
-    expect(h[23]!.total).toBe(0) // NOW is exactly 9:00: these writes fall in the 8 pm hour
-    expect(h[22]!).toMatchObject({ total: 3, byTool: { cc: 2, cx: 1 }, top: 'cc' })
-    expect(h[21]!).toMatchObject({ total: 1, top: 'cx' })
-    expect(h.reduce((n, x) => n + x.total, 0)).toBe(4) // 25 h ago is outside
+    expect(h[0]!.start).toBe(new Date(2026, 9, 30, 0).getTime())
+    expect(h[23]!.start).toBe(new Date(2026, 9, 30, 23).getTime())
+    expect(h[20]!).toMatchObject({ total: 3, byTool: { cc: 2, cx: 1 }, top: 'cc' }) // 8 pm (NOW is 9:00 sharp)
+    expect(h[19]!).toMatchObject({ total: 1, top: 'cx' })
+    expect(h.reduce((n, x) => n + x.total, 0)).toBe(4) // 25 h ago is yesterday
+  })
+
+  test('7 days: 7 daily buckets ending today', () => {
+    const d = rhythm(evs, 'week', NOW)
+    expect(d).toHaveLength(7)
+    expect(d[0]!.start).toBe(new Date(2026, 9, 24).getTime())
+    expect(d[6]!).toMatchObject({ start: new Date(2026, 9, 30).getTime(), total: 4 })
+    expect(d[5]!.total).toBe(1) // yesterday, 25 h ago
   })
 })
 
 describe('merging fetched and live events', () => {
+  test('folding every live update keeps writes after the store\'s live feed (200) moves past them', () => {
+    const fetched = [ev(CC, 300, 'B-1', 'comment', { text: 'fetched' })]
+    let gathered = mergeFeeds(fetched, [], TODAY)
+    const live: FeedEvent[] = []
+    for (let i = 0; i < 260; i++) {
+      live.unshift(ev(CC, 250 - i, 'B-1', 'comment', { text: `live ${i}` }))
+      gathered = mergeFeeds(gathered, live.slice(0, 200), TODAY) // the store keeps its newest 200
+    }
+    expect(gathered).toHaveLength(261)
+    expect(gathered.some((e) => e.text === 'live 0')).toBe(true) // fell out of the store's 200 long ago
+    expect(gathered.at(-1)!.text).toBe('fetched')
+  })
+
+  test('the UI keeps as many as one ?since= read returns (one shared cap)', async () => {
+    const { FEED_SINCE_MAX: server } = await import('../../src/server/http')
+    const { FEED_SINCE_MAX: shared } = await import('../../src/shared/feed')
+    expect(server).toBe(shared)
+    const many = Array.from({ length: shared + 5 }, (_, i) => ({ ...ev(CC, 0, 'B-1', 'comment'), at: new Date(NOW - i * 1000).toISOString() }))
+    expect(mergeFeeds(many, [], TODAY)).toHaveLength(shared)
+  })
+
   test('no duplicates, newest first, nothing before the range', () => {
     const a = ev(CC, 1, 'B-1', 'comment', { text: 'x' }), b = ev(CC, 2, 'B-1', 'comment', { text: 'y' })
     const old = { ...b, at: new Date(TODAY - 1000).toISOString() }
