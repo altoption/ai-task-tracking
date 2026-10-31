@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { IssueSummary } from '../../src/model'
 import { inScope, searchIssues, useScope, useTracker } from '../client'
 import { href } from '../router'
-import { PriorityIcon, StatusIcon } from '../components/icons'
+import { PriorityIcon, ProgressPill, StatusIcon } from '../components/icons'
 
 /** One issue row (search results). */
 export function IssueRow({ issue }: { issue: IssueSummary }) {
@@ -13,7 +13,7 @@ export function IssueRow({ issue }: { issue: IssueSummary }) {
       <span className="id">{issue.id}</span>
       <StatusIcon status={issue.status} config={config} />
       <span className="title">{issue.title}</span>
-      {issue.progress.total > 0 && <span className="pill">{issue.progress.done}/{issue.progress.total}</span>}
+      <ProgressPill done={issue.progress.done} total={issue.progress.total} config={config} />
       {issue.labels.slice(0, 3).map((l) => <span key={l} className="pill">{l}</span>)}
     </a>
   )

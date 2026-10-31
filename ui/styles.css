@@ -74,7 +74,7 @@ button { cursor: pointer; }
 code { font-family: var(--mono); font-size: 12px; }
 .muted { color: var(--muted); }
 .icon { flex: none; }
-.status-icon { flex: none; }
+.status-icon, .progress-ring { flex: none; }
 .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
 .pill { font-size: 11px; padding: 1px 7px; border: 1px solid var(--pill-border); border-radius: 10px; color: var(--pill-text); white-space: nowrap; }
 kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
@@ -567,7 +567,7 @@ span.tree-toggle { transform: none; }
 .project-name:hover { background: var(--hover); }
 .project-name:focus { border-color: var(--accent); background: none; }
 .project-status { background: var(--panel); color: var(--text); border: 1px solid var(--pill-border); border-radius: var(--radius); padding: 2px 6px; font-size: 12px; }
-.project-count { margin-left: auto; }
+.project-count { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .project-body { max-width: 860px; padding: 24px 40px 8px; }
 .proj-section { margin-top: 28px; }
 .proj-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

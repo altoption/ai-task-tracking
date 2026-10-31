@@ -1,31 +1,112 @@
 import type { Config, StatusDef } from '../../src/model'
 
-/** Status glyph: dashed ring (backlog), ring (unstarted), pie (started), check (completed), cross (canceled/duplicate). */
+/**
+ * Status glyphs. Every issue is a circle: an outline is open, a solid disc is closed, and the shape (not the color)
+ * carries the state, so a theme that gives two statuses one color still tells them apart.
+ */
+export type StatusGlyph = 'backlog' | 'todo' | 'progress' | 'waiting' | 'done' | 'canceled' | 'duplicate'
+
+const statusDef = (status: string, config: Config | null): StatusDef =>
+  config?.statuses.find((s) => s.name === status) ?? { name: status, type: 'unstarted', color: 'var(--muted)' }
+
+/**
+ * The glyph for a status. `started` statuses are told apart by name, not type: one of `config.needsYou.statuses`
+ * (Waiting, In Review…) is paused (`waiting`); every other started status (In Progress, custom ones) is `progress`.
+ */
+export function statusGlyph(status: string, config: Config | null): StatusGlyph {
+  switch (statusDef(status, config).type) {
+    case 'backlog': return 'backlog'
+    case 'started': return config?.needsYou?.statuses.includes(status) ? 'waiting' : 'progress'
+    case 'completed': return 'done'
+    case 'canceled': return 'canceled'
+    case 'duplicate': return 'duplicate'
+    default: return 'todo'
+  }
+}
+
+/** Status glyph in a 14×14 viewBox. Marks inside a solid disc are drawn in the page background (`--bg`). */
 export function StatusIcon({ status, config, size = 14 }: { status: string; config: Config | null; size?: number }) {
-  const statuses = config?.statuses ?? []
-  const def: StatusDef = statuses.find((s) => s.name === status) ?? { name: status, type: 'unstarted', color: 'var(--muted)' }
+  const def = statusDef(status, config)
   // A theme may recolor a status type (--status-<type>, ui/theme.ts); otherwise the status's own color.
   const c = `var(--status-${def.type}, ${def.color})`
   const common = { width: size, height: size, viewBox: '0 0 14 14', 'aria-label': status, role: 'img' as const, className: 'status-icon' }
-  switch (def.type) {
-    case 'backlog':
-      return <svg {...common}><circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.5" strokeDasharray="1.6 1.6" /></svg>
-    case 'unstarted':
-      return <svg {...common}><circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.5" /></svg>
-    case 'started': {
-      // Fill grows with the status's position among started statuses (In Progress, then Waiting…).
-      const started = statuses.filter((s) => s.type === 'started')
-      const frac = (Math.max(0, started.findIndex((s) => s.name === status)) + 1) / (started.length + 1)
-      const a = frac * 2 * Math.PI
-      const x = 7 + 3 * Math.sin(a), y = 7 - 3 * Math.cos(a)
-      const d = frac >= 1 ? '' : `M7 7 L7 4 A3 3 0 ${frac > 0.5 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`
-      return <svg {...common}><circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.5" /><path d={d} fill={c} /></svg>
-    }
-    case 'completed':
-      return <svg {...common}><circle cx="7" cy="7" r="6.25" fill={c} /><path d="M4.4 7.2 6.2 9 9.7 5.3" fill="none" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-    default:
-      return <svg {...common}><circle cx="7" cy="7" r="6.25" fill={c} /><path d="M5 5 9 9M9 5 5 9" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" /></svg>
+  const ring = <circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.5" />
+  const disc = <circle cx="7" cy="7" r="6.25" fill={c} />
+  switch (statusGlyph(status, config)) {
+    case 'backlog': // 12 round dots: the circumference 2π·5.5 ≈ 34.56 has one every 2.88
+      return <svg {...common}><circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeDasharray="0 2.88" transform="rotate(-90 7 7)" /></svg>
+    case 'todo':
+      return <svg {...common}>{ring}</svg>
+    case 'progress':
+      return <svg {...common}>{ring}<circle cx="7" cy="7" r="2.25" fill={c} /></svg>
+    case 'waiting':
+      return <svg {...common}>{ring}<path d="M5.75 5.1v3.8M8.25 5.1v3.8" stroke={c} strokeWidth="1.5" strokeLinecap="round" /></svg>
+    case 'done':
+      return <svg {...common}>{disc}<path d="M4.4 7.2 6.2 9 9.7 5.3" fill="none" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    case 'canceled':
+      return <svg {...common}>{disc}<path d="M4.6 7h4.8" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" /></svg>
+    case 'duplicate':
+      return <svg {...common}><circle cx="8.6" cy="5.4" r="4.4" fill="none" stroke={c} strokeWidth="1.3" opacity=".75" /><circle cx="5.9" cy="8.1" r="4.9" fill={c} /></svg>
   }
+}
+
+const RING_R = 5.25
+const RING_W = 2
+const RING_C = 2 * Math.PI * RING_R
+/** The shortest arc that shows above 0, and the gap that stays open below 100%: 20° each. */
+export const RING_MIN = 20 / 360
+
+/**
+ * The share of the circle the progress arc covers (round caps included): 0 at 0, at least 20° above 0, at most 340°
+ * below 100%, and 1 (a closed ring) when all are done.
+ */
+export function progressArc(done: number, total: number): number {
+  const f = total > 0 ? done / total : 0
+  if (f <= 0) return 0
+  if (f >= 1) return 1
+  return Math.min(Math.max(f, RING_MIN), 1 - RING_MIN)
+}
+
+/** The color a finished ring closes in: the theme's `completed` override, else the first Done-type status's color. */
+export function doneColor(config: Config | null): string {
+  const def = config?.statuses.find((s) => s.type === 'completed')
+  return `var(--status-completed, ${def?.color ?? 'var(--accent)'})`
+}
+
+/**
+ * The one progress glyph (list, board, issue page, project page) and the only glyph with a fill that grows. The arc
+ * starts at 12 o'clock and runs clockwise in `--accent` over a track of the text color at 18%; a finished ring closes
+ * in the Done color.
+ */
+export function ProgressRing({ done, total, config, size = 14, noun = 'sub-issues' }: { done: number; total: number; config: Config | null; size?: number; noun?: string }) {
+  const shown = progressArc(done, total)
+  const label = `${done} of ${total} ${noun} done`
+  // A round cap reaches RING_W / 2 past each end of the dash: shorten the dash by RING_W and start it RING_W / 2 in,
+  // so the arc you see (caps included) starts at 12 o'clock and covers exactly `shown` of the circle.
+  const dash = Math.max(0, shown * RING_C - RING_W)
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" role="img" aria-label={label} className="progress-ring">
+      <title>{label}</title>
+      <circle cx="7" cy="7" r={RING_R} fill="none" stroke="var(--text)" strokeOpacity=".18" strokeWidth={RING_W} />
+      {shown >= 1
+        ? <circle className="arc done" cx="7" cy="7" r={RING_R} fill="none" stroke={doneColor(config)} strokeWidth={RING_W} />
+        : shown > 0 && (
+          <circle className="arc" cx="7" cy="7" r={RING_R} fill="none" stroke="var(--accent)" strokeWidth={RING_W} strokeLinecap="round"
+            strokeDasharray={`${dash.toFixed(3)} ${RING_C.toFixed(3)}`} strokeDashoffset={(-RING_W / 2).toFixed(3)} transform="rotate(-90 7 7)" />
+        )}
+    </svg>
+  )
+}
+
+/** The ring plus the exact count, as a pill: the ring is the glance, the count the figure. Nothing without sub-issues. */
+export function ProgressPill({ done, total, config }: { done: number; total: number; config: Config | null }) {
+  if (!total) return null
+  return (
+    <span className="pill progress" title={`${done} of ${total} sub-issues done`}>
+      <ProgressRing done={done} total={total} config={config} size={12} />
+      <span aria-hidden="true">{done}/{total}</span>
+    </span>
+  )
 }
 
 export const PRIORITIES = ['No priority', 'Urgent', 'High', 'Medium', 'Low'] as const

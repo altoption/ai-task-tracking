@@ -6,7 +6,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { Project } from '../../src/model'
 import { callTool, inScope, NO_PROJECT, useScope, useTracker } from '../client'
-import { Icon } from '../components/icons'
+import { Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
 import { milestoneProgress, targetLabel } from '../projectPage'
@@ -243,7 +243,7 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
           {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {statusError && <span className="form-error" role="alert">{statusError}</span>}
-        <span className="muted small project-count">{done}/{total} issues done{scope.kind !== 'all' ? ' in this workspace' : ''}</span>
+        <span className="muted small project-count">{total > 0 && <ProgressRing done={done} total={total} config={state.config} noun="issues" />}{done}/{total} issues done{scope.kind !== 'all' ? ' in this workspace' : ''}</span>
       </header>
       <div className="project-body">
         <MarkdownBlock key={project.slug} source={project.description} ctx={ctx} label="Project description" emptyLabel="Add description…"
