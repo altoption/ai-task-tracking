@@ -25,7 +25,8 @@ curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/ins
 
 The installer checks this Mac, shows what it will do and asks once. It installs the latest notarized release into
 `~/Applications` (it checks the download's `.sha256`, the signature and the notarization first, and builds from
-source if any check fails or there is no release), links `~/.local/bin/aitt`, runs `aitt setup` and opens the app.
+source if any check fails or there is no release), links `~/.local/bin/aitt`, runs `aitt setup` and, on a first
+install, opens the app and turns on Launch at Login.
 The new app is prepared next to the old one and swapped in only when it is complete, so a failed download or build
 leaves the installed app as it was. From a clone, run `./install.sh`.
 
@@ -37,7 +38,7 @@ Options go after `bash -s --` when the script is piped, e.g. `… | bash -s -- -
 | `--dry-run` | only show what was found and what would happen |
 | `--from-source` | build from source even when a release is available |
 | `--version <tag>` | that release (or source tag) instead of the latest, e.g. `v0.2.0` |
-| `--no-launch` | don't open the app at the end |
+| `--no-launch` | don't open the app, at the end or after a failure |
 | `--connect <tools>` | connect these other agent tools, comma-separated (as in `aitt setup --connect`) |
 | `--help` | the options and environment (also works piped: `… \| bash -s -- --help`) |
 
@@ -180,7 +181,9 @@ which links it.
 
 ## Upgrade
 
-Run the install command again. It quits the app, replaces it and runs setup; your data folder and settings stay.
+Run the install command again. It checks that the new build runs, quits the app, replaces it and runs setup; your data
+folder and settings stay, Launch at Login is left as you set it, and the app is reopened only if it was running. If
+the swap fails or is interrupted, the old app goes back in place. Only one install runs at a time in a folder.
 `--version <tag>` installs a specific release. Restart agent sessions afterwards.
 
 ## Uninstall
