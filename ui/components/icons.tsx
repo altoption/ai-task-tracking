@@ -16,7 +16,11 @@ const statusDef = (status: string, config: Config | null): StatusDef =>
 export function statusGlyph(status: string, config: Config | null): StatusGlyph {
   switch (statusDef(status, config).type) {
     case 'backlog': return 'backlog'
-    case 'started': return config?.needsYou?.statuses.includes(status) ? 'waiting' : 'progress'
+    case 'started': {
+      // A hand-edited config.yml may hold anything here (`statuses: null`): only an array counts.
+      const paused = config?.needsYou?.statuses
+      return Array.isArray(paused) && paused.includes(status) ? 'waiting' : 'progress'
+    }
     case 'completed': return 'done'
     case 'canceled': return 'canceled'
     case 'duplicate': return 'duplicate'
@@ -34,7 +38,8 @@ export function StatusIcon({ status, config, size = 14 }: { status: string; conf
   const disc = <circle cx="7" cy="7" r="6.25" fill={c} />
   switch (statusGlyph(status, config)) {
     case 'backlog': // 12 round dots: the circumference 2π·5.5 ≈ 34.56 has one every 2.88
-      return <svg {...common}><circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeDasharray="0 2.88" transform="rotate(-90 7 7)" /></svg>
+      // A dash of 0.001, not 0: every engine (WebKit too) draws round caps on it, and it looks the same.
+      return <svg {...common}><circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeDasharray="0.001 2.879" transform="rotate(-90 7 7)" /></svg>
     case 'todo':
       return <svg {...common}>{ring}</svg>
     case 'progress':
@@ -56,12 +61,20 @@ const RING_C = 2 * Math.PI * RING_R
 /** The shortest arc that shows above 0, and the gap that stays open below 100%: 20° each. */
 export const RING_MIN = 20 / 360
 
+/** done/total made safe to show: NaN, infinite or negative counts are 0, and done never exceeds total. */
+export function clampProgress(done: number, total: number): { done: number; total: number } {
+  const t = Number.isFinite(total) && total > 0 ? total : 0
+  const d = Number.isFinite(done) && done > 0 ? done : 0
+  return { done: Math.min(d, t), total: t }
+}
+
 /**
  * The share of the circle the progress arc covers (round caps included): 0 at 0, at least 20° above 0, at most 340°
  * below 100%, and 1 (a closed ring) when all are done.
  */
 export function progressArc(done: number, total: number): number {
-  const f = total > 0 ? done / total : 0
+  const p = clampProgress(done, total)
+  const f = p.total > 0 ? p.done / p.total : 0
   if (f <= 0) return 0
   if (f >= 1) return 1
   return Math.min(Math.max(f, RING_MIN), 1 - RING_MIN)
@@ -77,15 +90,23 @@ export function doneColor(config: Config | null): string {
  * The one progress glyph (list, board, issue page, project page) and the only glyph with a fill that grows. The arc
  * starts at 12 o'clock and runs clockwise in `--accent` over a track of the text color at 18%; a finished ring closes
  * in the Done color.
+ *
+ * Its `<title>` is both the accessible name and the tooltip, the one place the figure is spoken. `decorative` hides it
+ * from assistive tech where visible text next to it already says the same ("2/9 issues done").
  */
-export function ProgressRing({ done, total, config, size = 14, noun = 'sub-issues' }: { done: number; total: number; config: Config | null; size?: number; noun?: string }) {
-  const shown = progressArc(done, total)
-  const label = `${done} of ${total} ${noun} done`
+export function ProgressRing({ done, total, config, size = 14, noun = 'sub-issues', decorative = false }: {
+  done: number; total: number; config: Config | null; size?: number; noun?: string; decorative?: boolean
+}) {
+  const p = clampProgress(done, total)
+  const shown = progressArc(p.done, p.total)
+  const label = `${p.done} of ${p.total} ${noun} done`
   // A round cap reaches RING_W / 2 past each end of the dash: shorten the dash by RING_W and start it RING_W / 2 in,
-  // so the arc you see (caps included) starts at 12 o'clock and covers exactly `shown` of the circle.
-  const dash = Math.max(0, shown * RING_C - RING_W)
+  // so the arc you see (caps included) starts at 12 o'clock and covers exactly `shown` of the circle. The shortest
+  // dash is 0.001, not 0, so every engine (WebKit too) draws its round caps.
+  const dash = Math.max(0.001, shown * RING_C - RING_W)
+  const a11y = decorative ? { 'aria-hidden': true as const } : { role: 'img' as const }
   return (
-    <svg width={size} height={size} viewBox="0 0 14 14" role="img" aria-label={label} className="progress-ring">
+    <svg width={size} height={size} viewBox="0 0 14 14" {...a11y} className="progress-ring">
       <title>{label}</title>
       <circle cx="7" cy="7" r={RING_R} fill="none" stroke="var(--text)" strokeOpacity=".18" strokeWidth={RING_W} />
       {shown >= 1
@@ -98,13 +119,17 @@ export function ProgressRing({ done, total, config, size = 14, noun = 'sub-issue
   )
 }
 
-/** The ring plus the exact count, as a pill: the ring is the glance, the count the figure. Nothing without sub-issues. */
+/**
+ * The ring plus the exact count, as a pill: the ring is the glance, the count the figure (hidden from assistive tech,
+ * which reads the ring's title once). Nothing without sub-issues.
+ */
 export function ProgressPill({ done, total, config }: { done: number; total: number; config: Config | null }) {
-  if (!total) return null
+  const p = clampProgress(done, total)
+  if (!p.total) return null
   return (
-    <span className="pill progress" title={`${done} of ${total} sub-issues done`}>
-      <ProgressRing done={done} total={total} config={config} size={12} />
-      <span aria-hidden="true">{done}/{total}</span>
+    <span className="pill progress">
+      <ProgressRing done={p.done} total={p.total} config={config} size={12} />
+      <span aria-hidden="true">{p.done}/{p.total}</span>
     </span>
   )
 }

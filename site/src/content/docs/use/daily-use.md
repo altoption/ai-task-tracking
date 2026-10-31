@@ -103,7 +103,7 @@ you the status, so you can tell them apart even when a theme gives two statuses 
 
 | Icon | Status | Meaning |
 |---|---|---|
-| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0 2.88" transform="rotate(-90 7 7)"/></svg> | Backlog | a ring of dots: not committed to yet |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.001 2.879" transform="rotate(-90 7 7)"/></svg> | Backlog | a ring of dots: not committed to yet |
 | <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg> | Todo | an empty ring: committed, nobody on it yet |
 | <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2.25" fill="currentColor"/></svg> | In Progress | a ring with a dot: someone is on it. Any started status you add gets this icon too |
 | <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.75 5.1v3.8M8.25 5.1v3.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> | Waiting | a ring with pause bars: stopped, it needs you. Every status listed under `needsYou.statuses` in `config.yml` (for example In Review) gets this icon |
@@ -113,7 +113,8 @@ you the status, so you can tell them apart even when a theme gives two statuses 
 
 An issue with sub-issues also shows a **progress ring** and the count, such as
 <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" stroke-opacity=".18" stroke-width="2"/><circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="14.493 32.987" stroke-dashoffset="-1" transform="rotate(-90 7 7)"/></svg> 3/6,
-in lists, on board cards, on the issue page and in a project's header. Point at it to read "3 of 6 sub-issues done".
+in lists, on board cards and on the issue page. A project page uses the same ring for the whole project, in its
+header, and for each milestone, counting that milestone's issues. Point at it to read "3 of 6 sub-issues done".
 The ring fills clockwise from 12 o'clock. Any progress shows at least a short arc, the ring stays open until every
 sub-issue is closed, and it closes in the Done color when they all are. It's the only icon that fills up; the
 issue's own status icon still tells you whether the issue itself is closed.

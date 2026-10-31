@@ -118,6 +118,12 @@ describe('Needs you: why and stalled', () => {
     expect(needsYouWhy(item({ status: 'Waiting' }), ny, now)).toEqual({ why: 'Waiting · 3d' })
     expect(needsYouWhy(item({ labels: ['Bug', 'Needs review'] }), ny, now)).toEqual({ why: 'Needs review · 3d' })
   })
+  test('a malformed needsYou (null lists, missing) falls back to the status instead of throwing', () => {
+    const broken = { statuses: null, labels: null } as unknown as typeof ny
+    expect(needsYouWhy(item({ status: 'Waiting', labels: ['Needs review'] }), broken, now)).toEqual({ why: 'Waiting · 3d' })
+    expect(needsYouWhy(item({ status: 'Waiting' }), {} as typeof ny, now)).toEqual({ why: 'Waiting · 3d' })
+    expect(needsYouWhy(item({ status: 'Waiting' }), undefined, now)).toEqual({ why: 'Waiting · 3d' })
+  })
   test('stalled only: no why, just the reason; stalled and waiting: both', () => {
     expect(needsYouWhy(item({ stalled: 'idle 72 h in In Progress' }), ny, now)).toEqual({ why: '', stalled: 'idle 72 h in In Progress' })
     expect(needsYouWhy(item({ status: 'Waiting', stalled: 'reopened 2× in 7 days' }), ny, now))

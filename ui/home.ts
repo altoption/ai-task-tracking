@@ -61,7 +61,10 @@ export function relTime(iso: string, nowMs: number): string {
 export function needsYouWhy(
   i: NeedsYouItem, needsYou: Config['needsYou'] | undefined, nowMs: number,
 ): { why: string; stalled?: string; ci?: string } {
-  const own = needsYou?.statuses.includes(i.status) ? i.status : i.labels.find((l) => needsYou?.labels.includes(l))
+  // A hand-edited config.yml may hold anything here (`statuses: null`): only an array counts.
+  const statuses = Array.isArray(needsYou?.statuses) ? needsYou.statuses : []
+  const labels = Array.isArray(needsYou?.labels) ? needsYou.labels : []
+  const own = statuses.includes(i.status) ? i.status : i.labels.find((l) => labels.includes(l))
   const stalled = { ...(i.stalled ? { stalled: i.stalled } : {}), ...(i.ciReason ? { ci: i.ciReason } : {}) }
   if (!own && (i.stalled || i.ciReason)) return { why: '', ...stalled }
   const why = own ?? i.status
