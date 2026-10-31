@@ -37,6 +37,7 @@ Open with ⌘, or **Settings…** in the menu. Every change applies straight awa
 
 - **General**: Launch at login; Show in the Dock; Show Needs-you issues in the menu; Show stalled work in Needs you
   (see [Stalled work](#stalled-work)); Show CI status (see [CI status](#ci-status-on-pull-requests)).
+- **Hidden projects**: one checkbox per project (and No project); see [Hidden projects](#hidden-projects).
 - **Notifications**: Notify me about agent activity, and for which events: an agent needs me (Waiting, Needs
   decision/review, stalled), an agent finished an issue (Done), an agent created an issue (off by default).
 - **Shortcuts**: the two global shortcuts above.
@@ -118,6 +119,27 @@ header, and for each milestone, counting that milestone's issues. Point at it to
 The ring fills clockwise from 12 o'clock. Any progress shows at least a short arc, the ring stays open until every
 sub-issue is closed, and it closes in the Done color when they all are. It's the only icon that fills up; the
 issue's own status icon still tells you whether the issue itself is closed.
+
+## Hidden projects
+
+Hide a project you don't want to see right now: tick it in **Settings ▸ Hidden projects**, or click **Hide project**
+on its page. **No project** in that list hides the issues that have no project. The choice is saved as
+`hiddenProjects` in `config.yml`, so the app window and the browser always agree.
+
+A hidden project's issues leave the sidebar, All issues, Home (Needs you, In progress, Ready next, Blocked), saved
+views, the board and every count. Filters and grouping stop offering the project, and any label, milestone or
+workspace that only it uses. ⌘K search leaves its issues out, and so do the menu-bar number, the menu's Needs-you
+list, quick capture's project list and notifications.
+
+Hiding only changes what *you* see:
+
+- **Links still open it.** An issue link (`#/issue/ATT-12`, `aitt://issue/ATT-12`), the project's page and an exact
+  issue id typed in ⌘K open as usual, with a quiet "This project is hidden" line and **Unhide**. A visible issue's
+  parent, blockers and related issues still show a hidden one's id ("in a hidden project") and open it.
+- **Agents see no change.** Every agent tool returns hidden projects' issues as before.
+- **Unhiding brings everything back straight away**, in every open window, without a reload. Hiding the project of
+  the page you're on keeps you on it.
+- A saved view filtered to a hidden project says so ("Filtered to a hidden project") instead of looking empty.
 
 ## Stalled work
 
