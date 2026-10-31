@@ -183,6 +183,11 @@ describe('queries', () => {
     // Long notes are shortened; a label-only item has no waitingSince; no comments, no request.
     await s.addComment('Q-2', 'x'.repeat(500), agent)
     expect(needsYouRequest(s, s.get('Q-2')!).request).toBe(`${'x'.repeat(REQUEST_MAX - 1)}…`)
+    // A huge comment of unclosed markup doesn't stall Home: only its start is scanned (uncapped, this takes many seconds).
+    await s.addComment('Q-2', ' *a'.repeat(133_000), agent)
+    const started = performance.now()
+    expect(needsYouRequest(s, s.get('Q-2')!).request?.length).toBeLessThanOrEqual(REQUEST_MAX)
+    expect(performance.now() - started).toBeLessThan(1000)
     await s.updateIssue('Q-3', { labels: ['Needs review'] }, agent)
     expect(needsYouRequest(s, s.get('Q-3')!).waitingSince).toBeUndefined()
     const bare = await s.createIssue({ title: 'Bare', project: 'support', status: 'Waiting' }, agent)
