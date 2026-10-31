@@ -119,11 +119,21 @@ final class SettingsWindow: NSWindow {
         themeMenu.selectItem(at: themes.firstIndex { $0.id == chosen } ?? 0)
     }
 
-    /// Rebuild the Hidden projects checkboxes when the engine's list or the hidden set changed; the window resizes
-    /// to fit.
+    /// Keep the Hidden projects checkboxes in step. When only the hidden set changed (a tick here, Hide on a project
+    /// page), each checkbox's state is updated in place, so focus and the VoiceOver cursor stay put; the boxes are
+    /// rebuilt (and the window resized to fit) only when the engine's project list changes.
     private func refreshHiddenList() {
         let projects = HiddenProjectsSetting.storedList(defaults), hidden = HiddenProjectsSetting.hidden(defaults)
-        if let shown = hiddenShown, shown.0 == projects, shown.1 == hidden { return }
+        if let shown = hiddenShown, shown.0 == projects {
+            guard shown.1 != hidden else { return }
+            hiddenShown = (projects, hidden)
+            for case let c as NSButton in hiddenList.arrangedSubviews {
+                guard let slug = c.identifier?.rawValue else { continue }
+                let state: NSControl.StateValue = hidden.contains(slug) ? .on : .off
+                if c.state != state { c.state = state }
+            }
+            return
+        }
         hiddenShown = (projects, hidden)
         hiddenList.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if projects.isEmpty {
