@@ -177,6 +177,8 @@ export const ICON_PATHS: Record<string, string> = {
   content: 'M4 1.8h5.3l3.2 3.2v8.7a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V2.3a.5.5 0 0 1 .5-.5zM9.2 1.8v3.3h3.3M5.8 8h4.4M5.8 10.5h4.4',
   // A circle half hatched: light and dark, for themes.
   theme: `${circle(8, 8, 5.5)}M8 2.5v11M8 5.2h4.6M8 8h5.5M8 10.8h4.6`,
+  // Two overlapping pages.
+  copy: 'M5.5 5.5V3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-2.5M3 5.5h7a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V6a.5.5 0 0 1 .5-.5z',
   // A gear.
   settings: `${circle(8, 8, 2.2)}${circle(8, 8, 4.8)}M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1`,
   project: 'M8 1.8 13.5 5v6L8 14.2 2.5 11V5zM2.5 5 8 8.2 13.5 5M8 8.2v6',
@@ -210,7 +212,7 @@ export const ICON_PATHS: Record<string, string> = {
 export const CONCEPT_ICON = {
   home: 'home', issues: 'issues', views: 'view', project: 'project', search: 'search', filter: 'filter', display: 'display',
   status: 'status', priority: 'priority', labels: 'label', relations: 'relations', links: 'link', parent: 'parent',
-  workspace: 'workspace', milestone: 'milestone', content: 'content', dates: 'calendar', theme: 'theme', settings: 'settings',
+  workspace: 'workspace', milestone: 'milestone', content: 'content', dates: 'calendar', theme: 'theme', settings: 'settings', copy: 'copy',
   newIssue: 'new', favorite: 'star', warning: 'warn', docs: 'help', list: 'list', board: 'board',
 } as const satisfies Record<string, keyof typeof ICON_PATHS>
 export type Concept = keyof typeof CONCEPT_ICON
