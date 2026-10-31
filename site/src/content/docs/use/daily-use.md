@@ -136,7 +136,7 @@ remove a line to be offered that view again at the next start.
 issues, by when they were closed: a later comment doesn't bring an issue back, reopening one takes it out, and a canceled
 issue that is then finished counts from when it was finished. With no
 **Status** filter, canceled and duplicate issues count as closed too. Issues closed before the activity log began, or
-on another Mac, go by their last update unless they were imported with a close date. The **Completed issues** display
+on another Mac, go by their last update unless they were [imported with a close date](/docs/use/data-model/#front-matter-keys). The **Completed issues** display
 option has no effect on a view with this filter, as on a view that names statuses.
 
 **Docs** at the bottom of the sidebar, **Help ▸ AI Task Tracking Help** (⌘?) in the app's menu and **Help** in the
