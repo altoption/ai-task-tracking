@@ -70,6 +70,7 @@ const PRS: Record<number, [string, string, string[]]> = {
   38: ['merged', 'passing', []],
   52: ['merged', 'passing', []],
   57: ['open', 'failing', ['lint', 'e2e (safari)']],
+  61: ['merged', 'passing', []],
 }
 
 /** A stand-in `gh` first on the engine's PATH: it records the call and fails as if signed out. */
@@ -173,7 +174,8 @@ async function seed(engine: Engine): Promise<void> {
     { title: 'Contact form sends twice on slow connections', labels: ['Bug'], priority: 1, state: 'Done', comment: 'Fixed in PR #38: the button disables while sending.',
       links: [{ url: PR(38), title: 'PR #38' }] },
   ]
-  for (const a of website) await call('save_issue', { project: 'Website', ...a }, web)
+  const webIds: string[] = []
+  for (const a of website) webIds.push((await call('save_issue', { project: 'Website', ...a }, web)).id as string)
 
   const app: Args[] = [
     { title: 'Offline edits are lost after a crash', labels: ['Bug'], priority: 1, state: 'In Progress' },
@@ -204,6 +206,20 @@ async function seed(engine: Engine): Promise<void> {
     await call('save_comment', { issueId: step2, body: 'Done: rows from the plans config. Next: sticky header. Blocking: lint fails on PR #57.' }, codex, 1)
   }
   if (epicId) await call('save_comment', { issueId: epicId, body: 'Step 1 is live behind the pricing flag. Next: the comparison table.' }, web, 1)
+
+  // Today, for Home's Agent activity: a Claude Code session that finishes two issues and is still writing, and a
+  // Codex session that hands a question back (it waits on you).
+  const cc = agent('web-app', 'fix/retina-hero', 'shots-today')
+  const cx = agent('mobile-app', 'fix/camera-rotation', 'shots-today-cx', 'codex')
+  t = SHOT_TIME - 6 * HOUR
+  await call('save_issue', { id: appIds[3], state: 'In Progress' }, cx, 0)
+  await call('save_issue', { id: appIds[3], state: 'Waiting', comment: 'Needs: lock the camera view to portrait, or support rotation on Android 12 only? Locking is a one-line fix.' }, cx, 1)
+  t = SHOT_TIME - 3 * HOUR
+  await call('save_issue', { id: webIds[0], state: 'In Progress' }, cc, 0)
+  await call('save_comment', { issueId: webIds[0], body: 'The hero now ships 1x, 2x and 3x sources; srcset picks the sharp one.' }, cc, 1)
+  await call('save_issue', { id: webIds[0], state: 'Done', comment: `Fixed in PR #61 (${PR(61)}).`, links: [{ url: PR(61), title: 'PR #61' }] }, cc, 0.5)
+  t = SHOT_TIME - HOUR / 4
+  await call('save_issue', { id: webIds[1], state: 'Done', comment: 'Added og:title, og:image and twitter:card to every post.' }, cc, 0.1)
   await engine.setTime(SHOT_TIME)
 }
 
