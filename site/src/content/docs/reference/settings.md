@@ -30,6 +30,12 @@ stored in the app's UserDefaults domain under its key: `defaults read io.github.
 |---|---|---|
 | Theme | Dark (also Light, Match macOS, Midnight, Paper, High contrast and your theme files; saved as `theme` in config.yml) | `theme` |
 
+## Hidden projects
+
+| Setting | Default | Key |
+|---|---|---|
+| Hidden projects | none (one checkbox per project, and No project; saved as `hiddenProjects` in config.yml) | `hiddenProjects` |
+
 ## Notifications
 
 | Setting | Default | Key |
