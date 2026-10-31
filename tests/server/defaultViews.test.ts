@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmod, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { chmod, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../../src/engine/store'
@@ -46,6 +46,18 @@ describe('aitt serve and the default views', () => {
     let slugs: string[] = []
     for (let i = 0; i < 50 && slugs.length < 4; i++) { slugs = await viewSlugs(base); await Bun.sleep(100) }
     expect(slugs).toEqual(['active-by-project', 'high-priority', 'shipped-this-week', 'unblock-first'])
+  }, 20_000)
+
+  test('saving a view from the UI keeps the window', async () => {
+    root = await mkdtemp(join(tmpdir(), 'aitt-serve-'))
+    const base = await serve()
+    const display = { layout: 'list', groupBy: 'project', orderBy: 'updated', showSubIssues: true, properties: ['id'] }
+    const r = await fetch(`${base}/api/tool/save_view`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-tracker': '1' },
+      body: JSON.stringify({ args: { name: 'Last month', filter: { closedWithinDays: 30 }, display } }),
+    })
+    expect(r.status).toBe(200)
+    expect(await readFile(join(root, 'views', 'last-month.yml'), 'utf8')).toContain('closedWithinDays: 30')
   }, 20_000)
 
   test('a read-only views folder does not stop the engine', async () => {
