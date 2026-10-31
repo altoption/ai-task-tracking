@@ -7,8 +7,8 @@
  * an ad-hoc page offers "Save view" (writes views/<slug>.yml through the owner-only `save_view` tool).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Filter, IssueSummary } from '../../src/model'
-import { callTool, inScope, setScope, useScope, useTracker, type ViewDef } from '../client'
+import type { Filter, IssueSummary, Project } from '../../src/model'
+import { callTool, inScope, isHiddenProject, projectName, setProjectHidden, setScope, useScope, useTracker, type ViewDef } from '../client'
 import { ConceptIcon } from '../components/icons'
 import { Popover } from '../components/Popover'
 import { navigate, replaceRoute, type Route } from '../router'
@@ -23,7 +23,7 @@ export function savedState(v: ViewDef): ViewState {
   return { filter: v.filter ?? {}, display: { ...DEFAULT_DISPLAY, ...v.display } }
 }
 
-export function ViewScreen({ title, icon, saved, defaults, base, locked, query, routeFor }: {
+export function ViewScreen({ title, icon, saved, defaults, base, locked, query, routeFor, issues, extraProjects }: {
   title: string
   icon?: ReactNode
   saved?: ViewDef
@@ -34,6 +34,12 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
   locked?: (keyof Filter)[]
   query?: string
   routeFor: (query?: string) => Route
+  /**
+   * The issues to show instead of the live store's (a hidden project's page, read by its link), with the projects
+   * they need names for. The workspace switcher doesn't apply to them.
+   */
+  issues?: IssueSummary[]
+  extraProjects?: Project[]
 }) {
   const state = useTracker()
   const scope = useScope()
@@ -43,21 +49,31 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
   const update = (next: ViewState) => replaceRoute(routeFor(viewToQuery(next, baseState) || undefined))
 
   const pool = useMemo(() => {
+    if (issues) return issues
     const out: IssueSummary[] = []
     for (const i of state.issues.values()) if (inScope(i, scope, state.config)) out.push(i)
     return out
-  }, [state.issues, scope, state.config])
-  const ctx = useMemo(() => ({ statuses: state.config?.statuses ?? [], labels: state.labels, projects: state.projects, byId: state.issues }), [state.config, state.labels, state.projects, state.issues])
+  }, [issues, state.issues, scope, state.config])
+  const byId = useMemo(() => {
+    if (!issues) return state.issues
+    const m = new Map(state.issues)
+    for (const i of issues) m.set(i.id, i)
+    return m
+  }, [issues, state.issues])
+  const projects = useMemo(() => (extraProjects?.length ? [...state.projects, ...extraProjects] : state.projects), [state.projects, extraProjects])
+  const ctx = useMemo(() => ({ statuses: state.config?.statuses ?? [], labels: state.labels, projects, byId }), [state.config, state.labels, projects, byId])
   const effective = useMemo(() => ({ filter: { ...current.filter, ...base }, display: current.display }), [current, base])
   const result = useMemo(() => applyView(pool, effective, ctx), [pool, effective, ctx])
   // When the switcher hides everything, say so (otherwise an empty view looks broken).
-  const outOfScope = useMemo(() => (result.total || scope.kind === 'all' ? 0 : applyView([...state.issues.values()], effective, ctx).total), [result.total, scope, state.issues, effective, ctx])
+  const outOfScope = useMemo(() => (result.total || scope.kind === 'all' || issues ? 0 : applyView([...state.issues.values()], effective, ctx).total), [result.total, scope, issues, state.issues, effective, ctx])
+  // A filter naming a hidden project (a saved view, an old link): say so, rather than look empty or incomplete.
+  const hiddenInFilter = useMemo(() => (issues ? [] : (effective.filter.project ?? []).filter((p) => isHiddenProject(state, p))), [issues, effective, state])
   const cells: CellCtx = useMemo(() => ({
     labels: new Map(state.labels.map((l) => [l.name, l])),
-    projects: new Map(state.projects.map((p) => [p.slug, p])),
+    projects: new Map(projects.map((p) => [p.slug, p])),
     since: timeInStatus(state.feed),
     now: Date.now(),
-  }), [state.labels, state.projects, state.feed])
+  }), [state.labels, projects, state.feed])
 
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -117,13 +133,30 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
         </div>
       </header>
       <FilterBar filter={current.filter} locked={locked} state={state} onChange={(filter) => update({ ...current, filter })} />
+      {state.ready && hiddenInFilter.length > 0 && <HiddenFilterNote slugs={hiddenInFilter} names={hiddenInFilter.map((p) => projectName(state, p))} />}
       {!state.ready ? <div className="view-empty muted">Loading…</div>
         : outOfScope > 0 ? <div className="view-empty muted">No issues here in the current workspace — {outOfScope} {outOfScope === 1 ? 'issue matches' : 'issues match'} in all workspaces. <button className="ghost-btn inline" onClick={() => setScope({ kind: 'all' })}>Show all workspaces</button></div>
         : current.display.layout === 'board'
           ? <BoardView groups={result.groups} hidden={result.hidden} display={current.display} ctx={ctx} config={state.config} cells={cells} onDrop={onDrop} />
-          : <ListView groups={result.groups} display={current.display} byId={state.issues} config={state.config} cells={cells} />}
+          : <ListView groups={result.groups} display={current.display} byId={byId} config={state.config} cells={cells} />}
       {toast && <div className="toast" role="alert">{toast}<button className="icon-button" aria-label="Dismiss" onClick={() => setToast('')}>×</button></div>}
     </section>
+  )
+}
+
+/** "Filtered to a hidden project": their issues aren't listed here; Unhide brings them back live. */
+function HiddenFilterNote({ slugs, names }: { slugs: string[]; names: string[] }) {
+  const [error, setError] = useState('')
+  const many = slugs.length > 1
+  return (
+    <div className="hidden-note view-hidden-note" role="note">
+      <span>Filtered to {many ? 'hidden projects' : 'a hidden project'} ({names.join(', ')}): {many ? 'their' : 'its'} issues aren't listed.</span>
+      <button type="button" className="ghost-btn inline" onClick={() => {
+        setError('')
+        Promise.all(slugs.map((s) => setProjectHidden(s, false))).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      }}>Unhide</button>
+      {error && <span className="form-error" role="alert">{error}</span>}
+    </div>
   )
 }
 

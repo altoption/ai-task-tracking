@@ -111,7 +111,9 @@ export function stalledOf(s: Store, now = Date.now()): (i: Issue) => string | nu
  * are there only because they are stalled (the app leaves those out when its stalled setting is off) and every
  * stalled id (the app notifies once per stalled episode, so a Waiting round trip doesn't notify twice).
  */
-export function needsYouCount(s: Store, now = Date.now()): { count: number; stalledOnly: string[]; stalledAll: string[] } {
+export function needsYouCount(
+  s: Store, now = Date.now(), visible?: (i: Issue) => boolean,
+): { count: number; stalledOnly: string[]; stalledAll: string[] } {
   const isOpen = openTest(s)
   const test = needsYouOf(s)
   const stalled = stalledOf(s, now)
@@ -119,6 +121,7 @@ export function needsYouCount(s: Store, now = Date.now()): { count: number; stal
   let count = 0
   const stalledOnly: string[] = [], stalledAll: string[] = []
   for (const i of s.all()) {
+    if (visible && !visible(i)) continue // a hidden project (src/engine/hidden.ts), for the app's poll
     if (!isOpen(i)) { if (ci(i)) count++; continue } // Done within the window with failing CI
     const needs = test(i) || ci(i) !== null
     const reason = stalled(i)
@@ -135,11 +138,11 @@ export function needsYouCount(s: Store, now = Date.now()): { count: number; stal
  * whenever they apply.
  */
 export function needsYouList(
-  s: Store, limit = 50, now = Date.now(), opts: { stalled?: boolean } = {},
+  s: Store, limit = 50, now = Date.now(), opts: { stalled?: boolean; visible?: (i: Issue) => boolean } = {},
 ): { issue: Issue; why: string; stalled?: string; ci?: string }[] {
   const nyStatus = new Set(s.config.needsYou.statuses)
   const nyLabels = new Set(s.config.needsYou.labels)
-  const h = home(s, now)
+  const h = home(s, now, { visible: opts.visible })
   const rows = h.needsYou.map((issue) => {
     const reason = h.stalled.get(issue.id)
     const ci = h.ci.get(issue.id)
@@ -157,9 +160,9 @@ export function needsYouList(
  * Only open issues appear, plus Done issues with failing CI (src/engine/ci.ts) in needsYou. `stalled` and `ci` map
  * every stalled open issue / failing-CI issue to its reason (computed in the same pass); with
  * `stalledInNeedsYou: false` (whats_next) stalled and failing-CI issues stay in their usual bucket and are only
- * marked there (Done ones then appear nowhere).
+ * marked there (Done ones then appear nowhere). `visible` leaves issues out entirely (hidden projects, for the UI).
  */
-export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boolean } = {}): {
+export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boolean; visible?: (i: Issue) => boolean } = {}): {
   needsYou: Issue[]; inProgress: Issue[]; readyNext: { issue: Issue; unblocks: number }[]; blocked: { issue: Issue; blockers: string[] }[]
   stalled: Map<string, string>; ci: Map<string, string>
 } {
@@ -174,7 +177,9 @@ export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boo
   const blocked: { issue: Issue; blockers: string[] }[] = []
   const stalled = new Map<string, string>()
   const ci = new Map<string, string>()
+  const visible = opts.visible
   for (const i of s.all()) {
+    if (visible && !visible(i)) continue
     const ciReason = ciTest(i)
     if (ciReason) ci.set(i.id, ciReason)
     if (!isOpen(i)) { if (ciReason && flagged) needsYou.push(i); continue }
@@ -263,9 +268,10 @@ export function filterIssues(s: Store, f: Filter): Issue[] {
 
 /**
  * Full-text search over title > description > activity (every term must match; terms match word prefixes).
- * An exact id ("q-12") ranks first. Ties: most recently updated first.
+ * An exact id ("q-12") ranks first. Ties: most recently updated first. `visible` drops other hits (hidden projects,
+ * for the UI) but never the exact id: typing an issue's id still finds it.
  */
-export function search(s: Store, q: string, limit = 50): Issue[] {
+export function search(s: Store, q: string, limit = 50, visible?: (i: Issue) => boolean): Issue[] {
   const query = q.trim()
   if (!query) return []
   const scores = s.index.query(query)
@@ -274,7 +280,7 @@ export function search(s: Store, q: string, limit = 50): Issue[] {
   const hits: { i: Issue; score: number; t: number }[] = []
   for (const [id, score] of scores) {
     const i = s.get(id)
-    if (i) hits.push({ i, score, t: Date.parse(i.updated) || 0 })
+    if (i && (!visible || i === exact || visible(i))) hits.push({ i, score, t: Date.parse(i.updated) || 0 })
   }
   hits.sort((a, b) => b.score - a.score || b.t - a.t || compareIds(a.i.id, b.i.id))
   return hits.slice(0, limit).map((h) => h.i)

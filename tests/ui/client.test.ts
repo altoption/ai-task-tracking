@@ -3,7 +3,7 @@ import { rm } from 'node:fs/promises'
 import { Store } from '../../src/engine/store'
 import { startServer, type RunningServer } from '../../src/server/http'
 import type { IssueSummary } from '../../src/model'
-import { applyEvent, emptyState, fromSnapshot, inScope, listedProjects, type Snapshot } from '../../ui/client'
+import { applyEvent, emptyState, fromSnapshot, inScope, isHiddenProject, listedProjects, projectName, type Snapshot, type WireEvent } from '../../ui/client'
 import { miniCopy } from '../engine/helpers'
 
 const YOU = { actor: 'you' as const }
@@ -73,6 +73,47 @@ describe('applyEvent (pure reducer)', () => {
   test('events before the first snapshot are ignored by the reducer (the client queues them)', () => {
     const s = applyEvent(emptyState(), { kind: 'issue', issue: summary('Q-1'), actor: YOU })
     expect(s.ready).toBe(false)
+  })
+})
+
+describe('hidden projects in the client (the engine leaves them out; the client keeps only ids and names)', () => {
+  const base = (): Snapshot => ({
+    ...snap([summary('Q-1'), summary('Q-2')]),
+    hidden: { projects: [{ slug: 'secret', name: 'Secret' }], issues: ['Q-9'] },
+  })
+
+  test('the snapshot\'s hidden ids and names are kept for links only', () => {
+    const s = fromSnapshot(base())
+    expect(s.hidden.issues.has('Q-9')).toBe(true)
+    expect(s.issues.has('Q-9')).toBe(false)
+    expect(projectName(s, 'secret')).toBe('Secret')
+    expect(projectName(s, 'gone')).toBe('gone')
+    expect(fromSnapshot(snap([])).hidden.issues.size).toBe(0) // an engine without hidden projects
+  })
+
+  test('a hidden event drops the issue, remembers its id and bumps hiddenRev', () => {
+    const s0 = fromSnapshot(base())
+    const s1 = applyEvent(s0, { kind: 'hidden', id: 'Q-2', project: 'secret' })
+    expect(s1.issues.has('Q-2')).toBe(false)
+    expect(s1.hidden.issues.has('Q-2')).toBe(true)
+    expect(s1.hiddenRev).toBe(1)
+    const s2 = applyEvent(s1, { kind: 'hidden', id: 'Q-9', project: 'secret' })
+    expect(s2.hidden).toBe(s1.hidden) // already known
+    expect(s2.hiddenRev).toBe(2)
+  })
+
+  test('an issue event (moved out of a hidden project) or a removal clears the hidden id', () => {
+    const s0 = fromSnapshot(base())
+    const s1 = applyEvent(s0, { kind: 'issue', issue: summary('Q-9'), actor: YOU } as WireEvent)
+    expect(s1.issues.has('Q-9')).toBe(true)
+    expect(s1.hidden.issues.has('Q-9')).toBe(false)
+    const s2 = applyEvent(s0, { kind: 'removed', id: 'Q-9', actor: YOU })
+    expect(s2.hidden.issues.has('Q-9')).toBe(false)
+  })
+
+  test('isHiddenProject reads config.hiddenProjects', () => {
+    expect(isHiddenProject({ config: null }, 'x')).toBe(false)
+    expect(isHiddenProject({ config: { hiddenProjects: ['x'] } as any }, 'x')).toBe(true)
   })
 })
 
@@ -153,5 +194,32 @@ describe('against a test server', () => {
     await reader.cancel()
     expect(state.issues.size).toBe(before)
     expect(state.issues.get(existing.id)!.title).toBe('Retitled from the UI')
+  })
+
+  test('hidden projects end to end: hide, a change inside it, unhide (the UI choke point is what the engine sends)', async () => {
+    await store.setProjectHidden('support', true)
+    let state = fromSnapshot((await (await fetch(`${base}/api/snapshot`)).json()) as Snapshot)
+    expect([...state.issues.values()].some((i) => i.project === 'support')).toBe(false)
+    expect(state.projects.some((p) => p.slug === 'support')).toBe(false)
+    expect(state.hidden.issues.has('Q-5')).toBe(true)
+    expect(isHiddenProject(state, 'support')).toBe(true)
+
+    const res = await fetch(`${base}/api/events`)
+    const reader = res.body!.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    // A visible issue moves into the hidden project: the client drops it.
+    await store.updateIssue('Q-2', { project: 'support' }, { actor: 'agent', workspace: 'w' })
+    while (!buf.includes('"kind":"hidden","id":"Q-2"')) buf += dec.decode((await reader.read()).value)
+    await reader.cancel()
+    for (const chunk of buf.split('\n\n')) if (chunk.startsWith('data: ')) state = applyEvent(state, JSON.parse(chunk.slice(6)))
+    expect(state.issues.has('Q-2')).toBe(false)
+    expect(state.hidden.issues.has('Q-2')).toBe(true)
+
+    // Unhide: the client refetches the snapshot on `meta` and everything is back.
+    await store.setProjectHidden('support', false)
+    state = fromSnapshot((await (await fetch(`${base}/api/snapshot`)).json()) as Snapshot)
+    expect(['Q-2', 'Q-5', 'Q-6'].every((id) => state.issues.has(id))).toBe(true)
+    expect(state.hidden.issues.size).toBe(0)
   })
 })

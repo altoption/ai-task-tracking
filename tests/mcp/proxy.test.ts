@@ -129,6 +129,24 @@ describe('tracker mcp', () => {
     await c.close()
   })
 
+  test('hidden projects (the owner\'s view setting) change nothing an agent gets', async () => {
+    const c = await connect(srv.port)
+    const calls: [string, Record<string, unknown>][] = [
+      ['list_issues', { project: 'support', includeArchived: true }], ['search', { query: 'warranty' }], ['get_issue', { id: 'Q-5' }],
+      ['whats_next', {}], ['list_projects', {}], ['get_project', { query: 'support' }],
+    ]
+    const run = async () => Promise.all(calls.map(async ([name, args]) => text(await c.callTool({ name, arguments: args }))))
+    const before = await run()
+    await store.setProjectHidden('support', true)
+    try {
+      expect(await run()).toEqual(before)
+      expect(before[0]).toContain('Q-5')
+    } finally {
+      await store.setProjectHidden('support', false)
+      await c.close()
+    }
+  })
+
   test('engine down -> isError with the exact sentence', async () => {
     const c = await connect(1) // nothing listens on port 1
     const r: any = await c.callTool({ name: 'whats_next', arguments: {} })

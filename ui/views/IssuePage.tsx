@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedEvent } from '../../src/engine/eventlog'
-import { callTool, getIssue, getIssueFeed, NO_PROJECT, useTracker, type IssueDetail } from '../client'
+import type { IssueSummary } from '../../src/model'
+import { callTool, getIssue, getIssueFeed, isHiddenProject, NO_PROJECT, projectName, useTracker, type IssueDetail } from '../client'
 import { ConceptIcon, Icon, ProgressPill, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
+import { HiddenNotice } from './HiddenNotice'
 import { buildTree, treeProgress, type TreeNode } from '../issuePage'
 import { taskAt, type MdContext } from '../markdown'
 import { href, navigate } from '../router'
@@ -12,7 +14,8 @@ import { IssueProperties } from './IssueProperties'
 
 /**
  * `/api/issues/:id` + its feed, re-fetched (debounced) when the live store shows a change to the issue,
- * one of its children, or a new feed event for it. `apply` merges a save_issue result immediately.
+ * one of its children, or a new feed event for it. `apply` merges a save_issue result immediately. Issues in a hidden
+ * project aren't in the live store, so any change in a hidden project (`hiddenRev`) refetches too.
  */
 function useIssueDetail(id: string) {
   const state = useTracker()
@@ -41,8 +44,8 @@ function useIssueDetail(id: string) {
     for (const i of state.issues.values()) if (i.parent === id) kids += `${i.id}@${i.updated},`
     const f = state.feed.find((e) => e.id === id)
     const ci = summary?.ci ? `${summary.ci.pr}:${summary.ci.state}:${summary.ci.checks}` : ''
-    return `${summary?.updated ?? '-'}|${kids}|${f?.at ?? ''}|${ci}`
-  }, [state.issues, state.feed, id, summary])
+    return `${summary?.updated ?? '-'}|${kids}|${f?.at ?? ''}|${ci}|${state.hiddenRev}`
+  }, [state.issues, state.feed, id, summary, state.hiddenRev])
 
   const first = useRef(true)
   useEffect(() => {
@@ -79,9 +82,19 @@ function SubIssueRow({ node, depth, open, setOpen, closed }: { node: TreeNode; d
   )
 }
 
-/** Sub-issues to any depth (first level shown, deeper levels collapsible), with done/total and "Add sub-issue". */
-function SubIssues({ id }: { id: string }) {
-  const { issues, config } = useTracker()
+/**
+ * Sub-issues to any depth (first level shown, deeper levels collapsible), with done/total and "Add sub-issue".
+ * `extra`: the detail's own children, for children the live store doesn't hold (a hidden project's).
+ */
+function SubIssues({ id, extra }: { id: string; extra: IssueSummary[] }) {
+  const { issues: live, config } = useTracker()
+  const issues = useMemo(() => {
+    const missing = extra.filter((c) => !live.has(c.id))
+    if (!missing.length) return live
+    const m = new Map(live)
+    for (const c of missing) m.set(c.id, c)
+    return m
+  }, [live, extra])
   const tree = useMemo(() => buildTree(issues, id), [issues, id])
   const closed = useMemo(() => {
     const types = new Map((config?.statuses ?? []).map((s) => [s.name, s.type]))
@@ -295,12 +308,13 @@ export function IssuePage({ id }: { id: string }) {
   }
 
   const project = state.projects.find((p) => p.slug === detail.project)
+  const hidden = isHiddenProject(state, detail.project)
   const summary = state.issues.get(id)
   return (
     <section className="issue-page">
       <header className="page-head issue-head">
         <nav className="crumbs" aria-label="Breadcrumb">
-          {project && detail.project !== NO_PROJECT && <><a href={href({ name: 'project', slug: project.slug })}><ConceptIcon concept="project" /> {project.name}</a><span className="sep">›</span></>}
+          {(project || hidden) && detail.project !== NO_PROJECT && <><a href={href({ name: 'project', slug: detail.project })}><ConceptIcon concept="project" /> {projectName(state, detail.project)}</a><span className="sep">›</span></>}
           {[...detail.ancestors].reverse().map((a) => (
             <span key={a.id} className="crumb"><a href={href({ name: 'issue', id: a.id })} title={a.title}><span className="id">{a.id}</span> <span className="t">{a.title}</span></a><span className="sep">›</span></span>
           ))}
@@ -309,11 +323,12 @@ export function IssuePage({ id }: { id: string }) {
         <IssueMenu id={detail.id} url={detail.url} childCount={summary?.childCount ?? detail.children.length} />
       </header>
       {error && <div className="form-error banner" role="alert">{error}</div>}
+      {hidden && <HiddenNotice slug={detail.project} />}
       <div className="issue-body">
         <article className="issue-main">
           <Title title={detail.title} save={(title) => save({ title })} />
           <Description key={detail.id} issueId={detail.id} source={detail.description} ctx={ctx} save={save} apply={apply} reload={reload} />
-          <SubIssues id={detail.id} />
+          <SubIssues id={detail.id} extra={detail.children} />
           <IssueAttempts attempts={detail.attempts} now={Date.now()} />
           <IssueActivity issueId={detail.id} activity={detail.activity} feed={feed} ctx={ctx} onSaved={reload} />
         </article>

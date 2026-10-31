@@ -65,5 +65,10 @@ export interface Config {
   needsYou: { statuses: string[]; labels: string[] }; stalled: StalledRules; ci: CiRules; nextNumber: Record<string, number>
   /** The UI theme (src/engine/themes.ts): a built-in id (dark, light, system, …) or a themes/<id>.yml file. */
   theme: string
+  /**
+   * Project slugs (`_none`: issues without a project) the owner hid from the app window, the browser UI and the menu
+   * bar (src/engine/hidden.ts). Agents still see them; direct links still open them. Unknown slugs are ignored.
+   */
+  hiddenProjects: string[]
   extra?: Record<string, unknown> // unknown top-level keys, preserved
 }

@@ -6,6 +6,7 @@ import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
 import { allThemes, selectedTheme } from '../engine/themes'
+import { hiddenHealth, hiddenProjectsOut, hiddenSlugs, visibleParts, visibleTest } from '../engine/hidden'
 import { ancestors, home, needsYouCount, needsYouList, progress, search, writerWorkspaces } from '../engine/queries'
 import type { ChangeEvent, Store } from '../engine/store'
 import { callTool, issueOut, ToolError, type ToolCtx } from '../tools/handlers'
@@ -36,7 +37,7 @@ export function summarize(s: Store, i: Issue): IssueSummary {
  * `stalled: <reason>` and `ciReason: "CI failing on PR #12"` when those apply.
  */
 function homeOut(s: Store) {
-  const h = home(s)
+  const h = home(s, Date.now(), { visible: visibleTest(s) })
   return {
     needsYou: h.needsYou.map((i) => {
       const reason = h.stalled.get(i.id)
@@ -55,22 +56,50 @@ function ciProblems(s: Store, i: Issue): { ciProblems?: Record<string, string> }
   return Object.keys(out).length ? { ciProblems: out } : {}
 }
 
-/** SSE/wire form of a store event: issue events carry summaries, never full issues. */
+/**
+ * SSE/wire form of a store event: issue events carry summaries, never full issues. The stream feeds the UI and the
+ * app's notifications, so hidden projects (src/engine/hidden.ts) stay out of it: a change to an issue in a hidden
+ * project goes out only as `{ kind: 'hidden', id, project }` (the UI drops the issue if it had it, and a page showing
+ * it by direct link refetches), feed events of hidden issues become the same, and CI changes leave them out. Null:
+ * send nothing.
+ */
 export function wireEvent(s: Store, e: ChangeEvent): unknown {
-  if (e.kind !== 'issue') return e
-  const { issue, prev, comment, ...rest } = e
-  return { ...rest, issue: summarize(s, issue), ...(prev ? { prev: summarize(s, prev) } : {}), ...(comment ? { comment } : {}) }
+  if (e.kind !== 'issue' && e.kind !== 'feed' && e.kind !== 'ci') return e
+  const hidden = hiddenSlugs(s)
+  const touched = (i: { id: string; project: string }) => ({ kind: 'hidden', id: i.id, project: i.project })
+  if (e.kind === 'issue') {
+    if (hidden.has(e.issue.project)) return touched(e.issue)
+    const { issue, prev, comment, ...rest } = e
+    return { ...rest, issue: summarize(s, issue), ...(prev ? { prev: summarize(s, prev) } : {}), ...(comment ? { comment } : {}) }
+  }
+  if (!hidden.size) return e
+  if (e.kind === 'feed') {
+    const i = s.get(e.event.id)
+    return i && hidden.has(i.project) ? touched(i) : e
+  }
+  if (e.kind === 'ci') {
+    const changes = Object.fromEntries(Object.entries(e.changes).filter(([id]) => { const i = s.get(id); return !i || !hidden.has(i.project) }))
+    return Object.keys(changes).length ? { ...e, changes } : null
+  }
+  return e
 }
 
+/**
+ * The UI's copy of everything: issue summaries, config, labels, projects, views, file errors and themes, with hidden
+ * projects left out (visibleParts). `hidden` names what is left out, for direct links only: the hidden projects that
+ * exist (slug and name) and the ids of their issues.
+ */
 export function buildSnapshot(s: Store) {
+  const v = visibleParts(s)
   return {
-    issues: s.all().map((i) => summarize(s, i)),
-    config: s.config,
-    labels: s.labels,
-    projects: [...s.projects.values()],
+    issues: v.issues.map((i) => summarize(s, i)),
+    config: v.workspaces === s.config.workspaces ? s.config : { ...s.config, workspaces: v.workspaces },
+    labels: v.labels,
+    projects: v.projects,
     views: s.views,
     errors: [...s.errors].map(([path, message]) => ({ path, message })),
     themes: themesOut(s),
+    hidden: { projects: hiddenProjectsOut(s), issues: v.hiddenIds },
   }
 }
 
@@ -202,7 +231,10 @@ export function sseResponse(store: Store, signal: AbortSignal): Response {
         if ((c.desiredSize ?? 1) <= 0) { cleanup(); try { c.close() } catch { /* already closed */ } return }
         try { c.enqueue(enc.encode(chunk)) } catch { cleanup() }
       }
-      unsub = store.on((e) => send(`data: ${JSON.stringify(wireEvent(store, e))}\n\n`))
+      unsub = store.on((e) => {
+        const wire = wireEvent(store, e)
+        if (wire !== null) send(`data: ${JSON.stringify(wire)}\n\n`)
+      })
       beat = setInterval(() => send(': heartbeat\n\n'), HEARTBEAT_MS)
       signal.addEventListener('abort', cleanup)
       send(': connected\n\n')
@@ -268,6 +300,25 @@ async function themeRoute(store: Store, req: Request): Promise<Response> {
   return json(themeHealth(store))
 }
 
+/**
+ * `POST /api/hidden-projects` `{ "project": "<slug>", "hidden": true }` — hide or unhide one project folder in the UIs
+ * (the owner only: the app's Settings and the project page). One change per request, so the app and a browser
+ * changing different projects at once don't undo each other. Answers with the list as /api/health reports it.
+ */
+async function hiddenProjectsRoute(store: Store, req: Request): Promise<Response> {
+  if (req.headers.get('x-tracker-agent') === '1') return fail(403, 'agents cannot hide or unhide projects')
+  const usage = 'Request body must be JSON: { "project": "<slug>", "hidden": true|false }'
+  let body: { project?: unknown; hidden?: unknown }
+  try { body = await req.json() as typeof body } catch { return fail(400, usage) }
+  if (typeof body?.project !== 'string' || !plainSegment(body.project) || typeof body.hidden !== 'boolean') return fail(400, usage)
+  try {
+    await store.setProjectHidden(body.project, body.hidden)
+  } catch (e) {
+    return fail(400, e instanceof Error ? e.message : String(e))
+  }
+  return json(hiddenHealth(store))
+}
+
 /** `POST /api/sync` — commit now, then push unless the body says `{ "push": false }`. */
 async function syncRoute(git: ServerOpts['git'], req: Request): Promise<Response> {
   if (req.headers.get('x-tracker-agent') === '1') return fail(403, 'agents cannot run a sync; the engine commits and pushes on its own')
@@ -310,20 +361,23 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
             const git = url.searchParams.get('fresh') === '1' && opts.git?.refresh ? await opts.git.refresh() : opts.git?.status() ?? {}
             // `needsYou` counts stalled issues; `stalled` lists the ids in Needs you only because they stalled and
             // `stalledAll` every stalled id (the app notifies once per stalled episode).
-            const ny = needsYouCount(store)
+            // The menu bar leaves hidden projects out of the count, the stalled ids and their notifications.
+            const ny = needsYouCount(store, Date.now(), visibleTest(store))
             return json({
               ok: true, version: opts.version, home: store.root, needsYou: ny.count, stalled: ny.stalledOnly, stalledAll: ny.stalledAll,
               git, rules: rules(store),
               // CI status: on/off, the app's setting as last heard, and a one-line reason when off or failing ("gh not signed in").
               ...(opts.ci ? { ci: opts.ci.health() } : {}),
               theme: themeHealth(store),
+              // For the app's Settings: every project and the hidden ones (`hiddenProjects` in config.yml).
+              hiddenProjects: hiddenHealth(store),
             })
           }
           if (p === '/api/snapshot') return json(buildSnapshot(store))
           if (p === '/api/home') return json(homeOut(store))
           if (p === '/api/needs-you') {
             // `?stalled=0`: leave stalled-only rows out (before the 50-row cut), for the app with its stalled setting off.
-            const opt = url.searchParams.get('stalled') === '0' ? { stalled: false } : {}
+            const opt = { visible: visibleTest(store), ...(url.searchParams.get('stalled') === '0' ? { stalled: false } : {}) }
             return json(needsYouList(store, 50, Date.now(), opt).map(({ issue: i, why, stalled, ci }) => ({
               id: i.id, title: i.title, why, updated: i.updated, ...(stalled ? { stalled } : {}), ...(ci ? { ci } : {}),
             })))
@@ -333,10 +387,26 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
             const n = Number(url.searchParams.get('limit') ?? 50)
             const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 50
             const id = url.searchParams.get('id')
-            const all = readFeed(store.root, id ? Infinity : limit)
-            return json(id ? all.filter((e) => e.id === id).slice(0, limit) : all)
+            // One issue's history answers for any issue (a direct link); the general feed leaves hidden projects out.
+            const visible = id ? undefined : visibleTest(store)
+            const all = readFeed(store.root, id || visible ? Infinity : limit)
+            if (id) return json(all.filter((e) => e.id === id).slice(0, limit))
+            if (!visible) return json(all)
+            return json(all.filter((e) => { const i = store.get(e.id); return !i || visible(i) }).slice(0, limit))
           }
-          if (p === '/api/search') return json(search(store, url.searchParams.get('q') ?? '').map((i) => summarize(store, i)))
+          if (p === '/api/search') return json(search(store, url.searchParams.get('q') ?? '', 50, visibleTest(store)).map((i) => summarize(store, i)))
+          const pm = /^\/api\/projects\/([^/]+)$/.exec(p)
+          if (pm) {
+            // A direct read (the project page's link), hidden or not: the project, whether it is hidden, its issues.
+            let slug: string
+            try { slug = decodeURIComponent(pm[1]!) } catch { return fail(400, 'malformed project slug') }
+            const project = store.projects.get(slug)
+            if (!project) return fail(404, `project ${pm[1]} not found`)
+            return json({
+              project, hidden: hiddenSlugs(store).has(slug),
+              issues: store.all().filter((i) => i.project === slug).map((i) => summarize(store, i)),
+            })
+          }
           const m = /^\/api\/issues\/([^/]+)$/.exec(p)
           if (m) {
             let id: string
@@ -373,6 +443,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
           if (p === '/api/sync') return await syncRoute(opts.git, req)
           if (p === '/api/ci') return await ciRoute(opts.ci, req)
           if (p === '/api/theme') return await themeRoute(store, req)
+          if (p === '/api/hidden-projects') return await hiddenProjectsRoute(store, req)
           return fail(404, 'not found')
         }
         return fail(405, 'method not allowed')

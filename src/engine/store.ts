@@ -14,6 +14,9 @@ import type { CiLookup } from './ci'
 import { allThemes, parseThemeFile, type Theme } from './themes'
 import { aittEnv } from '../shared/env'
 
+/** The folder of issues without a project. */
+export const NO_PROJECT = '_none'
+
 export type ChangeEvent =
   | { kind: 'issue'; issue: Issue; prev?: Issue; actor: Actor; comment?: ActivityEntry }
   | { kind: 'removed'; id: string; actor: Actor }
@@ -437,6 +440,26 @@ export class Store {
       await this.refreshConfig()
       if (this.config.theme === id) return
       this.config.theme = id
+      await writeConfig(this.root, this.config)
+      await this.rememberFile(this.configPath)
+      this.emit({ kind: 'meta' })
+    })
+  }
+
+  /**
+   * Hide or unhide a project folder in the UIs (`hiddenProjects` in config.yml, src/engine/hidden.ts); `_none` is the
+   * folder of issues without a project. Hiding needs an existing project; unhiding any slug clears it from the list.
+   * Clients follow the `meta` event.
+   */
+  async setProjectHidden(slug: string, hidden: boolean): Promise<void> {
+    if (hidden && slug !== NO_PROJECT && !this.projects.has(slug)) {
+      throw new Error(`unknown project "${slug}"; projects: ${[...this.projects.keys()].filter((p) => p !== NO_PROJECT).sort().join(', ') || 'none'}`)
+    }
+    await this.enqueue(this.configPath, async () => {
+      await this.refreshConfig()
+      const cur = this.config.hiddenProjects
+      if (cur.includes(slug) === hidden) return
+      this.config.hiddenProjects = hidden ? [...cur, slug] : cur.filter((x) => x !== slug)
       await writeConfig(this.root, this.config)
       await this.rememberFile(this.configPath)
       this.emit({ kind: 'meta' })

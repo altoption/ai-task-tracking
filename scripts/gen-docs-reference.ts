@@ -324,7 +324,7 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
   const rows: SettingRow[] = []
   const labelled = new Set<string>()
   let section = ''
-  const token = /section\(stack, "([^"]+)"\)|addArrangedSubview\(loginCheck\)|(?:check\(|\()SettingKey\.(\w+), "([^"]+)"\)|popup\(SettingKey\.(\w+), HotKeyPreset\.(\w+)\)|themePopup\(SettingKey\.(\w+), "([^"]+)"\)/g
+  const token = /section\(stack, "([^"]+)"\)|addArrangedSubview\(loginCheck\)|(?:check\(|\()SettingKey\.(\w+), "([^"]+)"\)|popup\(SettingKey\.(\w+), HotKeyPreset\.(\w+)\)|themePopup\(SettingKey\.(\w+), "([^"]+)"\)|hiddenProjectsList\(SettingKey\.(\w+), "([^"]+)"\)/g
   let lastToggle = ''
   for (const m of init.matchAll(token)) {
     if (m[1]) { section = m[1]; continue }
@@ -366,6 +366,14 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
       const others = builtinThemes().filter((x) => x.id !== t.id).map((x) => x.name)
       rows.push({ section, label: m[7]!, key, def: `${t.name} (also ${others.join(', ')} and your theme files; saved as \`theme\` in config.yml)` })
       labelled.add(name)
+      continue
+    }
+    if (m[8]) {
+      // The Hidden projects list: one checkbox per project; the choice is `hiddenProjects` in config.yml, mirrored here.
+      const name = m[8], key = keys.get(name)
+      if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
+      rows.push({ section, label: m[9]!, key, def: 'none (one checkbox per project, and No project; saved as \`hiddenProjects\` in config.yml)' })
+      labelled.add(name)
     }
   }
   for (const name of keys.keys()) {
@@ -405,6 +413,7 @@ const CONFIG_DOCS: Record<string, string> = {
   stalled: 'When open work counts as stalled and joins Needs you. `idleHours`: In Progress with no edit or comment for this long. `windowDays`, `reopens`, `sessions`: in that many days, reopened (back to In Progress from Done, Canceled, Duplicate, Todo or Backlog; never from Waiting) at least `reopens` times, or more than `sessions` agent sessions since it was last Done. 0 turns a rule off.',
   ci: 'CI status on linked GitHub PRs, fetched in the background with your `gh`. `enabled`: false turns it off (no `gh` calls, no badges, nothing in Needs you). `refreshMinutes`: how often an open PR is re-checked; merged and closed PRs are checked until their checks settle, then never again.',
   nextNumber: 'Project key → the next issue number. Maintained by the engine.',
+  hiddenProjects: 'Project slugs hidden from the app window, the browser UI and the menu bar (\`_none\` is the issues without a project): not in the sidebar, lists, Home, saved views, the board, counts, filter and group options, search or Needs you, and no notifications. A direct link (\`#/issue/ID\`, \`aitt://issue/ID\`, the project page) still opens them, and agents see no change. Set it from the app\'s Settings ▸ Hidden projects or a project page\'s Hide project / Unhide; a slug that names no project is ignored.',
   theme: 'The UI theme, the same in the browser and the app window: `dark`, `light`, `system` (Match macOS), `midnight`, `paper`, `high-contrast`, or the id of a theme file in `themes/` (`themes/ocean.yml` is `ocean`). An unknown id shows Dark. Set it from the app\'s Settings or ⌘K ▸ Theme; see the Themes guide.',
 }
 
@@ -412,7 +421,7 @@ function configPage(): string {
   const d = defaultConfig() as unknown as Record<string, unknown>
   for (const k of Object.keys(d)) if (!CONFIG_DOCS[k]) throw new Error(`config.yml key "${k}" (defaultConfig in src/store/metaFiles.ts) has no description in CONFIG_DOCS`)
   for (const k of Object.keys(CONFIG_DOCS)) if (!(k in d)) throw new Error(`CONFIG_DOCS describes "${k}", which defaultConfig() doesn't have`)
-  const short = (v: unknown) => (Array.isArray(v) ? `${v.length} items (below)` : JSON.stringify(v))
+  const short = (v: unknown) => (Array.isArray(v) && v.length ? `${v.length} items (below)` : JSON.stringify(v))
   const statuses = (d.statuses as { name: string; type: string; color: string }[])
   const parts = [
     'The data folder\'s `config.yml`. A missing key takes its default; unknown top-level keys are kept as they are.',

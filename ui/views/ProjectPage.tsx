@@ -2,14 +2,19 @@
  * `#/project/:slug`: header (name, status), description, milestones with progress, documents, then the project's
  * issues (the shared list/board screen with the project locked in). Markdown edits carry the text they started from
  * (`baseDescription` / `baseContent`) so a newer save by an agent is refused instead of overwritten.
+ *
+ * A hidden project (`hiddenProjects` in config.yml) isn't in the live store; its link still opens it, read from
+ * `/api/projects/:slug`, with a "This project is hidden" line and Unhide. "Hide project" in the header hides it and
+ * keeps you on the page.
  */
-import { useMemo, useRef, useState } from 'react'
-import type { Project } from '../../src/model'
-import { callTool, inScope, NO_PROJECT, useScope, useTracker } from '../client'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { IssueSummary, Project } from '../../src/model'
+import { callTool, getProject, inScope, isHiddenProject, NO_PROJECT, setProjectHidden, useScope, useTracker, type ProjectDetail } from '../client'
 import { ConceptIcon, Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
 import { milestoneProgress, targetLabel } from '../projectPage'
+import { HiddenNotice } from './HiddenNotice'
 import { ViewScreen } from './ViewScreen'
 import type { ViewState } from '../viewModel'
 import { DEFAULT_DISPLAY } from '../viewModel'
@@ -205,27 +210,62 @@ function Documents({ project, ctx }: { project: Project; ctx: MdContext }) {
   )
 }
 
+/**
+ * A hidden project by its link: `/api/projects/:slug`, refetched when the snapshot changes (project edits, hiding and
+ * unhiding) or anything in a hidden project changes (`hiddenRev`). Null until loaded; `missing` when it doesn't exist.
+ */
+function useDirectProject(slug: string, on: boolean): { detail: ProjectDetail | null; missing: boolean } {
+  const state = useTracker()
+  const [detail, setDetail] = useState<ProjectDetail | null>(null)
+  const [missing, setMissing] = useState(false)
+  useEffect(() => {
+    if (!on) return
+    let live = true
+    getProject(slug).then((d) => { if (live) { setDetail(d); setMissing(false) } }, () => { if (live) setMissing(true) })
+    return () => { live = false }
+  }, [on, slug, state.hiddenRev, state.config, state.projects])
+  return { detail: on && detail?.project.slug === slug ? detail : null, missing: on && missing }
+}
+
+function HideButton({ slug }: { slug: string }) {
+  const [error, setError] = useState('')
+  return (
+    <>
+      <button type="button" className="ghost-btn project-hide" title="Hide this project from the sidebar, lists, Home and the menu bar; its links still open"
+        onClick={() => { setError(''); setProjectHidden(slug, true).catch((e) => setError(errText(e))) }}>Hide project</button>
+      {error && <span className="form-error" role="alert">{error}</span>}
+    </>
+  )
+}
+
 export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?: string; routeQuery: (q?: string) => import('../router').Route }) {
   const state = useTracker()
   const scope = useScope()
-  const project = state.projects.find((p) => p.slug === slug)
+  const live = state.projects.find((p) => p.slug === slug)
+  const hidden = isHiddenProject(state, slug)
+  const direct = useDirectProject(slug, state.ready && !live && hidden && slug !== NO_PROJECT)
+  const project = live ?? direct.detail?.project
   const [statusError, setStatusError] = useState('')
   const keys = useMemo(() => new Set([...state.projects.map((p) => p.key), ...Object.keys(state.config?.nextNumber ?? {})]), [state.projects, state.config])
   const ctx = useMemo<MdContext>(() => ({ project: slug, keys }), [slug, keys])
 
   const closedTypes = useMemo(() => new Map((state.config?.statuses ?? []).map((s) => [s.name, s.type])), [state.config])
   const closed = useMemo(() => (st: string) => { const t = closedTypes.get(st); return t === 'completed' || t === 'canceled' || t === 'duplicate' }, [closedTypes])
-  // Counts respect the workspace switcher: only issues in scope count.
-  const pool = useMemo(() => [...state.issues.values()].filter((i) => i.project === slug && inScope(i, scope, state.config)), [state.issues, slug, scope, state.config])
+  // Counts respect the workspace switcher: only issues in scope count. A hidden project's come from its direct read.
+  const directIssues = live ? undefined : direct.detail?.issues
+  const pool = useMemo<IssueSummary[]>(() => directIssues ?? [...state.issues.values()].filter((i) => i.project === slug && inScope(i, scope, state.config)),
+    [directIssues, state.issues, slug, scope, state.config])
   const progress = useMemo(() => milestoneProgress(pool, slug, project?.milestones.map((m) => m.name) ?? [], closed), [pool, slug, project, closed])
   const total = pool.length
   const done = pool.reduce((n, i) => n + (closed(i.status) ? 1 : 0), 0)
 
   if (!project || slug === NO_PROJECT) {
+    const loading = !state.ready || (hidden && slug !== NO_PROJECT && !direct.missing)
     return (
       <section className="page">
         <header className="page-head"><h1>{slug}</h1></header>
-        <p className="muted placeholder">{state.ready ? `Project "${slug}" not found.` : 'Loading…'}</p>
+        {hidden && slug === NO_PROJECT && <HiddenNotice slug={slug} />}
+        <p className="muted placeholder">{loading ? 'Loading…' : `Project "${slug}" not found.`}</p>
       </section>
     )
   }
@@ -245,8 +285,10 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
           {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {statusError && <span className="form-error" role="alert">{statusError}</span>}
-        <span className="muted small project-count">{total > 0 && <ProgressRing done={done} total={total} config={state.config} noun="issues" decorative />}{done}/{total} issues done{scope.kind !== 'all' ? ' in this workspace' : ''}</span>
+        <span className="muted small project-count">{total > 0 && <ProgressRing done={done} total={total} config={state.config} noun="issues" decorative />}{done}/{total} issues done{scope.kind !== 'all' && !directIssues ? ' in this workspace' : ''}</span>
+        {!hidden && <HideButton slug={project.slug} />}
       </header>
+      {hidden && <div className="project-hidden"><HiddenNotice slug={project.slug} /></div>}
       <div className="project-body">
         <MarkdownBlock key={project.slug} source={project.description} ctx={ctx} label="Project description" emptyLabel="Add description…"
           save={async (text, base) => { await callTool('save_project', { id: project.slug, description: text, baseDescription: base }) }} />
@@ -254,7 +296,8 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
         <Documents project={project} ctx={ctx} />
         <h2 className="proj-issues-h">Issues</h2>
       </div>
-      <ViewScreen key={`project:${slug}`} title={project.name} defaults={base} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery} />
+      <ViewScreen key={`project:${slug}`} title={project.name} defaults={base} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery}
+        {...(directIssues ? { issues: directIssues, extraProjects: [project] } : {})} />
     </div>
   )
 }
