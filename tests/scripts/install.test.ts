@@ -1,5 +1,5 @@
-import { afterAll, describe, expect, test } from 'bun:test'
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { afterAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -9,6 +9,7 @@ import { join } from 'node:path'
  * so the installer can never prompt. The full install/upgrade runs (which build the app) are done by hand with the
  * same kind of sandbox; see the B1-B3 report.
  */
+setDefaultTimeout(60_000) // whole installs, on a loaded machine
 const ROOT = join(import.meta.dir, '../..')
 const INSTALL = join(ROOT, 'install.sh')
 const temps: string[] = []
@@ -183,6 +184,7 @@ const E2E_STUBS: Record<string, string> = {
 if [ "$1" = "-l" ]; then
   echo "osascript-jxa $5 $6" >> "$STUB_LOG"
   case "$(ps -o comm= -p "$5")" in "$6/Contents/MacOS/"*) kill "$5" ;; esac
+  if [ -n "$OSA_SIGNAL" ]; then kill -"$OSA_SIGNAL" "$PPID"; sleep 0.2; fi
   exit 0
 fi
 echo "osascript $*" >> "$STUB_LOG"
@@ -196,11 +198,31 @@ case "$1" in read) exit 1 ;; export) exit 0 ;; esac
   gemini: '#!/bin/bash\necho "gemini $*" >> "$STUB_LOG"\n', // a detected agent tool
   bun: '#!/bin/bash\n[ "$1" = "--version" ] && { echo 1.4.4; exit 0; }\necho "bun $*" >> "$STUB_LOG"\nexit 1\n',
   open: '#!/bin/bash\necho "open $*" >> "$STUB_LOG"\n', // never the real one
+  // Removing a stage folder, on request: RM_FAIL=1 refuses, RM_SIGNAL=<name> signals the installer first. The lock always goes.
+  rm: `#!/bin/bash
+case "$*" in
+  *.aitt-install.lock*) ;;
+  *.aitt-install.*)
+    if [ -n "$RM_FAIL" ]; then echo "rm: refused" >&2; exit 1; fi
+    # Only cleanup's removal of the whole stage folder, not the swap's removal of the old app.
+    case "$*" in *previous.app) ;; *) if [ -n "$RM_SIGNAL" ]; then kill -"$RM_SIGNAL" "$PPID"; sleep 0.2; fi ;; esac ;;
+esac
+exec /bin/rm "$@"
+`,
+  // CAT_SWAP_FILE=<file> CAT_SWAP_TO=<text>: the first read of that file sees it as it was, then it changes, like
+  // another installer taking a stale lock over just after we looked.
+  cat: `#!/bin/bash
+if [ -n "$CAT_SWAP_FILE" ] && [ "$1" = "$CAT_SWAP_FILE" ] && [ ! -e "$CAT_SWAP_FILE.swapped" ]; then
+  /bin/cat "$1"; printf '%s\\n' "$CAT_SWAP_TO" > "$1"; touch "$CAT_SWAP_FILE.swapped"; exit 0
+fi
+exec /bin/cat "$@"
+`,
   // The swap's renames, on request. MV_FAIL=aside|new refuses one; MV_SIGNAL=<name> signals the installer between the
   // two (old app aside, new one not in yet), with MV_READONLY=1 also making the restore impossible. Else the real mv.
   mv: `#!/bin/bash
 last="\${@: -1}"
 if [ "$MV_FAIL" = aside ] && [[ "$last" = */previous.app ]]; then echo "mv: refused" >&2; exit 1; fi
+if [ -n "$MV_PAUSE" ] && [ "$last" = "$MV_APP" ] && [[ "$1" != */previous.app ]]; then touch "$MV_PAUSE"; sleep 3; fi
 if [ -n "$MV_LOCK_SEEN" ] && [ -d "$(dirname "$MV_APP")/.aitt-install.lock" ]; then touch "$MV_LOCK_SEEN"; fi
 if [ "$last" = "$MV_APP" ] && [[ "$1" != */previous.app ]]; then
   if [ "$MV_FAIL" = new ]; then echo "mv: refused" >&2; exit 1; fi
@@ -263,16 +285,16 @@ async function e2e(opts: { appsInHome?: boolean; aitt?: string } = {}) {
     STUB_RELEASE: 'v0.1.0 AI-Task-Tracking-0.1.0-macos.zip', STUB_LIB: join(ROOT, 'scripts/lib.sh'),
     AITT_LSREGISTER: join(stubs, 'lsregister'), TMPDIR: tmp, LANG: 'en_US.UTF-8',
   }
-  const install = async (args: string[], extra: Record<string, string> = {}) => {
-    const p = Bun.spawn(['/usr/bin/perl', '-MPOSIX', '-e', 'POSIX::setsid(); exec @ARGV', 'bash', INSTALL, ...args],
-      { env: { ...env, ...extra }, cwd: base, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  const install = async (args: string[], extra: Record<string, string> = {}, o: { script?: string; timeout?: number } = {}) => {
+    const p = Bun.spawn(['/usr/bin/perl', '-MPOSIX', '-e', 'POSIX::setsid(); exec @ARGV', 'bash', o.script ?? INSTALL, ...args],
+      { env: { ...env, ...extra }, cwd: base, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: o.timeout ?? 50_000 })
     const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
     return { code, out: out + err }
   }
   const calls = async () => (await readFile(log, 'utf8')).split('\n').filter(Boolean)
   const version = async () => /<string>([\d.]+)<\/string>\s*<\/dict>/.exec(await readFile(join(apps, 'AI Task Tracking.app/Contents/Info.plist'), 'utf8'))?.[1]
   const leftovers = async () => [...(await readdir(apps)).filter((f) => f.startsWith('.aitt-install')), ...(await readdir(tmp))]
-  return { base, home, apps, app: join(apps, 'AI Task Tracking.app'), zip, install, calls, version, leftovers }
+  return { base, home, apps, app: join(apps, 'AI Task Tracking.app'), zip, env, install, calls, version, leftovers }
 }
 
 describe('install.sh release path (end to end, nothing built)', () => {
@@ -397,7 +419,7 @@ describe('install.sh release path (end to end, nothing built)', () => {
       const { t, lock } = await locked(`${process.pid}\n`)
       const r = await t.install(['--yes', '--no-launch'])
       expect(r.code).toBe(1)
-      expect(r.out).toContain(`another install is running (pid ${process.pid})`)
+      expect(r.out).toContain(`another install is running (pid ${process.pid},`)
       expect(await t.version()).toBe('0.0.9')
       expect((await t.calls()).some((c) => c.includes('/releases/download/'))).toBe(false)
       expect(await exists(lock)).toBe(true)
@@ -424,13 +446,15 @@ describe('install.sh release path (end to end, nothing built)', () => {
     })
   })
 
-  test('a new build that does not run: the old app is neither quit nor replaced', async () => {
+  test('a release that does not run falls back to source; when that build fails the old app is neither quit nor replaced', async () => {
     const t = await e2e({ aitt: '#!/bin/bash\nexit 1\n' })
     await bundle(t.apps, '0.0.9')
     const old = await running(t.app)
     const r = await t.install(['--yes'])
-    expect(r.code).toBe(1)
-    expect(r.out).toContain("the new app doesn't run; nothing was replaced")
+    expect(r.code).not.toBe(0)
+    expect(r.out).toContain("doesn't run")
+    expect(r.out).toContain('building from source instead')
+    expect(await t.calls()).toContain('bun install --frozen-lockfile')
     expect(() => process.kill(old.pid, 0)).not.toThrow()
     expect((await t.calls()).some((c) => c.startsWith('osascript-jxa'))).toBe(false)
     expect(await t.version()).toBe('0.0.9')
@@ -516,5 +540,234 @@ mkdir -p "$dest/AI Task Tracking.app/Contents/Resources"
   test('SKIP_LOGIN_ITEM=1 skips it on a first install too', async () => {
     const run = await dev()
     expect(await run({ SKIP_LOGIN_ITEM: '1' })).toEqual([])
+  })
+})
+
+const LOCK = '.aitt-install.lock'
+
+/** install.sh from a scratch clone-like folder, with a stub build: --from-source builds nothing real. */
+async function sourceBuild(t: Awaited<ReturnType<typeof e2e>>, aitt: string) {
+  const root = join(t.base, 'clone')
+  await mkdir(join(root, 'scripts'), { recursive: true })
+  await mkdir(join(root, 'app'))
+  await copyFile(INSTALL, join(root, 'install.sh'))
+  await copyFile(join(ROOT, 'scripts/lib.sh'), join(root, 'scripts/lib.sh'))
+  await writeFile(join(root, 'app/build.sh'), `#!/bin/bash
+for a in "$@"; do dest="$a"; done
+mkdir -p "$dest/AI Task Tracking.app/Contents/Resources"
+printf '%b' ${JSON.stringify(aitt)} > "$dest/AI Task Tracking.app/Contents/Resources/aitt"
+chmod +x "$dest/AI Task Tracking.app/Contents/Resources/aitt"
+`)
+  await chmod(join(root, 'app/build.sh'), 0o755)
+  await writeFile(join(t.base, 'stubs/bun'), '#!/bin/bash\n[ "$1" = "--version" ] && echo 1.4.4\nexit 0\n')
+  return join(root, 'install.sh')
+}
+
+describe('install.sh on a terminal', () => {
+  // A real pty as the controlling terminal, stdin not a terminal (as when piped into bash). Enter after each silence;
+  // killed at the deadline, so a hang is a failure and not a stuck suite.
+  const DRIVER = `
+import os, pty, select, signal, sys, time
+pid, fd = pty.fork()
+if pid == 0:
+    n = os.open('/dev/null', os.O_RDONLY); os.dup2(n, 0)
+    os.execv('/bin/bash', ['bash'] + sys.argv[1:])
+deadline, last, out = time.time() + 30, time.time(), b''
+while True:
+    now = time.time()
+    if now > deadline:
+        os.killpg(pid, signal.SIGKILL); sys.stdout.write(out.decode('utf8', 'replace') + '\\nDRIVER TIMEOUT\\n'); sys.exit(124)
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if r:
+        try: d = os.read(fd, 4096)
+        except OSError: d = b''
+        if not d: break
+        out += d; last = time.time()
+    elif time.time() - last > 0.6:
+        os.write(fd, b'\\n'); last = time.time()
+_, st = os.waitpid(pid, 0)
+sys.stdout.write(out.decode('utf8', 'replace'))
+sys.exit(os.waitstatus_to_exitcode(st))
+`
+  test('no --yes: setup gets the real terminal device, asks, and the install finishes', async () => {
+    const t = await e2e()
+    await writeFile(join(t.base, 'driver.py'), DRIVER)
+    const p = Bun.spawn(['python3', '-I', join(t.base, 'driver.py'), INSTALL], {
+      env: { ...t.env, PATH: `${t.env.PATH}` }, cwd: t.base, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 45_000,
+    })
+    const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
+    const all = out + err
+    expect(all).not.toContain('kqueue')
+    expect(all).toContain('First project')
+    expect(code).toBe(0)
+    expect(await t.version()).toBe('0.1.0')
+    expect(await exists(join(t.apps, LOCK))).toBe(false)
+  })
+})
+
+describe('install.sh when interrupted', () => {
+  test('Ctrl-C during the quit wait: the app that was running is reopened', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    await running(t.app)
+    const r = await t.install(['--yes'], { OSA_SIGNAL: 'INT' })
+    expect(r.code).toBe(130)
+    expect(await t.version()).toBe('0.0.9')
+    expect((await t.calls()).filter((c) => c.startsWith('open'))).toEqual([`open ${t.app}`])
+  })
+  test('setup exits 130 after the swap: the app that was running is reopened, once', async () => {
+    const t = await e2e({ aitt: '#!/bin/bash\n[ "$1" = --version ] && exit 0\nexit 130\n' })
+    await bundle(t.apps, '0.0.9')
+    await running(t.app)
+    const r = await t.install(['--yes'])
+    expect(r.code).toBe(130)
+    expect(await t.version()).toBe('0.1.0')
+    expect((await t.calls()).filter((c) => c.startsWith('open'))).toEqual([`open ${t.app}`])
+    expect(await exists(join(t.apps, LOCK))).toBe(false)
+  })
+  test('a signal during cleanup does not stop it: the lock and stage still go', async () => {
+    const t = await e2e()
+    const r = await t.install(['--yes', '--no-launch'], { RM_SIGNAL: 'TERM' })
+    expect(r.code).toBe(0)
+    expect(await t.leftovers()).toEqual([])
+  })
+})
+
+describe('install.sh cleanup', () => {
+  test('a stage folder that cannot be removed: still success, a warning, and the lock is released', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    const r = await t.install(['--yes', '--no-launch'], { RM_FAIL: '1' })
+    expect(r.code).toBe(0)
+    expect(r.out).toContain("couldn't remove the old app")
+    expect(await t.version()).toBe('0.1.0')
+    expect(await exists(join(t.apps, LOCK))).toBe(false)
+    // …and the next run clears what was left.
+    const again = await t.install(['--yes', '--no-launch'])
+    expect(again.code).toBe(0)
+    expect(await t.leftovers()).toEqual([])
+  })
+})
+
+describe('install.sh after a kill between the renames', () => {
+  const stranded = async (t: Awaited<ReturnType<typeof e2e>>) => {
+    const stage = join(t.apps, '.aitt-install.abc123')
+    await rename(await bundle(stage, '0.0.9'), join(stage, 'previous.app'))
+    return join(stage, 'previous.app')
+  }
+  const gonePid = async () => { const g = Bun.spawn(['/usr/bin/true']); await g.exited; return g.pid }
+
+  test('the rerun puts the old app back first: an upgrade, Launch at Login left alone, nothing left over', async () => {
+    const t = await e2e({ appsInHome: true })
+    await stranded(t)
+    await mkdir(join(t.apps, LOCK))
+    await writeFile(join(t.apps, LOCK, 'pid'), `${await gonePid()}\n`)
+    const r = await t.install(['--yes', '--no-launch'])
+    expect(r.code).toBe(0)
+    expect(r.out).toMatch(/AI Task Tracking\s+0.0.9 installed/)
+    expect((await t.calls()).some((c) => c.includes('enableLoginItemOnLaunch'))).toBe(false)
+    expect(await t.version()).toBe('0.1.0')
+    expect(await t.leftovers()).toEqual([])
+  })
+  test('while another install is live, it leaves that install\'s old app alone', async () => {
+    const t = await e2e()
+    const old = await stranded(t)
+    await mkdir(join(t.apps, LOCK))
+    await writeFile(join(t.apps, LOCK, 'pid'), `${process.pid}\n`)
+    const r = await t.install(['--yes', '--no-launch'])
+    expect(r.code).toBe(1)
+    expect(r.out).toContain('another install is running')
+    expect(await exists(old)).toBe(true)
+    expect(await exists(t.app)).toBe(false)
+  })
+  test('--dry-run says so and moves nothing', async () => {
+    const t = await e2e()
+    const old = await stranded(t)
+    const r = await t.install(['--dry-run'])
+    expect(r.code).toBe(0)
+    expect(r.out).toContain('would be put back')
+    expect(await exists(old)).toBe(true)
+    expect(await exists(t.app)).toBe(false)
+  })
+  test('dead stage folders go once the lock is held, when the app is in place', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    await stranded(t)
+    await mkdir(join(t.apps, '.aitt-install.def456'))
+    expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+    expect(await t.leftovers()).toEqual([])
+  })
+})
+
+describe('install.sh lock details', () => {
+  const locked = async (pid: string, command?: string) => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    const lock = join(t.apps, LOCK)
+    await mkdir(lock)
+    await writeFile(join(lock, 'pid'), pid)
+    if (command) await writeFile(join(lock, 'command'), command)
+    return { t, lock }
+  }
+  test('a stale lock taken over just after we looked is not deleted', async () => {
+    const gone = Bun.spawn(['/usr/bin/true'])
+    await gone.exited
+    const { t, lock } = await locked(`${gone.pid}\n`)
+    const r = await t.install(['--yes', '--no-launch'], { CAT_SWAP_FILE: join(lock, 'pid'), CAT_SWAP_TO: String(process.pid) })
+    expect(r.code).toBe(1)
+    expect(r.out).toContain(`pid ${process.pid}`)
+    expect(await readFile(join(lock, 'pid'), 'utf8')).toContain(String(process.pid))
+    expect(await t.version()).toBe('0.0.9')
+  })
+  test('the refusal names the lock', async () => {
+    const { t, lock } = await locked(`${process.pid}\n`)
+    expect((await t.install(['--yes', '--no-launch'])).out).toContain(lock)
+  })
+  test('a pid reused by another program does not block', async () => {
+    const { t, lock } = await locked(`${process.pid}\n`, 'bash some-other-command')
+    expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+    expect(await exists(lock)).toBe(false)
+  })
+  test('a holder we may not signal counts as alive', async () => {
+    const { t, lock } = await locked('1\n') // pid 1 is root's: kill -0 says EPERM
+    const r = await t.install(['--yes', '--no-launch'])
+    expect(r.code).toBe(1)
+    expect(await exists(lock)).toBe(true)
+  })
+  test('a real running install is seen as alive by a second one', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    const marker = join(t.base, 'paused')
+    const first = t.install(['--yes', '--no-launch'], { MV_PAUSE: marker, MV_APP: t.app })
+    for (let i = 0; i < 400 && !(await exists(marker)); i++) await Bun.sleep(25)
+    expect(await exists(marker)).toBe(true)
+    const second = await t.install(['--yes', '--no-launch'])
+    expect(second.code).toBe(1)
+    expect(second.out).toContain('another install is running')
+    expect((await first).code).toBe(0)
+    expect(await t.version()).toBe('0.1.0')
+  })
+})
+
+describe('install.sh smoke test', () => {
+  test('a binary that hangs is stopped and the release falls back; the lock is released', async () => {
+    const t = await e2e({ aitt: '#!/bin/bash\nexec /bin/sleep 40\n' })
+    await bundle(t.apps, '0.0.9')
+    const r = await t.install(['--yes', '--no-launch'], { AITT_SMOKE_TIMEOUT: '1' }, { timeout: 20_000 })
+    expect(r.out).toContain('did not answer')
+    expect(r.out).toContain('building from source instead')
+    expect(await t.version()).toBe('0.0.9')
+    expect(await exists(join(t.apps, LOCK))).toBe(false)
+  })
+  test('a source build that does not run stops before the old app is quit', async () => {
+    const t = await e2e()
+    await bundle(t.apps, '0.0.9')
+    const old = await running(t.app)
+    const r = await t.install(['--yes', '--from-source'], {}, { script: await sourceBuild(t, '#!/bin/bash\nexit 1\n') })
+    expect(r.code).toBe(1)
+    expect(r.out).toContain('nothing was replaced')
+    expect(() => process.kill(old.pid, 0)).not.toThrow()
+    expect((await t.calls()).some((c) => c.startsWith('osascript-jxa'))).toBe(false)
+    expect(await t.version()).toBe('0.0.9')
   })
 })

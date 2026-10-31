@@ -14,7 +14,7 @@ MIN_MACOS=13
 MIN_BUN=1.4
 
 YES=0 DRY=0 FROM_SOURCE=0 LAUNCH=1 VERSION="" CONNECT=""
-CLONE="" TMP_DIRS=() APP="" SWAP_OLD="" WAS_RUNNING="" INSTALL_LOCK=""
+CLONE="" TMP_DIRS=() APP="" SWAP_OLD="" WAS_RUNNING="" OPENED=0 INSTALL_LOCK="" SMOKE_PID=""
 
 # The help text lives here (not only in comments) so --help also works when the script is piped into bash.
 usage() {
@@ -27,7 +27,7 @@ quit and replaced, and reopened only if it was running; your data folder and set
   ./install.sh [options]         (from a clone: builds that checkout when no release is used)
 
 It checks what this Mac has, shows what it will do, and asks once. Then it installs the latest notarized
-release (or builds from source when there is none, it fails verification, or --from-source; Bun is then
+release (or builds from source when there is none, it fails verification or doesn't run, or --from-source; Bun is then
 installed if missing), links ~/.local/bin/aitt, runs `aitt setup` and, on a first install, opens the app.
 
 Options:
@@ -45,23 +45,27 @@ Environment:
                       no Claude Code MCP entry, no aitt link and no other agent tools (unless --connect).
 USAGE
 }
-# On every exit, signals included. Between the swap's two renames the old app sits in the stage folder: it goes back
-# before that folder is removed, and if it can't, the folder stays so the old app isn't lost. /bin/mv: nothing on PATH
-# gets a say in the last rename.
+# On every exit, signals included; nothing here may stop it or change the exit code. Between the swap's two renames the
+# old app sits in the stage folder: it goes back before that folder is removed, and if it can't, the folder stays so the
+# old app isn't lost (the next run puts it back). An app this run quit and didn't open goes back to running, unless
+# --no-launch. /bin/mv: nothing on PATH gets a say in the last rename.
 cleanup() {
-  local d keep=""
+  local rc=$? d keep=""
+  trap '' INT TERM HUP
+  set +e
+  if [ -n "$SMOKE_PID" ]; then kill -9 "$SMOKE_PID" 2>/dev/null; fi
   if [ -n "$SWAP_OLD" ] && [ -e "$SWAP_OLD" ] && [ ! -e "$APP" ]; then
-    if /bin/mv "$SWAP_OLD" "$APP"; then
-      reopen_kept
-    else
+    if ! /bin/mv "$SWAP_OLD" "$APP"; then
       keep="$(dirname "$SWAP_OLD")"
-      aitt_warn "the old app could not be put back; it is at $SWAP_OLD. Move it to $APP."
+      aitt_warn "the old app could not be put back; it is at $SWAP_OLD. Move it to $APP, or run the installer again."
     fi
   fi
+  if [ -n "$WAS_RUNNING" ] && [ "$LAUNCH" = 1 ] && [ "$OPENED" = 0 ] && [ -d "$APP" ]; then open "$APP"; fi
   for d in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do
     if [ "$d" != "$keep" ]; then rm -rf "$d"; fi
   done
   if [ -n "$INSTALL_LOCK" ]; then rm -rf "$INSTALL_LOCK"; fi
+  exit "$rc"
 }
 # new_tmp: a temp folder in $NEW_TMP, removed on exit. (Not through $(…): the list must live in this shell.)
 new_tmp() {
@@ -117,6 +121,15 @@ load_lib() {
 }
 
 have_tty() { (: </dev/tty) 2>/dev/null; }
+
+# terminal_device: this script's terminal as its real device (/dev/ttys003), else nothing. Bun can't read stdin through
+# the /dev/tty alias (kqueue refuses it), so `aitt setup` gets this one.
+terminal_device() {
+  local t
+  t="$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ' || true)"
+  case "$t" in "" | "?" | "??") return 0 ;; esac
+  if (: <"/dev/$t") 2>/dev/null; then printf '/dev/%s\n' "$t"; fi
+}
 
 # json_str JSON KEY VALUE_PATTERN: the first string value of KEY that matches VALUE_PATTERN (grep BRE), else "".
 json_str() {
@@ -180,7 +193,7 @@ print_table() {
   row "macOS $MIN_MACOS+" "$OS_VER ($ARCH)" "$(version_ge "$OS_VER" "$MIN_MACOS" && echo — || echo 'not supported')"
   if [ "$METHOD" = release ]; then
     row "Release" "$RELEASE_TAG ($RELEASE_ZIP)" "download, verify signature + notarization"
-    row "" "" "(builds from source if verification fails)"
+    row "" "" "(builds from source if verification fails or it doesn't run)"
     row "Bun $MIN_BUN+ (for that case)" "${BUN_VER:-missing}" "$([ "$BUN_OK" = 1 ] && echo — || echo 'installed from bun.sh only if a source build is needed (asks first)')"
   else
     if [ "$FROM_SOURCE" = 1 ]; then src="--from-source"; else src="no release${VERSION:+ $VERSION}"; fi
@@ -239,51 +252,113 @@ ensure_source_prereqs() {
   export PATH
 }
 
-# reopen_kept: a failure after quitting: the kept app goes back to running, unless --no-launch.
-reopen_kept() {
-  if [ -n "$WAS_RUNNING" ] && [ "$LAUNCH" = 1 ] && [ -d "$APP" ]; then open "$APP" || true; fi
+# lock_holder_alive PID LOCK: that process still exists and is still the installer that took LOCK (a pid can be reused).
+# ps, not kill -0: it also sees a process we aren't allowed to signal.
+lock_holder_alive() {
+  local now was
+  now="$(ps -o command= -p "$1" 2>/dev/null || true)"
+  if [ -z "$now" ]; then kill -0 "$1" 2>/dev/null; return; fi
+  was="$(cat "$2/command" 2>/dev/null || true)"
+  [ -z "$was" ] || [ "$was" = "$now" ]
 }
 
-# take_lock: one install at a time into a folder. A lock whose process is gone is taken over.
+# take_lock: one install at a time into a folder. A lock whose process is gone is taken over: renamed first, so only one
+# run gets it, and checked again in case another run took it over just before the rename.
 take_lock() {
-  local lock="$APP_DIR/.aitt-install.lock" pid attempt
+  local lock="$APP_DIR/.aitt-install.lock" stale pid attempt
+  stale="$lock.stale.$$"
   for attempt in 1 2 3; do
     if mkdir "$lock" 2>/dev/null; then
-      echo "$$" >"$lock/pid"
       INSTALL_LOCK="$lock"
+      # The command first: a pid with no command beside it is someone else's format, and counts as alive.
+      ps -o command= -p $$ >"$lock/command" 2>/dev/null || true
+      echo "$$" >"$lock/pid"
       return 0
     fi
     pid="$(cat "$lock/pid" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      aitt_die "another install is running (pid $pid); try again when it is done. Nothing was replaced."
+    if [ -n "$pid" ] && lock_holder_alive "$pid" "$lock"; then
+      aitt_die "another install is running (pid $pid, lock $lock); try again when it is done. Nothing was replaced."
     fi
     # No pid yet may be another installer between its mkdir and its write: give it a moment before calling it stale.
     if [ -z "$pid" ] && [ "$attempt" = 1 ]; then sleep 1; continue; fi
-    rm -rf "$lock"
+    if mv "$lock" "$stale" 2>/dev/null; then
+      pid="$(cat "$stale/pid" 2>/dev/null || true)"
+      if [ -n "$pid" ] && lock_holder_alive "$pid" "$stale"; then
+        mv "$stale" "$lock" 2>/dev/null || true
+      else
+        rm -rf "$stale"
+      fi
+    fi
   done
   aitt_die "could not take the install lock $lock. Nothing was replaced."
 }
 
-# swap_in NEW_APP: NEW_APP is a complete bundle in a stage folder inside APP_DIR. Check that it runs, then quit only
-# the copies in APP_DIR and rename: the old app aside, the new one in place (the old one comes back if that fails),
-# the old one removed.
+# recover_stranded: a run killed outright (no cleanup) between the swap's renames leaves no app and the old one in its
+# stage folder. Put it back before looking at what is installed, unless a live install owns that folder.
+recover_stranded() {
+  local d found=""
+  [ ! -e "$APP" ] || return 0
+  for d in "$APP_DIR"/.aitt-install.*/previous.app; do
+    [ -e "$d" ] || continue
+    if [ -z "$found" ] || [ "$d" -nt "$found" ]; then found="$d"; fi
+  done
+  [ -n "$found" ] || return 0
+  if [ "$DRY" = 1 ]; then echo "An earlier install was interrupted: its old app at $found would be put back."; return 0; fi
+  take_lock
+  if [ ! -e "$APP" ]; then
+    /bin/mv "$found" "$APP" || aitt_die "an earlier install left the old app at $found and it could not be put back; move it to $APP."
+    echo "An earlier install was interrupted: the old app was put back."
+  fi
+  rm -rf "$INSTALL_LOCK"
+  INSTALL_LOCK=""
+}
+
+# remove_dead_stages: with the lock held, any stage folder here is left over from a run that was killed.
+remove_dead_stages() {
+  local d
+  for d in "$APP_DIR"/.aitt-install.*; do
+    if [ "$d" != "$INSTALL_LOCK" ] && [ -e "$d" ]; then rm -rf "$d" || aitt_warn "couldn't remove the leftover $d"; fi
+  done
+}
+
+# smoke_test APP: the new build's aitt answers --version. Stopped after AITT_SMOKE_TIMEOUT seconds, so a binary that
+# hangs can't hold the lock.
+smoke_test() {
+  local limit="${AITT_SMOKE_TIMEOUT:-30}" i rc=0
+  "$1/Contents/Resources/aitt" --version >/dev/null 2>&1 </dev/null &
+  SMOKE_PID=$!
+  for ((i = 0; i < limit * 10; i++)); do
+    if ! kill -0 "$SMOKE_PID" 2>/dev/null; then
+      wait "$SMOKE_PID" || rc=$?
+      SMOKE_PID=""
+      if [ "$rc" -eq 0 ]; then return 0; fi
+      aitt_warn "the new build doesn't run (aitt --version exited with $rc)"
+      return 1
+    fi
+    sleep 0.1
+  done
+  kill -9 "$SMOKE_PID" 2>/dev/null || true
+  wait "$SMOKE_PID" 2>/dev/null || true
+  SMOKE_PID=""
+  aitt_warn "the new build did not answer aitt --version within $limit s"
+  return 1
+}
+
+# swap_in NEW_APP: NEW_APP is a complete, smoke-tested bundle in a stage folder inside APP_DIR. Quit only the copies in
+# APP_DIR, then rename: the old app aside, the new one in place (the old one comes back if that fails), the old one
+# removed. cleanup reopens what was quit if any of this stops.
 swap_in() {
   local new="$1" old
-  "$new/Contents/Resources/aitt" --version >/dev/null 2>&1 </dev/null || aitt_die "the new app doesn't run; nothing was replaced"
   WAS_RUNNING="$(app_pids "$APP")"
   quit_app "$APP" || exit 1
   old="$(dirname "$new")/previous.app"
   SWAP_OLD="$old"
-  if [ -e "$APP" ] && ! mv "$APP" "$old"; then
-    reopen_kept
-    aitt_die "could not move the old app aside; it was kept"
-  fi
+  if [ -e "$APP" ] && ! mv "$APP" "$old"; then aitt_die "could not move the old app aside; it was kept"; fi
   if ! mv "$new" "$APP"; then
     if [ -e "$old" ]; then mv "$old" "$APP"; fi
-    reopen_kept
     aitt_die "could not move the new app into place; the old one was kept"
   fi
-  rm -rf "$old"
+  rm -rf "$old" || aitt_warn "couldn't remove the old app at $old; the next install clears it"
   if should_register "$APP_DIR"; then register_app "$APP"; fi
 }
 
@@ -303,6 +378,7 @@ install_release() {
   [ -d "$app" ] || { aitt_warn "$RELEASE_ZIP has no $AITT_APP_NAME"; return 1; }
   verify_app "$app" || return 1
   echo "✓ signature and notarization verified"
+  smoke_test "$app" || return 1
   swap_in "$app"
 }
 
@@ -330,6 +406,7 @@ install_source() {
   echo "building the app (this takes a few minutes the first time)…"
   new_stage
   "$src/app/build.sh" --no-register "$NEW_TMP" >/dev/null
+  smoke_test "$NEW_TMP/$AITT_APP_NAME" || aitt_die "the new build doesn't work; nothing was replaced"
   swap_in "$NEW_TMP/$AITT_APP_NAME"
 }
 
@@ -345,10 +422,12 @@ post_install() {
   if ! should_register "$APP_DIR"; then args+=(--no-mcp --no-link --no-skill --no-claude-md); fi
   if [ -n "$CONNECT" ]; then args+=(--connect "$CONNECT")
   elif ! should_register "$APP_DIR"; then args+=(--no-connect); fi
-  if [ "$YES" = 1 ] || ! have_tty; then
+  local tty
+  tty="$(terminal_device)"
+  if [ "$YES" = 1 ] || [ -z "$tty" ]; then
     run_setup "$aitt" "${args[@]}" --yes
   else
-    run_setup "$aitt" "${args[@]}" </dev/tty
+    run_setup "$aitt" "${args[@]}" <"$tty"
   fi
   if should_register "$APP_DIR"; then
     defaults write "$AITT_BUNDLE_ID" trackerHome -string "$home"
@@ -356,13 +435,12 @@ post_install() {
     if [ -z "$INSTALLED_VER" ]; then defaults write "$AITT_BUNDLE_ID" enableLoginItemOnLaunch -bool true; fi
   fi
   # An upgrade reopens the app only if it was running.
-  local opened=0
-  if [ "$LAUNCH" = 1 ] && { [ -z "$INSTALLED_VER" ] || [ -n "$WAS_RUNNING" ]; }; then open "$APP"; opened=1; fi
+  if [ "$LAUNCH" = 1 ] && { [ -z "$INSTALLED_VER" ] || [ -n "$WAS_RUNNING" ]; }; then OPENED=1; open "$APP"; fi
   echo
   echo "✓ AI Task Tracking $(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null || true) is installed: $APP"
   echo "  data: $home"
   echo "  menu bar: the AI Task Tracking icon; ⌥⌘I opens it. Terminal: aitt (aitt setup to change settings)."
-  [ "$opened" = 1 ] || echo "  Not opened: open \"$APP\""
+  [ "$OPENED" = 1 ] || echo "  Not opened: open \"$APP\""
 }
 
 main() {
@@ -374,6 +452,7 @@ main() {
   APP_DIR="${AITT_APP_DIR:-$HOME/Applications}"
   APP_DIR="$(canon_dir "$APP_DIR")"
   APP="$APP_DIR/$AITT_APP_NAME"
+  recover_stranded
   detect
   plan
   print_table
@@ -387,6 +466,7 @@ main() {
   APP_DIR="$(canon_dir "$APP_DIR")"
   APP="$APP_DIR/$AITT_APP_NAME"
   take_lock
+  remove_dead_stages
   if [ "$METHOD" = release ] && ! install_release; then
     aitt_warn "the release couldn't be installed; building from source instead"
     install_source
