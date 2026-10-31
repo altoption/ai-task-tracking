@@ -82,7 +82,7 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   back.
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
   a badge on the issue page, a dot on rows, and failing checks in Needs you. Without `gh` nothing shows.
-- **Themes.** Dark (the default), Light, Match macOS, Midnight, Paper and High contrast, or your own theme file
+- **Themes.** Graphite (the default), Dark, Light, Match macOS, Midnight, Plum, Paper and High contrast, or your own theme file
   (`themes/<name>.yml` in the data folder). Pick one in Settings ▸ Theme or with ⌘K ▸ "Theme: …"; the browser and the
   app window switch together. See [Themes](site/src/content/docs/guides/themes.md).
 - **Hidden projects.** Hide a project you don't want to see (Settings ▸ Hidden projects, or Hide project on its page):

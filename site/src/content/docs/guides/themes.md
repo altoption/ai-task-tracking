@@ -1,6 +1,6 @@
 ---
 title: Themes
-description: Switch the UI between Dark, Light, Match macOS and the presets, or write your own theme file.
+description: Switch the UI between Graphite, Dark, Light, Match macOS and the presets, or write your own theme file.
 sidebar:
   order: 5
 ---
@@ -22,12 +22,17 @@ changes, without a reload.
 
 | Theme | id | Notes |
 |---|---|---|
-| Dark | `dark` | The default. |
+| Graphite | `graphite` | The default: graphite grey with a sage-green accent. |
+| Dark | `dark` | The original dark theme, neutral grey with a violet accent. |
 | Light | `light` | |
 | Match macOS | `system` | Dark or Light, following System Settings ▸ Appearance; it switches when macOS does. |
 | Midnight | `midnight` | A blue-tinted dark theme. |
-| Paper | `paper` | A warm light theme. |
+| Plum | `plum` | A warm purple dark theme. |
+| Paper | `paper` | A soft off-white light theme with a green accent. |
 | High contrast | `high-contrast` | Black background, white text, brighter borders. |
+
+Graphite is shown when `config.yml` has no `theme`. A theme you picked stays picked, Dark included: a `config.yml`
+that says `theme: dark` keeps Dark. New data folders start with `theme: graphite`.
 
 Every built-in theme passes WCAG AA contrast (4.5:1) for body text and muted text on its backgrounds.
 
@@ -55,7 +60,9 @@ statuses:              # optional: recolor a status type's icon
   started: "#c98a00"
 ```
 
-- `name` and `base` are required; `colors` and `statuses` are optional. The `name` must differ from the built-in
+- `name` and `base` are required; `colors` and `statuses` are optional. A file named after a built-in id (for
+  example an older `themes/plum.yml`, from before Plum was built in) isn't loaded: it shows as a file that can't be
+  read, and renaming it (`themes/my-plum.yml`) brings it back. The `name` must differ from the built-in
   themes' names and from every other theme file's, ignoring case: when two files share a name, the first by file
   name loads and the other is reported. A color you leave out takes the base
   theme's value, so a theme can be as small as one color.
@@ -68,7 +75,7 @@ statuses:              # optional: recolor a status type's icon
   on white.
 - Only the keys and token names below are accepted, and only colors as values. A file that breaks a rule isn't
   applied: it shows in the sidebar as a file that can't be read, with what to fix, and the other themes still work.
-  If the chosen theme's file is removed or broken, the UI shows Dark until it's back (`config.yml` keeps its id).
+  If the chosen theme's file is removed or broken, the UI shows Graphite until it's back (`config.yml` keeps its id).
   Picking a theme in Settings or ⌘K replaces that id, so the theme doesn't jump when the file returns.
 
 ### Color tokens
@@ -101,7 +108,7 @@ A token may also be written with its CSS name (`--bg`).
 | `on-accent` | text on accent-colored buttons and avatars |
 | `accent` | primary buttons, focus rings, checked items, the progress ring's arc |
 | `accent-wash` | a board column or cell while you drag an issue over it |
-| `warn` | Needs-you reasons and the Needs you heading |
+| `warn` | Needs-you reasons, the Needs you heading and the waiting request's status on Home |
 | `danger` | errors, Blocked, delete buttons, failing checks |
 | `danger-border` | the outline of the STALLED pill and closed PRs |
 | `danger-border-soft` | the outline of an overdue date |

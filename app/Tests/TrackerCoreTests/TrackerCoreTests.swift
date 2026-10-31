@@ -399,7 +399,8 @@ final class ThemeSettingTests: XCTestCase {
 
     func testPollsAdoptTheEnginesThemeAndStoreItsList() {
         let h = Harness(scratchDefaults())
-        XCTAssertEqual(h.theme, "dark")
+        XCTAssertEqual(h.theme, "graphite") // the default until the engine says otherwise
+        XCTAssertEqual(ThemeSetting.fallbackList.first?.id, ThemeSetting.defaultTheme)
         XCTAssertEqual(ThemeSetting.storedList(h.d), ThemeSetting.fallbackList)
         h.sync.sync(ThemeState(selected: "ocean", themes: list), probe: h.tick()) // ⌘K in the browser
         XCTAssertEqual(h.theme, "ocean")
@@ -426,9 +427,13 @@ final class ThemeSettingTests: XCTestCase {
         XCTAssertEqual(ThemeSetting.look(selected: "dark", themes: list), WindowLook(appearance: "dark", darkBackground: dark, lightBackground: dark))
         XCTAssertEqual(ThemeSetting.look(selected: "light", themes: list), WindowLook(appearance: "light", darkBackground: light, lightBackground: light))
         XCTAssertEqual(ThemeSetting.look(selected: "system", themes: list), WindowLook(appearance: nil, darkBackground: dark, lightBackground: light))
-        // A background the app can't parse (rgb()) takes its base's; an unknown id looks like Dark.
+        // A background the app can't parse (rgb()) takes its base's; an unknown id looks like the default, Graphite.
         XCTAssertEqual(ThemeSetting.look(selected: "ocean", themes: list).lightBackground, WindowLook.lightBg)
-        XCTAssertEqual(ThemeSetting.look(selected: "gone", themes: list), WindowLook.dark)
+        XCTAssertEqual(ThemeSetting.look(selected: "gone", themes: list), WindowLook.graphite)
+        XCTAssertEqual(WindowLook.graphite.darkBackground, RGBA(hex: "#141619"))
+        // Before the engine answers: the default's window, and a saved Dark keeps Dark's.
+        XCTAssertEqual(ThemeSetting.look(selected: ThemeSetting.defaultTheme, themes: ThemeSetting.fallbackList), WindowLook.graphite)
+        XCTAssertEqual(ThemeSetting.look(selected: "dark", themes: ThemeSetting.fallbackList).darkBackground, dark)
     }
 
     func testHex() {

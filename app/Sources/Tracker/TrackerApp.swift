@@ -228,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var currentThemeLook: WindowLook {
         let d = UserDefaults.standard
-        return ThemeSetting.look(selected: d.string(forKey: SettingKey.theme) ?? "dark", themes: ThemeSetting.storedList(d))
+        return ThemeSetting.look(selected: d.string(forKey: SettingKey.theme) ?? ThemeSetting.defaultTheme, themes: ThemeSetting.storedList(d))
     }
 
     /// Re-applied on every UserDefaults change (cheap and idempotent): hotkeys, notifications, the theme.

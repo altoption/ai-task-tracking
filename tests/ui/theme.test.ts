@@ -7,11 +7,12 @@ import { makeThemePick, orderGroups, themeCommands } from '../../ui/views/Palett
 const list = allThemes([parseThemeFile('name: Ocean\nbase: light\ncolors:\n  accent: "#0a84ff"\n', 'ocean.yml')])
 
 describe('ui theme', () => {
-  test('the chosen theme; Match macOS follows the system; an unknown id falls back to Dark; no info, nothing', () => {
+  test('the chosen theme; Match macOS follows the system; an unknown id falls back to Graphite; no info, nothing', () => {
     expect(effectiveTheme({ selected: 'ocean', list }, true)?.id).toBe('ocean')
     expect(effectiveTheme({ selected: 'system', list }, true)?.id).toBe('dark')
     expect(effectiveTheme({ selected: 'system', list }, false)?.id).toBe('light')
-    expect(effectiveTheme({ selected: 'gone', list }, false)?.id).toBe('dark')
+    expect(effectiveTheme({ selected: 'gone', list }, false)?.id).toBe('graphite')
+    expect(effectiveTheme({ selected: 'dark', list }, false)?.id).toBe('dark')
     expect(effectiveTheme(null, true)).toBeNull()
   })
 
@@ -28,7 +29,7 @@ describe('ui theme', () => {
     const info = { selected: 'light', list }
     expect(themeCommands(info, '')).toEqual([])
     expect(themeCommands(info, 'theme').map((t) => t.label)).toEqual(
-      ['Theme: Dark', 'Theme: Light', 'Theme: Match macOS', 'Theme: Midnight', 'Theme: Paper', 'Theme: High contrast', 'Theme: Ocean'])
+      ['Theme: Graphite', 'Theme: Dark', 'Theme: Light', 'Theme: Match macOS', 'Theme: Midnight', 'Theme: Plum', 'Theme: Paper', 'Theme: High contrast', 'Theme: Ocean'])
     expect(themeCommands(info, 'light')).toEqual([{ id: 'light', label: 'Theme: Light', current: true }])
     expect(themeCommands(info, 'theme oce')).toEqual([{ id: 'ocean', label: 'Theme: Ocean', current: false }])
     expect(themeCommands(null, 'theme')).toEqual([])
