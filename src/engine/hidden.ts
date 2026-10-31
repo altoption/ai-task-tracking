@@ -64,14 +64,15 @@ export function visibleParts(s: Store): {
 
 /**
  * Feed entries the UI may see: by the issue's current project, else (a deleted issue) the project recorded on the
- * entry; an old entry of a deleted issue with no project recorded passes. Undefined when nothing is hidden.
+ * entry. An old entry of a deleted issue with no project recorded can't be placed, so while anything is hidden it stays
+ * out (it might have been a hidden project's). Undefined when nothing is hidden.
  */
 export function feedVisibleTest(s: Store): ((e: FeedEvent) => boolean) | undefined {
   const hidden = hiddenSlugs(s)
   if (!hidden.size) return undefined
   return (e) => {
     const p = s.get(e.id)?.project ?? e.project
-    return !p || !hidden.has(p)
+    return !!p && !hidden.has(p)
   }
 }
 

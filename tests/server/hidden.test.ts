@@ -157,6 +157,27 @@ describe('UI endpoints leave hidden projects out', () => {
     expect(await get(`/api/feed?since=${encodeURIComponent(new Date(Date.now() + 60_000).toISOString())}`)).toEqual([])
   })
 
+  test('feed: an old entry of a deleted issue with no recorded project stays out while anything is hidden', async () => {
+    const { appendFile, mkdir } = await import('node:fs/promises')
+    await mkdir(join(root, '.tracker'), { recursive: true })
+    const at = new Date().toISOString()
+    await appendFile(join(root, '.tracker', 'events.jsonl'), `${JSON.stringify({ at, actor: { actor: 'agent' }, id: 'Q-404', kind: 'comment', text: 'secret note' })}\n`)
+    expect(JSON.stringify(await get('/api/feed?limit=50'))).not.toContain('secret note')
+    expect(JSON.stringify(await get(`/api/feed?since=${encodeURIComponent(new Date(Date.now() - 60_000).toISOString())}`))).not.toContain('secret note')
+    await store.setProjectHidden('support', false)
+    expect(JSON.stringify(await get('/api/feed?limit=50'))).toContain('secret note') // nothing hidden: shown as before
+  })
+
+  test('feed ?since= without a limit returns up to FEED_SINCE_MAX; one issue\'s history stays capped at 1000', async () => {
+    const { appendFile, mkdir } = await import('node:fs/promises')
+    await mkdir(join(root, '.tracker'), { recursive: true })
+    const base0 = Date.now() - 10 * 60_000
+    const lines = Array.from({ length: 1200 }, (_, i) => JSON.stringify({ at: new Date(base0 + i * 100).toISOString(), actor: { actor: 'agent' }, id: 'Q-2', kind: 'comment', text: `n${i}`, project: 'acme-app' }))
+    await appendFile(join(root, '.tracker', 'events.jsonl'), `${lines.join('\n')}\n`)
+    expect((await get(`/api/feed?since=${encodeURIComponent(new Date(base0 - 1000).toISOString())}`)).length).toBe(1200)
+    expect((await get('/api/feed?id=Q-2&limit=5000')).length).toBe(1000)
+  })
+
   test('direct reads: an issue and a project by id', async () => {
     const i = await get('/api/issues/Q-5')
     expect(i.id).toBe('Q-5')
@@ -316,8 +337,8 @@ describe('nothing of a hidden project reaches the UI through visible issues', ()
     expect((await get('/api/feed?limit=1')).map((e: any) => e.id)).toEqual([created2.id])
     // Over the stream: the deleted hidden issue's feed entry isn't sent.
     expect(wireEvent(store, { kind: 'feed', event: { at: 'x', actor: { actor: 'you' }, id: created.id, kind: 'created', text: 'Doomed secret', project: 'support' } })).toBeNull()
-    // An old entry without a project, of a deleted issue: today's behaviour (sent).
-    expect(wireEvent(store, { kind: 'feed', event: { at: 'x', actor: { actor: 'you' }, id: 'Q-99', kind: 'created' } })).not.toBeNull()
+    // An old entry without a project, of a deleted issue: it can't be placed, so while anything is hidden it stays out.
+    expect(wireEvent(store, { kind: 'feed', event: { at: 'x', actor: { actor: 'you' }, id: 'Q-99', kind: 'created' } })).toBeNull()
   })
 
   test('file errors and file events inside a hidden project\'s folder are left out', async () => {
