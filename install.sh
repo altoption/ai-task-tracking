@@ -352,7 +352,8 @@ post_install() {
   fi
   if should_register "$APP_DIR"; then
     defaults write "$AITT_BUNDLE_ID" trackerHome -string "$home"
-    defaults write "$AITT_BUNDLE_ID" enableLoginItemOnLaunch -bool true
+    # A first install only: the user may have turned Launch at Login off since.
+    if [ -z "$INSTALLED_VER" ]; then defaults write "$AITT_BUNDLE_ID" enableLoginItemOnLaunch -bool true; fi
   fi
   # An upgrade reopens the app only if it was running.
   local opened=0

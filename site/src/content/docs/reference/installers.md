@@ -102,7 +102,7 @@ Environment:
                        app settings, no Claude Code MCP entry, no aitt link and no other agent tools (unless
                        --connect names them).
   SKIP_MCP=1           don't register the user-scope `ai-task-tracking` MCP entry or link `aitt`
-  SKIP_LOGIN_ITEM=1    don't turn on Launch at Login (otherwise every run turns it on; harmless when already on)
+  SKIP_LOGIN_ITEM=1    don't turn on Launch at Login (otherwise a first install turns it on; later runs leave it)
   NO_LAUNCH=1          don't open the app at the end
 ```
 
@@ -120,5 +120,5 @@ Environment:
 | `AITT_HOME=<dir>` | data folder the app runs the engine on (default: the folder the app already uses, else ~/AITaskTracking); remembered by the app |
 | `AITT_APP_DIR=<dir>` | where the app is installed (default ~/Applications). Any folder other than ~/Applications or /Applications is a scratch install: no Launch Services registration, no app settings, no Claude Code MCP entry, no aitt link and no other agent tools (unless --connect names them). |
 | `SKIP_MCP=1` | don't register the user-scope `ai-task-tracking` MCP entry or link `aitt` |
-| `SKIP_LOGIN_ITEM=1` | don't turn on Launch at Login (otherwise every run turns it on; harmless when already on) |
+| `SKIP_LOGIN_ITEM=1` | don't turn on Launch at Login (otherwise a first install turns it on; later runs leave it) |
 | `NO_LAUNCH=1` | don't open the app at the end |

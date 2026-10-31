@@ -480,7 +480,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window?.settingsChanged()
     }
 
-    /// scripts/install.sh sets this on every install (unless SKIP_LOGIN_ITEM=1); the app must register itself.
+    /// The installers set this on a first install (scripts/install.sh unless SKIP_LOGIN_ITEM=1); the app must register itself.
     /// Idempotent: nothing to do when launch at login is already on.
     private func enableLoginItemIfRequested() {
         let d = UserDefaults.standard
