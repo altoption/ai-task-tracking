@@ -7,10 +7,10 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { IssueSummary, PlanSlot } from '../../src/model'
 import { callTool, inScope, useScope, useTracker, type TrackerState } from '../client'
 import {
-  PLAN_SLOTS, blockedChains, boardColumns, dayHeading, daySummary, listHref, needsYouCard, needsYouWhy, relTime, scopeHome,
+  PLAN_SLOTS, blockedChains, boardColumns, dayHeading, listHref, needsYouCard, needsYouWhy, overviewLine, relTime, scopeHome,
   statusesOf, type HomeData, type NeedsYouCard, type NeedsYouItem,
 } from '../home'
-import { href, navigate } from '../router'
+import { href } from '../router'
 import { CiDot } from '../components/Ci'
 import { Icon, StatusIcon } from '../components/icons'
 import { Activity, useActivity } from './Activity'
@@ -48,33 +48,33 @@ const NEEDS_SHOWN = 3
 const LIST_SHOWN = 3
 
 /** A list section's title: the heading, its count, and "Showing N" when the list is cut. */
-function SectionTitle({ id, title, count, shown, mark }: { id: string; title: string; count: number; shown: number; mark?: boolean }) {
+export function SectionTitle({ id, title, count, shown, mark }: { id: string; title: string; count: number | null; shown: number; mark?: boolean }) {
   return (
     <div className="ov-title">
-      <h2 id={id}>{mark && <span className="ov-mark" aria-hidden="true" />}{title} <span className="ov-count">{count}</span></h2>
-      {count > shown && <span className="ov-subtle">Showing {shown}</span>}
+      <h2 id={id}>{mark && <span className="ov-mark" aria-hidden="true" />}{title}{count !== null && <> <span className="ov-count">{count}</span></>}</h2>
+      {count !== null && count > shown && <span className="ov-subtle">Showing {shown}</span>}
     </div>
   )
 }
 
 /** One Needs-you request: issue and project, the status chip, the title, what it asks, how long it waited, and the action. */
 export function NeedsYouRequest({ issue, card, featured, project }: { issue: NeedsYouItem; card: NeedsYouCard; featured: boolean; project: string }) {
-  const open = () => navigate({ name: 'issue', id: issue.id })
+  const to = href({ name: 'issue', id: issue.id })
   return (
     <article className={`ov-request${featured ? ' featured' : ''}`} aria-labelledby={`ny-${issue.id}`}>
       <div className="ov-meta">
         <span>{issue.id}{project && <><span className="ov-sep" aria-hidden="true">·</span>{project}</>}</span>
         <span className="ov-status">{card.status}</span>
       </div>
-      <h3 id={`ny-${issue.id}`}><a href={href({ name: 'issue', id: issue.id })}>{issue.title}</a></h3>
+      <h3 id={`ny-${issue.id}`}><a href={to}>{issue.title}</a></h3>
       {card.summary && <p>{card.summary}</p>}
       {card.stalled && card.summary !== card.stalled && <p className="stalled-why">{card.status !== 'Stalled' && <span className="pill stalled">stalled</span>}{card.stalled}</p>}
+      {card.ci && card.summary !== card.ci && <p className="ci-why">{card.ci}</p>}
       <div className="ov-action-line">
         <span className="ov-subtle">{card.age}</span>
-        <button type="button" className={`ov-action${featured ? ' primary' : ''}`} onClick={open}
-          aria-label={`${card.action}: ${issue.id} ${issue.title}`}>
+        <a className={`ov-action${featured ? ' primary' : ''}`} href={to} aria-label={`${card.action}: ${issue.id} ${issue.title}`}>
           {card.action} <Icon name="forward" size={12} />
-        </button>
+        </a>
       </div>
     </article>
   )
@@ -179,12 +179,12 @@ export function Home() {
       <header className="ov-heading">
         <div className="ov-eyebrow">{dayHeading(now)}</div>
         <h1 id="home-title">Your work, in motion.</h1>
-        <p>{home ? daySummary({ finished: activity.today.finished, inProgress: home.inProgress.length, needsYou: home.needsYou.length }) : state.ready ? 'Loading…' : 'Connecting…'}</p>
+        <p>{overviewLine(home, activity.loaded ? activity.today.finished : null, state.ready)}</p>
       </header>
       {error && <div className="form-error home-pad">{error}</div>}
       <div className="ov-layout">
         <section className="ov-needs" aria-labelledby="ov-needs-h">
-          <SectionTitle id="ov-needs-h" title="Needs you" count={home?.needsYou.length ?? 0} shown={needs.length} mark />
+          <SectionTitle id="ov-needs-h" title="Needs you" count={home?.needsYou.length ?? null} shown={needs.length} mark />
           {home && home.needsYou.length === 0 && <p className="home-empty">Nothing needs you right now.</p>}
           {needs.map((i, n) => (
             <NeedsYouRequest key={i.id} issue={i} card={needsYouCard(i, state.config?.needsYou, now)} featured={n === 0} project={projectName(i.project)} />
@@ -197,7 +197,7 @@ export function Home() {
         </section>
 
         <section className="ov-progress" aria-labelledby="ov-progress-h">
-          <SectionTitle id="ov-progress-h" title="In progress" count={home?.inProgress.length ?? 0} shown={Math.min(LIST_SHOWN, home?.inProgress.length ?? 0)} />
+          <SectionTitle id="ov-progress-h" title="In progress" count={home?.inProgress.length ?? null} shown={Math.min(LIST_SHOWN, home?.inProgress.length ?? 0)} />
           {home && home.inProgress.length === 0 && <p className="home-empty">Nothing in progress.</p>}
           <ul className="ov-rows">
             {home?.inProgress.slice(0, LIST_SHOWN).map((i) => (
@@ -210,7 +210,7 @@ export function Home() {
         <Activity data={activity} now={now} />
 
         <section className="ov-next" aria-labelledby="ov-next-h">
-          <SectionTitle id="ov-next-h" title="Ready next" count={home?.readyNext.length ?? 0} shown={Math.min(LIST_SHOWN, home?.readyNext.length ?? 0)} />
+          <SectionTitle id="ov-next-h" title="Ready next" count={home?.readyNext.length ?? null} shown={Math.min(LIST_SHOWN, home?.readyNext.length ?? 0)} />
           {home && home.readyNext.length === 0 && <p className="home-empty">Nothing ready.</p>}
           <ul className="ov-rows">
             {home?.readyNext.slice(0, LIST_SHOWN).map(({ issue, unblocks }) => (
@@ -235,6 +235,7 @@ export function Home() {
                         <a href={href({ name: 'issue', id })}><span className="ov-chain-id">{id}</span> {titleOf(id) ?? ''}</a>
                       </span>
                     ))}
+                    {c.cycle && <span className="ov-cycle"> · a cycle: these block each other</span>}
                     {c.more > 0 && <span className="ov-subtle"> (+{c.more} more {c.more === 1 ? 'blocker' : 'blockers'})</span>}
                   </li>
                 ))}
@@ -257,15 +258,26 @@ export function Home() {
               onDragLeave={(ev) => { if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) setDragOver((d) => (d === slot ? null : d)) }}
               onDrop={onDrop(slot)}
             >
-              <h3>{COLUMN_TITLE[slot]} <span className="n">{columns[slot].length}</span></h3>
-              {columns[slot].map((i) => <PlanCard key={i.id} issue={i} tag={bucketOf.get(i.id)} />)}
-              {columns[slot].length === 0 && <div className="home-empty">Drop issues here.</div>}
+              <PlanColumn title={COLUMN_TITLE[slot]} issues={columns[slot]} ready={state.ready} tagOf={(id) => bucketOf.get(id)} />
             </div>
           ))}
         </div>
       </section>
       {toast && <div className="toast" role="alert">{toast}<button className="icon-button" aria-label="Dismiss" onClick={() => setToast('')}>×</button></div>}
     </section>
+  )
+}
+
+/** A plan column's heading and cards; before the snapshot it claims nothing about how many there are. */
+export function PlanColumn({ title, issues, ready, tagOf }: {
+  title: string; issues: IssueSummary[]; ready: boolean; tagOf: (id: string) => 'needs' | 'stalled' | 'ci' | 'blocked' | undefined
+}) {
+  return (
+    <>
+      <h3>{title}{ready && <> <span className="n">{issues.length}</span></>}</h3>
+      {issues.map((i) => <PlanCard key={i.id} issue={i} tag={tagOf(i.id)} />)}
+      {ready && issues.length === 0 && <div className="home-empty">Drop issues here.</div>}
+    </>
   )
 }
 

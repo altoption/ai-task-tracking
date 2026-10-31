@@ -4,10 +4,10 @@ import type { Config, IssueSummary } from '../../src/model'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
-  blockedChains, boardColumns, daySummary, duration, feedActor, feedInScope, feedLine, listHref, needsYouCard, needsYouWhy, relTime,
+  blockedChains, boardColumns, daySummary, duration, feedActor, feedInScope, feedLine, listHref, needsYouCard, needsYouWhy, overviewLine, relTime,
   scopeHome, statusesOf, type HomeData, type NeedsYouItem,
 } from '../../ui/home'
-import { NeedsYouRequest } from '../../ui/views/Home'
+import { NeedsYouRequest, PlanColumn, SectionTitle } from '../../ui/views/Home'
 import { parseRoute } from '../../ui/router'
 import { viewFromQuery, DEFAULT_DISPLAY } from '../../ui/viewModel'
 
@@ -189,6 +189,47 @@ describe('Daily overview', () => {
     expect(needsYouCard(item({ stalled: 'idle 40 h' }), { statuses: null, labels: null } as never, now)).toMatchObject({ status: 'Stalled', summary: 'idle 40 h' })
   })
 
+  test('CI failing with a comment: the reason still shows beside the request', () => {
+    const i = item({ status: 'Waiting', request: 'Which plan?', ciReason: 'CI failing on PR #3' })
+    const html = renderToStaticMarkup(createElement(NeedsYouRequest, { issue: i, card: needsYouCard(i, ny, now), featured: false, project: '' }))
+    expect(html).toContain('<p>Which plan?</p>')
+    expect(html).toContain('<p class="ci-why">CI failing on PR #3</p>')
+    // Alone it is the summary, not shown twice.
+    const alone = item({ ciReason: 'CI failing on PR #3' })
+    expect(renderToStaticMarkup(createElement(NeedsYouRequest, { issue: alone, card: needsYouCard(alone, ny, now), featured: false, project: '' })).match(/CI failing on PR #3/g)).toHaveLength(1)
+  })
+
+  test('stalled-only and CI-only items are opened, not "viewed as a request"', () => {
+    expect(needsYouCard(item({ stalled: 'idle 40 h' }), ny, now).action).toBe('Open')
+    expect(needsYouCard(item({ ciReason: 'CI failing on PR #3' }), ny, now).action).toBe('Open')
+  })
+
+  test('the action is a link to the issue, so ⌘-click works', () => {
+    const i = item({ status: 'Waiting', request: 'Which plan?' })
+    const html = renderToStaticMarkup(createElement(NeedsYouRequest, { issue: i, card: needsYouCard(i, ny, now), featured: true, project: '' }))
+    expect(html).toMatch(/<a class="ov-action primary" href="#\/issue\/Q-1"/)
+    expect(html).not.toContain('<button')
+  })
+
+  test('before the data arrives: no summary claims and no zero counts', () => {
+    expect(overviewLine(null, null, true)).toBe('Loading…')
+    expect(overviewLine(null, null, false)).toBe('Connecting…')
+    const home = { inProgress: [{}], needsYou: [] } as never
+    expect(overviewLine(home, null, true)).toBe('Loading…') // Home is here, the day's activity isn't
+    expect(overviewLine(home, 2, true)).toBe('2 finished today. 1 in progress. Nothing needs you.')
+    const title = (count: number | null) => renderToStaticMarkup(createElement(SectionTitle, { id: 'x', title: 'Needs you', count, shown: 0 }))
+    expect(title(null)).not.toContain('ov-count')
+    expect(title(0)).toContain('<span class="ov-count">0</span>')
+  })
+
+  test('the plan board before the issues arrive: no zero and no "Drop issues here"', () => {
+    const col = (ready: boolean) => renderToStaticMarkup(createElement(PlanColumn, { title: 'Now', issues: [], ready, tagOf: () => undefined }))
+    expect(col(false)).not.toContain('Drop issues here')
+    expect(col(false)).not.toContain('class="n"')
+    expect(col(true)).toContain('Drop issues here')
+    expect(col(true)).toContain('<span class="n">0</span>')
+  })
+
   test('the day summary', () => {
     expect(daySummary({ finished: 12, inProgress: 5, needsYou: 21 })).toBe('12 finished today. 5 in progress. 21 need you.')
     expect(daySummary({ finished: 0, inProgress: 1, needsYou: 1 })).toBe('0 finished today. 1 in progress. 1 needs you.')
@@ -206,9 +247,16 @@ describe('Daily overview', () => {
     expect(blockedChains(blocked, (id) => issues[id], open)).toEqual([
       { ids: ['A', 'B', 'C'], more: 1 }, // C is also blocked by X
       { ids: ['D'], more: 0 }, // blocked by the label only, or by closed issues
-      { ids: ['F', 'E'], more: 1 }, // E ⇄ F: the walk stops where it closes (the cycle's way back counts as another blocker)
-      { ids: ['E', 'F'], more: 1 },
+      { ids: ['F', 'E'], more: 0, cycle: true }, // E ⇄ F: one chain, marked, not two mirror images
     ])
+  })
+
+  test('a chain into a cycle absorbs the cycle\'s own chains', () => {
+    const issues: Record<string, { id: string; blockedBy: string[] }> = {
+      E: { id: 'E', blockedBy: ['F'] }, F: { id: 'F', blockedBy: ['E'] }, G: { id: 'G', blockedBy: ['E'] },
+    }
+    const chains = blockedChains(['E', 'F', 'G'].map((id) => ({ issue: { id } })), (id) => issues[id], () => true)
+    expect(chains).toEqual([{ ids: ['F', 'E', 'G'], more: 0, cycle: true }])
   })
 
   test('full-list links open All issues with the filter', () => {

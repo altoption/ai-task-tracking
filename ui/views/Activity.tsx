@@ -31,7 +31,7 @@ function readRange(): Range {
  * The range's events: fetched per range (and after a snapshot reload: hiding changes what's visible), then every live
  * update folded in, so nothing drops out when the store's live feed (200) moves past it.
  */
-function useRangeFeed(state: TrackerState, range: Range, now: number): { events: FeedEvent[]; capped: boolean; since: number } {
+function useRangeFeed(state: TrackerState, range: Range, now: number): { events: FeedEvent[]; capped: boolean; since: number; loaded: boolean } {
   const since = rangeStart(range, now)
   const [gathered, setGathered] = useState<{ since: number; events: FeedEvent[]; capped: boolean } | null>(null)
   const feed = useRef(state.feed)
@@ -48,7 +48,7 @@ function useRangeFeed(state: TrackerState, range: Range, now: number): { events:
     setGathered((g) => (g && g.since === since ? { ...g, events: mergeFeeds(g.events, state.feed, since) } : g))
   }, [state.feed, since])
   const events = useMemo(() => (gathered?.since === since ? gathered.events : mergeFeeds([], state.feed, since)), [gathered, state.feed, since])
-  return { events, capped: gathered?.since === since && gathered.capped, since }
+  return { events, capped: gathered?.since === since && gathered.capped, since, loaded: gathered?.since === since }
 }
 
 const PATH_LIMIT = 4
@@ -178,6 +178,8 @@ export interface ActivityData {
   buckets: RhythmBucket[]
   waitingIds: ReadonlySet<string>
   capped: boolean
+  /** The range's feed has arrived; until then the counts and empty states would be claims about nothing. */
+  loaded: boolean
 }
 
 /**
@@ -189,7 +191,7 @@ export function useActivity(needsYou: NeedsYouItem[] | null, now: number): Activ
   const scope = useScope()
   const [range, setRangeState] = useState<Range>(readRange)
   const setRange = (r: Range) => { setRangeState(r); try { globalThis.localStorage?.setItem(RANGE_KEY, r) } catch { /* ignore */ } }
-  const { events: raw, capped, since } = useRangeFeed(state, range, now)
+  const { events: raw, capped, since, loaded } = useRangeFeed(state, range, now)
 
   const events = useMemo(() => raw.filter((e) => feedInScope(e, state.issues.get(e.id), scope, state.config)), [raw, state.issues, scope, state.config])
   const skip = useMemo(() => (id: string) => state.hidden.issues.has(id), [state.hidden])
@@ -202,7 +204,7 @@ export function useActivity(needsYou: NeedsYouItem[] | null, now: number): Activ
   const waiting = useMemo(() => waitingOnYou(events, needsYou ?? [], state.config, since), [events, needsYou, state.config, since])
   const waitingIds = useMemo(() => new Set(waiting.map((w) => w.id)), [waiting])
   const buckets = useMemo(() => rhythm(events, range, now, skip), [events, range, now, skip])
-  return { range, setRange, today, days, buckets, waitingIds, capped }
+  return { range, setRange, today, days, buckets, waitingIds, capped, loaded }
 }
 
 /** "4m ago", "just now". */
@@ -213,8 +215,11 @@ const ago = (iso: string, now: number) => { const r = relTime(iso, now); return 
  * working on, what finished last, and Session details (the range, the rhythm, filters and a card per session).
  */
 export function Activity({ data, now }: { data: ActivityData; now: number }) {
-  const state = useTracker()
-  const { range, setRange, today, days, buckets, waitingIds, capped } = data
+  return <ActivityView data={data} now={now} state={useTracker()} />
+}
+
+export function ActivityView({ data, now, state }: { data: ActivityData; now: number; state: TrackerState }) {
+  const { range, setRange, today, days, buckets, waitingIds, capped, loaded } = data
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const [open, setOpen] = useState(false)
   const [shut, setShut] = useState<ReadonlySet<string>>(new Set())
@@ -225,7 +230,7 @@ export function Activity({ data, now }: { data: ActivityData; now: number }) {
   const stat = (f: ActivityFilter, n: number, label: string) => (
     <button type="button" className="ov-stat" aria-pressed={open && filter === f} aria-controls="ov-sessions"
       onClick={() => { const off = open && filter === f; setFilter(off ? 'all' : f); if (!off) { setRange('today'); setOpen(true) } }}>
-      <strong>{n}</strong><span>{label}</span>
+      <strong>{loaded ? n : '–'}</strong><span>{label}</span>
     </button>
   )
   const onKey = (e: KeyboardEvent<HTMLElement>) => { if (e.key === 'Escape' && filter !== 'all') setFilter('all') }
@@ -257,9 +262,9 @@ export function Activity({ data, now }: { data: ActivityData; now: number }) {
             <span className="ov-subtle">{cur.row.id} · Updated {ago(cur.row.at, now)}</span>
           </div>
         </>
-      ) : <p className="home-empty">No agent sessions today yet.</p>}
+      ) : loaded && today.agents === 0 && <p className="home-empty">No agent sessions today yet.</p>}
       <div className="ov-title ov-recent-title"><h3>Recently finished</h3><span className="ov-subtle">Today</span></div>
-      {today.recent.length === 0 && <p className="home-empty">Nothing finished today yet.</p>}
+      {loaded && today.recent.length === 0 && <p className="home-empty">Nothing finished today yet.</p>}
       {today.recent.length > 0 && (
         <ul className="ov-events">
           {today.recent.map((r) => (
@@ -289,7 +294,7 @@ export function Activity({ data, now }: { data: ActivityData; now: number }) {
             {filter === 'agents' && <button type="button" aria-pressed="true" onClick={() => setFilter('all')}>Agents</button>}
           </div>
           {capped && <div className="home-empty">Showing the latest {FEED_SINCE_MAX} writes.</div>}
-          {days.length === 0 && <div className="home-empty">{range === 'today' ? 'No activity today yet. Switch to 7 days to see earlier work.' : 'No activity in the last 7 days.'}</div>}
+          {loaded && days.length === 0 && <div className="home-empty">{range === 'today' ? 'No activity today yet. Switch to 7 days to see earlier work.' : 'No activity in the last 7 days.'}</div>}
           {days.map((d) => {
             const shown = d.cards.flatMap((c) => { const rows = filterCard(c, filter, waitingIds); return rows ? [{ c, rows }] : [] })
             if (!shown.length) return null

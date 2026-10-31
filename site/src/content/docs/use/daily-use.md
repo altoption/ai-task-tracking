@@ -50,16 +50,18 @@ Open with ⌘, **Settings…** in the menu, or the gear at the bottom of the sid
 3 need you.* Below it, in two columns (one on a phone: Needs you, In progress, Agent activity, Ready next):
 
 - **Needs you** comes first: issues waiting for your decision or review, work that has [stalled](#stalled-work), and
-  work whose [PR checks fail](#ci-status-on-pull-requests). Each request shows its issue and project, why it needs you
-  (*Input needed* for Waiting, *Needs review*, *Needs decision*, *Stalled* or *CI failing*), what it asks (its newest
-  comment, else the stalled or CI reason), and how long it has waited: *Waiting 3 days* since it moved to Waiting, or
-  *No activity for 7 days*. **View request**, **Review** or **Open** opens the issue; so does its title. The first
-  request is highlighted. Home shows three; **Show all** lists the rest.
+  work whose [PR checks fail](#ci-status-on-pull-requests). Each request shows its issue and project and why it needs
+  you (*Input needed* for Waiting, *Needs review*, *Needs decision*, *Stalled* or *CI failing*). An issue that waits on
+  you by status or label also shows what it asks: the newest comment that isn't your own, so your reply doesn't replace
+  the question. A stalled or failing reason shows too. It says how long the issue has waited: *Waiting 3 days* since it
+  last moved to Waiting (or was created there), else how long it has been quiet (*No activity for 7 days*). **View
+  request**, **Review** or **Open** opens the issue, and so does its title; stalled-only and CI-only work shows **Open**.
+  The first request is highlighted. Home shows three; **Show all** lists the rest.
 - **In progress** and **Ready next**: the first three of each, with how long ago an issue in progress last changed,
   and *Urgent* or *High* and *Unblocks N* (how many open issues wait on it) on ready ones. **All in progress** and
   **All ready** open the full lists in All issues.
 - **Blocked work**, folded under Ready next: click it to see the dependency chains, the first blocker first
-  (*WEB-12 Plans config → WEB-13 Comparison table → WEB-14 FAQ*), and **All blocked**.
+  (*WEB-12 Plans config → WEB-13 Comparison table → WEB-14 FAQ*), and **All blocked**. Issues that block each other show as one chain marked as a cycle.
 - **Agent activity**, beside the queue (below).
 - **Plan**: your Now, Next and Later board; drag issues between the columns.
 
