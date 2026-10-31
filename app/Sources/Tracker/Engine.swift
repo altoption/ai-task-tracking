@@ -43,6 +43,8 @@ struct Health {
     let ciSetting: Bool?
     /// The theme the engine shows and its theme list (`theme`); nil from an engine without themes.
     let theme: ThemeState?
+    /// Every project and the hidden ones (`hiddenProjects`); nil from an engine without hidden projects.
+    let hiddenProjects: HiddenProjectsState?
 }
 
 /// One row of GET /api/needs-you.
@@ -156,6 +158,20 @@ struct EngineAPI {
         }.resume()
     }
 
+    /// POST /api/hidden-projects: one project ticked or unticked in Settings ▸ Hidden projects; the reply's status as an
+    /// outcome (2xx confirmed, 400 refused, anything else or no reply: retried on the next poll).
+    func setProjectHidden(_ slug: String, hidden: Bool, _ completion: @escaping (HiddenProjectsSync.Outcome) -> Void) {
+        var req = URLRequest(url: base.appendingPathComponent("api/hidden-projects"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 2)
+        req.httpMethod = "POST"
+        req.setValue("1", forHTTPHeaderField: "X-Tracker")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["project": slug, "hidden": hidden])
+        URLSession.shared.dataTask(with: req) { _, response, _ in
+            let outcome = HiddenProjectsSync.Outcome(status: (response as? HTTPURLResponse)?.statusCode)
+            DispatchQueue.main.async { completion(outcome) }
+        }.resume()
+    }
+
     /// GET /api/needs-you (light: id, title, why); without `stalled`, stalled-only rows are left out by the engine.
     func needsYou(stalled: Bool = true, _ completion: @escaping ([NeedsYouItem]?) -> Void) {
         let url = URL(string: StalledFilter.needsYouPath(showStalled: stalled), relativeTo: base) ?? base
@@ -186,7 +202,8 @@ struct EngineAPI {
                                     git: GitState(json: git),
                                     rules: (o["rules"] as? [String: Any]).map(NoteRules.init(json:)),
                                     ciSetting: (o["ci"] as? [String: Any])?["setting"] as? Bool,
-                                    theme: (o["theme"] as? [String: Any]).flatMap(ThemeState.init(json:)))))
+                                    theme: (o["theme"] as? [String: Any]).flatMap(ThemeState.init(json:)),
+                                    hiddenProjects: (o["hiddenProjects"] as? [String: Any]).flatMap(HiddenProjectsState.init(json:)))))
         }
     }
 }

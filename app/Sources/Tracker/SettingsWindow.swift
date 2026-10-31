@@ -13,6 +13,10 @@ final class SettingsWindow: NSWindow {
     /// while the window is open (a theme file added, ⌘K in the browser); `themeShown` is what it was built from.
     private let themeMenu = NSPopUpButton(frame: .zero, pullsDown: false)
     private var themeShown: ([ThemeEntry], String?)?
+    /// Hidden projects: one checkbox per project of the engine's list (UserDefaults `hiddenProjectsList`), ticked when
+    /// hidden. Rebuilt when the list or the hidden set changes (a project added, Hide on a project page).
+    private let hiddenList = NSStackView()
+    private var hiddenShown: ([ProjectEntry], Set<String>)?
     private var defaultsObserver: NSObjectProtocol?
     private let loginCheck = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
     private var perKindNotifications: [NSButton] = []
@@ -47,6 +51,12 @@ final class SettingsWindow: NSWindow {
         stack.addArrangedSubview(note("The same theme as the browser UI (⌘K ▸ Theme), saved as theme in config.yml. "
             + "Add your own as themes/<name>.yml in the data folder."))
 
+        section(stack, "Hidden projects")
+        stack.addArrangedSubview(hiddenProjectsList(SettingKey.hiddenProjects, "Hidden projects"))
+        stack.addArrangedSubview(note("Ticked projects leave the sidebar, lists, Home, search, the board and the menu bar. "
+            + "Their links still open them, and agents still see them. Saved as hiddenProjects in config.yml; "
+            + "a project's page can hide and unhide it too."))
+
         section(stack, "Notifications")
         stack.addArrangedSubview(check(SettingKey.notifications, "Notify me about agent activity"))
         for (key, title) in [(SettingKey.notifyNeedsYou, "An agent needs me (Waiting, Needs decision/review, stalled)"),
@@ -70,7 +80,7 @@ final class SettingsWindow: NSWindow {
 
         contentView = stack
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshThemeMenu() }
+            MainActor.assumeIsolated { self?.refreshThemeMenu(); self?.refreshHiddenList() }
         }
         setContentSize(stack.fittingSize)
         center()
@@ -88,6 +98,7 @@ final class SettingsWindow: NSWindow {
             p.selectItem(at: presets.firstIndex { $0.id == defaults.string(forKey: key) } ?? 0)
         }
         refreshThemeMenu()
+        refreshHiddenList()
         loginCheck.state = SMAppService.mainApp.status == .enabled ? .on : .off
         let notificationsOn = defaults.bool(forKey: SettingKey.notifications)
         perKindNotifications.forEach { $0.isEnabled = notificationsOn }
@@ -108,7 +119,35 @@ final class SettingsWindow: NSWindow {
         themeMenu.selectItem(at: themes.firstIndex { $0.id == chosen } ?? 0)
     }
 
+    /// Rebuild the Hidden projects checkboxes when the engine's list or the hidden set changed; the window resizes
+    /// to fit.
+    private func refreshHiddenList() {
+        let projects = HiddenProjectsSetting.storedList(defaults), hidden = HiddenProjectsSetting.hidden(defaults)
+        if let shown = hiddenShown, shown.0 == projects, shown.1 == hidden { return }
+        hiddenShown = (projects, hidden)
+        hiddenList.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        if projects.isEmpty {
+            hiddenList.addArrangedSubview(note("The projects appear here once the engine is running."))
+        }
+        for p in projects {
+            let c = NSButton(checkboxWithTitle: p.name, target: self, action: #selector(toggledHidden(_:)))
+            c.identifier = NSUserInterfaceItemIdentifier(p.slug)
+            c.state = hidden.contains(p.slug) ? .on : .off
+            hiddenList.addArrangedSubview(c)
+        }
+        if let content = contentView { setContentSize(content.fittingSize) }
+    }
+
     // MARK: building blocks
+
+    private func hiddenProjectsList(_ key: String, _ title: String) -> NSStackView {
+        hiddenList.identifier = NSUserInterfaceItemIdentifier(key)
+        hiddenList.setAccessibilityLabel(title)
+        hiddenList.orientation = .vertical
+        hiddenList.alignment = .leading
+        hiddenList.spacing = 4
+        return hiddenList
+    }
 
     private func section(_ stack: NSStackView, _ title: String) {
         let label = NSTextField(labelWithString: title)
@@ -180,6 +219,12 @@ final class SettingsWindow: NSWindow {
     @objc private func pickedTheme(_ sender: NSPopUpButton) {
         guard let id = sender.selectedItem?.representedObject as? String else { return }
         ThemeSetting.pick(id, defaults: defaults)
+    }
+
+    /// The app sends the change to the engine straight away (AppDelegate.applySettings), or on the next poll.
+    @objc private func toggledHidden(_ sender: NSButton) {
+        guard let slug = sender.identifier?.rawValue else { return }
+        HiddenProjectsSetting.set(slug, hidden: sender.state == .on, defaults: defaults)
     }
 
     @objc private func toggleLogin(_ sender: NSButton) {

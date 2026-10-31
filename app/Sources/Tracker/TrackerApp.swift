@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var settings: SettingsWindow?
     /// The Theme setting's sync with the engine (TrackerCore.ThemeSync); set up before the first applySettings.
     private var themeSync: ThemeSync!
+    /// The Hidden projects setting's sync with the engine (TrackerCore.HiddenProjectsSync).
+    private var hiddenSync: HiddenProjectsSync!
     private var capture: QuickCapturePanel?
     /// Set while the data folder waits for `aitt setup` (the engine isn't started until it finishes).
     private var firstRun: FirstRunWindow?
@@ -69,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.onChange = { [weak self] in self?.render() }
         let api = engine.api
         themeSync = ThemeSync(defaults: .standard) { id, done in api.setTheme(id, done) }
+        hiddenSync = HiddenProjectsSync(defaults: .standard) { slug, hidden, done in api.setProjectHidden(slug, hidden: hidden, done) }
         notifier = Notifier(api: engine.api) { [weak self] route in self?.showWindow(route: route) }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -232,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applySettings() {
         let d = UserDefaults.standard
         themeSync.pushIfPending() // a theme picked in Settings goes to the engine straight away
+        hiddenSync.pushIfPending() // so does a project ticked in Settings ▸ Hidden projects
         applyThemeLook()
         // Dock icon (and app switcher) or menu bar only; the Info.plist starts as LSUIElement so login launches with
         // the setting off never flash a Dock icon.
@@ -275,6 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refresh() {
         let probeNumber = themeSync.beginProbe()
+        let hiddenProbe = hiddenSync.beginProbe()
         engine.api.probe(home: engine.config.home) { [weak self] probe in
             guard let self else { return }
             var h: Health?
@@ -288,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let showCI = UserDefaults.standard.bool(forKey: SettingKey.showCIStatus)
             if CIStatusSetting.needsSync(engine: h?.ciSetting, wanted: showCI) { self.engine.api.setCIStatus(showCI) }
             self.themeSync.sync(h?.theme, probe: probeNumber)
+            self.hiddenSync.sync(h?.hiddenProjects, probe: hiddenProbe)
             self.applyThemeLook()
             if h == nil { self.engine.engineUnreachable() }
             self.render()
