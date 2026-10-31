@@ -26,7 +26,7 @@ quit and replaced, and reopened only if it was running; your data folder and set
   ./install.sh [options]         (from a clone: builds that checkout when no release is used)
 
 It checks what this Mac has, shows what it will do, and asks once. Then it installs the latest notarized
-release (or builds from source when there is none, it fails verification, or --from-source; Bun is then
+release (or builds from source when there is none, it fails verification or doesn't run, or --from-source; Bun is then
 installed if missing), links ~/.local/bin/aitt, runs `aitt setup` and, on a first install, opens the app.
 
 Options:
