@@ -436,4 +436,35 @@ describe('install.sh release path (end to end, nothing built)', () => {
     expect(await t.version()).toBe('0.0.9')
     expect(await t.leftovers()).toEqual([])
   })
+
+  describe('opening the app at the end', () => {
+    const opens = async (t: Awaited<ReturnType<typeof e2e>>) => (await t.calls()).filter((c) => c.startsWith('open'))
+    test('a first install opens it', async () => {
+      const t = await e2e()
+      expect((await t.install(['--yes'])).code).toBe(0)
+      expect(await opens(t)).toEqual([`open ${t.app}`])
+    })
+    test('an upgrade of a running app reopens it', async () => {
+      const t = await e2e()
+      await bundle(t.apps, '0.0.9')
+      await running(t.app)
+      expect((await t.install(['--yes'])).code).toBe(0)
+      expect(await opens(t)).toEqual([`open ${t.app}`])
+    })
+    test('an upgrade of an app that was not running leaves it closed, and says how to open it', async () => {
+      const t = await e2e()
+      await bundle(t.apps, '0.0.9')
+      const r = await t.install(['--yes'])
+      expect(r.code).toBe(0)
+      expect(await opens(t)).toEqual([])
+      expect(r.out).toContain(`Not opened: open "${t.app}"`)
+    })
+    test('--no-launch never opens it', async () => {
+      const t = await e2e()
+      await bundle(t.apps, '0.0.9')
+      await running(t.app)
+      expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+      expect(await opens(t)).toEqual([])
+    })
+  })
 })

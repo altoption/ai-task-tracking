@@ -19,7 +19,7 @@ The user installer at the repo root. Piped from `curl`, or `./install.sh` from a
 
 ```text
 Install AI Task Tracking on this Mac (macOS 13+, Apple Silicon or Intel). Re-running it upgrades: the app is
-quit and replaced; your data folder and settings stay.
+quit and replaced, and reopened only if it was running; your data folder and settings stay.
 
   curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
   … | bash -s -- [options]       (options when piped)
@@ -27,14 +27,14 @@ quit and replaced; your data folder and settings stay.
 
 It checks what this Mac has, shows what it will do, and asks once. Then it installs the latest notarized
 release (or builds from source when there is none, it fails verification, or --from-source; Bun is then
-installed if missing), links ~/.local/bin/aitt, runs `aitt setup` and opens the app.
+installed if missing), links ~/.local/bin/aitt, runs `aitt setup` and, on a first install, opens the app.
 
 Options:
   --yes             don't ask; take the defaults
   --dry-run         only show what was found and what would happen
   --from-source     build from source even when a release is available
   --version <tag>   that release (or source tag) instead of the latest, e.g. v0.2.0
-  --no-launch       don't open the app at the end
+  --no-launch       don't open the app, at the end or after a failure
   --connect <tools> connect these other agent tools (comma-separated, as in aitt setup --connect); a scratch
                     install connects none otherwise
 Environment:
@@ -52,7 +52,7 @@ Environment:
 | `--dry-run` | only show what was found and what would happen |
 | `--from-source` | build from source even when a release is available |
 | `--version <tag>` | that release (or source tag) instead of the latest, e.g. v0.2.0 |
-| `--no-launch` | don't open the app at the end |
+| `--no-launch` | don't open the app, at the end or after a failure |
 | `--connect <tools>` | connect these other agent tools (comma-separated, as in aitt setup --connect); a scratch install connects none otherwise |
 
 ### Environment
