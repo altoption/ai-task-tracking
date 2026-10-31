@@ -5,7 +5,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Config, IssueSummary, ViewDisplay } from '../../src/model'
-import { PriorityIcon, ProgressPill, StatusIcon, Icon } from '../components/icons'
+import { ConceptIcon, PriorityIcon, ProgressPill, StatusIcon, Icon } from '../components/icons'
 import { href, navigate } from '../router'
 import { listRows, type ListRow, type ViewGroup } from '../viewModel'
 import { PropertyCells, type CellCtx } from './IssueCells'
@@ -16,8 +16,9 @@ const ROW = 40
 export function GroupIcon({ by, group, config }: { by: string; group: { key: string }; config: Config | null }) {
   if (by === 'status') return <StatusIcon status={group.key} config={config} />
   if (by === 'priority') return <PriorityIcon priority={Number(group.key)} />
-  if (by === 'project') return <Icon name="project" />
-  if (by === 'parent') return <Icon name="issues" />
+  if (by === 'project') return <ConceptIcon concept="project" />
+  if (by === 'parent') return <ConceptIcon concept="parent" />
+  if (by.startsWith('label-group:')) return <ConceptIcon concept="labels" />
   return null
 }
 

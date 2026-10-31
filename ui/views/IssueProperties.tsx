@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { IssueSummary } from '../../src/model'
 import { listedProjects, searchIssues, useTracker, type IssueDetail } from '../client'
-import { Icon, PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
+import { ConceptIcon, PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
 import { Picker, type PickOption } from '../components/Picker'
 import { CiBadgeLine } from '../components/Ci'
 import { filterOptions, labelOptions } from '../issuePage'
@@ -22,7 +22,7 @@ export function IssueChip({ id, onRemove }: { id: string; onRemove?: () => void 
   return (
     <div className="rel-row">
       <a href={href({ name: 'issue', id })} className="rel-link" title={i?.title}>
-        {i ? <StatusIcon status={i.status} config={config} size={12} /> : <Icon name="warn" size={12} />}
+        {i ? <StatusIcon status={i.status} config={config} size={12} /> : <ConceptIcon concept="warning" size={12} />}
         <span className="id">{id}</span>
         <span className="t">{i ? i.title : 'not found'}</span>
       </a>
@@ -114,9 +114,9 @@ export function IssueProperties({ issue, save }: { issue: IssueDetail; save: Sav
 
       <Section title="Project" error={errors.project}>
         <Picker label="Project" options={projectOpts} selected={[issue.project]} onPick={(v) => { if (v !== issue.project) void run('project', { project: v }) }}
-          trigger={<><Icon name="project" /><span className={project && issue.project !== '_none' ? '' : 'muted'}>{project && issue.project !== '_none' ? project.name : 'No project'}</span></>} />
+          trigger={<><ConceptIcon concept="project" /><span className={project && issue.project !== '_none' ? '' : 'muted'}>{project && issue.project !== '_none' ? project.name : 'No project'}</span></>} />
         <Picker label="Milestone" className="indent" options={milestoneOpts} selected={[issue.milestone ?? '']} onPick={(v) => void run('project', { milestone: v || null })}
-          trigger={<><span className="milestone-dot" /><span className={issue.milestone ? '' : 'muted'}>{issue.milestone ?? 'Set milestone'}</span></>} />
+          trigger={<><ConceptIcon concept="milestone" /><span className={issue.milestone ? '' : 'muted'}>{issue.milestone ?? 'Set milestone'}</span></>} />
       </Section>
 
       <Section title="Relations" error={errors.relations}>

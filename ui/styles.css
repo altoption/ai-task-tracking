@@ -385,7 +385,7 @@ span.tree-toggle { transform: none; }
 .prop-button:hover { background: var(--hover); }
 .prop-add { color: var(--muted); font-size: 12px; }
 .prop-button:hover .prop-add { color: var(--text); }
-.milestone-dot { width: 12px; height: 12px; border: 1.5px dashed var(--muted); border-radius: 50%; flex: none; }
+.milestone-row > .icon { color: var(--muted); }
 .issue-props .picker-menu { left: auto; right: 0; }
 .picker-menu { width: 280px; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .picker-input { border: 0; border-bottom: 1px solid var(--border); background: none; outline: none; padding: 9px 12px; }

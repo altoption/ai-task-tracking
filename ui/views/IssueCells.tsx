@@ -1,6 +1,6 @@
 /** Property pills shared by list rows and board cards (columns come from `display.properties`). */
 import type { IssueSummary, LabelDef, Project } from '../../src/model'
-import { Icon } from '../components/icons'
+import { ConceptIcon } from '../components/icons'
 import { CiDot } from '../components/Ci'
 import { relTime } from '../home'
 
@@ -49,10 +49,10 @@ export function PropertyCells({ issue, props, ctx }: { issue: IssueSummary; prop
     <>
       <CiDot ci={issue.ci} />
       {props.has('labels') && <LabelPills issue={issue} ctx={ctx} />}
-      {props.has('milestone') && issue.milestone && <span className="pill"><Icon name="milestone" size={11} /> {issue.milestone}</span>}
+      {props.has('milestone') && issue.milestone && <span className="pill"><ConceptIcon concept="milestone" size={11} /> {issue.milestone}</span>}
       {props.has('project') && project && <span className="pill"><span className="swatch round" style={{ background: project.color ?? 'var(--accent)' }} />{project.name}</span>}
-      {props.has('due') && issue.due && <span className={`pill${overdue ? ' overdue' : ''}`}><Icon name="calendar" size={11} /> {shortDate(issue.due)}</span>}
-      {props.has('links') && issue.links.length > 0 && <span className="pill" title={issue.links.map((l) => l.title || l.url).join('\n')}><Icon name="link" size={11} /> {issue.links.length}</span>}
+      {props.has('due') && issue.due && <span className={`pill${overdue ? ' overdue' : ''}`}><ConceptIcon concept="dates" size={11} /> {shortDate(issue.due)}</span>}
+      {props.has('links') && issue.links.length > 0 && <span className="pill" title={issue.links.map((l) => l.title || l.url).join('\n')}><ConceptIcon concept="links" size={11} /> {issue.links.length}</span>}
       {props.has('time') && <span className="pill faint" title="Time in status">{relTime(ctx.since(issue), ctx.now)}</span>}
       {props.has('created') && <span className="date" title={`Created ${issue.created}`}>{shortDate(issue.created)}</span>}
       {props.has('updated') && <span className="date" title={`Updated ${issue.updated}`}>{shortDate(issue.updated)}</span>}

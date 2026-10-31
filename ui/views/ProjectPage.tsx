@@ -6,7 +6,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { Project } from '../../src/model'
 import { callTool, inScope, NO_PROJECT, useScope, useTracker } from '../client'
-import { Icon, ProgressRing } from '../components/icons'
+import { ConceptIcon, Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
 import { milestoneProgress, targetLabel } from '../projectPage'
@@ -120,7 +120,7 @@ function Milestones({ project, progress }: { project: Project; progress: ReturnT
           const p = progress.get(m.name) ?? { done: 0, total: 0 }
           return (
             <li key={m.name} className="milestone-row">
-              <span className="milestone-dot" />
+              <ConceptIcon concept="milestone" />
               <span className="m-name" title={m.description}>{m.name}</span>
               <label className="m-date">
                 <span className="muted small">{m.target ? targetLabel(m.target) : 'No date'}</span>
@@ -234,7 +234,7 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
   return (
     <div className="project-page">
       <header className="project-head">
-        <span className="project-icon" style={{ color: project.color ?? 'var(--muted)' }}><Icon name="project" size={20} /></span>
+        <span className="project-icon" style={{ color: project.color ?? 'var(--muted)' }}><ConceptIcon concept="project" size={20} /></span>
         <Name key={project.name} project={project} />
         <select className="project-status" aria-label="Project status" value={project.status}
           onChange={(e) => {

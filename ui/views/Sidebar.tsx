@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { listedProjects, setScope, useScope, useTracker, type Scope, type TrackerState } from '../client'
 import { appHref, href, inTrackerApp, navigate, useHistoryPosition, type Route } from '../router'
 import { TOGGLE_SHORTCUT } from '../sidebarState'
-import { Icon } from '../components/icons'
+import { ConceptIcon, Icon, type Concept } from '../components/icons'
 
 const CLOSED = new Set(['completed', 'canceled', 'duplicate'])
 /** The user docs, served by the engine (src/server/http.ts serveDocs). */
@@ -25,14 +25,14 @@ export function initials(name: string): string {
   return (words.length > 1 ? words[0]![0]! + words[1]![0]! : name.slice(0, 2)).toUpperCase()
 }
 
-function NavItem({ to, active, icon, label, count, color, collapsed }: { to: string; active: boolean; icon?: string; label: string; count?: number; color?: string; collapsed: boolean }) {
+function NavItem({ to, active, icon, label, count, color, collapsed }: { to: string; active: boolean; icon?: Concept; label: string; count?: number; color?: string; collapsed: boolean }) {
   // Collapsed, only the icon shows: the name (and open count) is the tooltip.
   const tip = collapsed ? (count ? `${label} (${count} open)` : label) : undefined
   return (
     <a className={`nav-item${active ? ' active' : ''}`} href={to} aria-current={active ? 'page' : undefined} title={tip} aria-label={collapsed ? label : undefined}>
       {color
         ? (collapsed ? <span className="tile" style={{ background: color }}>{initials(label)}</span> : <span className="swatch" style={{ background: color }} />)
-        : <Icon name={icon ?? 'issues'} />}
+        : <ConceptIcon concept={icon ?? 'issues'} />}
       <span className="label">{label}</span>
       {count !== undefined && count > 0 && <span className="count">{count}</span>}
     </a>
@@ -127,7 +127,7 @@ function NavControls({ collapsed, onToggle }: { collapsed: boolean; onToggle: ()
       <button className="icon-button" onClick={() => history.back()} disabled={!canBack} title="Back (⌘[)" aria-label="Back"><Icon name="back" /></button>
       <button className="icon-button" onClick={() => history.forward()} disabled={!canForward} title="Forward (⌘])" aria-label="Forward"><Icon name="forward" /></button>
       {!collapsed && (
-        <button className="icon-button" onClick={() => navigate({ name: 'home' })} title="Home (G then H)" aria-label="Home"><Icon name="home" /></button>
+        <button className="icon-button" onClick={() => navigate({ name: 'home' })} title="Home (G then H)" aria-label="Home"><ConceptIcon concept="home" /></button>
       )}
     </div>
   )
@@ -156,8 +156,8 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
       <NavControls collapsed={collapsed} onToggle={onToggle} />
       <div className="sidebar-top">
         <ScopeSwitcher collapsed={collapsed} />
-        <button className="icon-button" onClick={onSearch} title="Search (⌘K)" aria-label="Search"><Icon name="search" /></button>
-        <a className="icon-button" href={href({ name: 'new' })} title="New issue (C)" aria-label="New issue"><Icon name="new" /></a>
+        <button className="icon-button" onClick={onSearch} title="Search (⌘K)" aria-label="Search"><ConceptIcon concept="search" /></button>
+        <a className="icon-button" href={href({ name: 'new' })} title="New issue (C)" aria-label="New issue"><ConceptIcon concept="newIssue" /></a>
       </div>
 
       <div className="nav-group">
@@ -178,24 +178,24 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
       <div className="nav-group">
         {views.map((v) => (
           <NavItem key={v.slug} to={href({ name: 'view', slug: v.slug })} active={route.name === 'view' && route.slug === v.slug}
-            icon={v.favorite ? 'star' : 'view'} label={v.name} collapsed={collapsed} />
+            icon={v.favorite ? 'favorite' : 'views'} label={v.name} collapsed={collapsed} />
         ))}
         {state.ready && views.length === 0 && !collapsed && <div className="nav-empty">No saved views</div>}
       </div>
 
       <div className="sidebar-bottom">
         {state.errors.length > 0 && collapsed && (
-          <span className="file-errors" title={`${state.errors.length} file${state.errors.length === 1 ? '' : 's'} can't be read (expand the sidebar for details)`}><Icon name="warn" /></span>
+          <span className="file-errors" title={`${state.errors.length} file${state.errors.length === 1 ? '' : 's'} can't be read (expand the sidebar for details)`}><ConceptIcon concept="warning" /></span>
         )}
         {state.errors.length > 0 && !collapsed && (
           <details className="file-errors">
-            <summary><Icon name="warn" /> {state.errors.length} file{state.errors.length === 1 ? '' : 's'} can't be read</summary>
+            <summary><ConceptIcon concept="warning" /> {state.errors.length} file{state.errors.length === 1 ? '' : 's'} can't be read</summary>
             <ul>{state.errors.map((e) => <li key={e.path}><code>{e.path.split('/').slice(-3).join('/')}</code> {e.message}</li>)}</ul>
           </details>
         )}
         {!collapsed && <OpenInApp route={route} />}
         {/* The docs site the engine serves; same origin, so the app's window shows it too. */}
-        <NavItem to={DOCS_HREF} active={false} icon="help" label="Docs" collapsed={collapsed} />
+        <NavItem to={DOCS_HREF} active={false} icon="docs" label="Docs" collapsed={collapsed} />
         <div className={`conn ${state.connected ? 'on' : 'off'}`} title={state.connected ? 'Live' : 'Reconnecting…'}>
           <span className="conn-dot" /> <span className="label">{state.connected ? 'Live' : state.ready ? 'Reconnecting…' : 'Connecting…'}</span>
         </div>
