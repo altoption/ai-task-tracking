@@ -17,7 +17,9 @@
  * engine starts, checked "2 minutes ago" and not due again for a year.
  *
  * The issue shot opens its attempts list: two agent sessions (two tools), the second pausing with a handoff comment.
- * home-light.png is Home in the Light theme (POST /api/theme around that shot; the others are Dark, the default).
+ * home-light.png is Home in the Light theme (POST /api/theme around that shot; the others are Graphite, the default).
+ *
+ * `startEngine` and `seed` are exported for a manual look at the same sample data (a scratch folder and port).
  *
  * Browser: Playwright's own Chromium when installed (bunx playwright-core install chromium), else Google Chrome.
  */
@@ -33,7 +35,7 @@ const OUT = join(ROOT, 'site', 'src', 'assets', 'screenshots')
 const VIEWPORT = { width: 1440, height: 900 }
 /** The sample data's "today": every write and the browser clock are pinned around it. */
 const T0 = Date.parse('2026-03-02T09:00:00Z')
-const SHOT_TIME = Date.parse('2026-03-12T15:30:00Z')
+export const SHOT_TIME = Date.parse('2026-03-12T15:30:00Z')
 const HOUR = 3_600_000
 
 // ---------- scratch engine ----------
@@ -95,13 +97,14 @@ async function seedCi(home: string): Promise<void> {
   await writeFile(join(home, '.tracker', 'ci.json'), JSON.stringify({ v: 1, prs }))
 }
 
-async function startEngine(scratch: string): Promise<Engine & { ghCalls: string }> {
+export async function startEngine(scratch: string, fixedPort?: number): Promise<Engine & { ghCalls: string }> {
   const home = join(scratch, 'data'), clock = join(scratch, 'clock'), preload = join(scratch, 'clock-preload.mjs')
   await writeFile(clock, String(T0))
   await writeFile(preload, CLOCK_PRELOAD)
   await seedCi(home)
   const gh = await fakeGh(scratch)
-  const port = await freePort()
+  const port = fixedPort ?? await freePort()
+  if (port === 7477) throw new Error('7477 belongs to the installed app')
   const proc = Bun.spawn(['bun', '--preload', preload, 'src/cli.ts', 'serve'], {
     cwd: ROOT,
     env: {
@@ -131,7 +134,7 @@ async function startEngine(scratch: string): Promise<Engine & { ghCalls: string 
 type Args = Record<string, unknown>
 const agent = (workspace: string, branch: string, session = 'shots', client = 'claude-code') => ({ actor: 'agent', workspace, branch, client, session })
 
-async function seed(engine: Engine): Promise<void> {
+export async function seed(engine: Engine): Promise<void> {
   let t = T0
   const call = async (name: string, args: Args, actor?: ReturnType<typeof agent>, stepHours = 3) => {
     t += stepHours * HOUR
@@ -243,7 +246,7 @@ async function capture(base: string, shots: Shot[]): Promise<Map<string, Buffer>
   const browser = await launch()
   const out = new Map<string, Buffer>()
   try {
-    // Fixed locale and time zone: the issue page shows absolute dates. Dark unless a shot names a theme.
+    // Fixed locale and time zone: the issue page shows absolute dates. Graphite (the default) unless a shot names a theme.
     const context = await browser.newContext({
       viewport: VIEWPORT, deviceScaleFactor: 2, colorScheme: 'dark', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
     })
@@ -261,7 +264,7 @@ async function capture(base: string, shots: Shot[]): Promise<Map<string, Buffer>
       await page.waitForTimeout(300)
       out.set(s.file, await page.screenshot({ animations: 'disabled', caret: 'hide' }))
       await page.close()
-      if (s.theme) await setTheme(base, 'dark')
+      if (s.theme) await setTheme(base, 'graphite')
     }
   } finally {
     await browser.close()
