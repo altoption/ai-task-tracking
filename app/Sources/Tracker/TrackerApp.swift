@@ -6,7 +6,7 @@ import WebKit
 
 /// Menu bar shell for the AI Task Tracking engine: runs `Resources/aitt serve`, shows the *Needs you* count and git
 /// trouble in the menu bar, and hosts the web UI in a window toggled by ⌥⌘I. Optional behaviors are settings
-/// (SettingsWindow); quitting first commits and backs up (SyncPanel); agent activity can notify (Notifier).
+/// (the Settings page, through SettingsBridgeHandler; SettingsWindow without an engine); quitting first commits and backs up (SyncPanel); agent activity can notify (Notifier).
 @main
 @MainActor
 enum TrackerMain {
@@ -38,10 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var git = GitState()
     private var notifier: Notifier?
     private var settings: SettingsWindow?
-    /// The Theme setting's sync with the engine (TrackerCore.ThemeSync); set up before the first applySettings.
-    private var themeSync: ThemeSync!
-    /// The Hidden projects setting's sync with the engine (TrackerCore.HiddenProjectsSync).
-    private var hiddenSync: HiddenProjectsSync!
     private var capture: QuickCapturePanel?
     /// Set while the data folder waits for `aitt setup` (the engine isn't started until it finishes).
     private var firstRun: FirstRunWindow?
@@ -69,9 +65,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = Self.mainMenu()
         engine = EngineSupervisor(config: EngineConfig.load())
         engine.onChange = { [weak self] in self?.render() }
-        let api = engine.api
-        themeSync = ThemeSync(defaults: .standard) { id, done in api.setTheme(id, done) }
-        hiddenSync = HiddenProjectsSync(defaults: .standard) { slug, hidden, done in api.setProjectHidden(slug, hidden: hidden, done) }
         notifier = Notifier(api: engine.api) { [weak self] route in self?.showWindow(route: route) }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -236,8 +229,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Re-applied on every UserDefaults change (cheap and idempotent): hotkeys, notifications, the theme.
     private func applySettings() {
         let d = UserDefaults.standard
-        themeSync.pushIfPending() // a theme picked in Settings goes to the engine straight away
-        hiddenSync.pushIfPending() // so does a project ticked in Settings ▸ Hidden projects
         applyThemeLook()
         // Dock icon (and app switcher) or menu bar only; the Info.plist starts as LSUIElement so login launches with
         // the setting off never flash a Dock icon.
@@ -265,10 +256,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notifier?.apply()
     }
 
+    /// ⌘,, the menu and `aitt://settings`: the page when the engine answers now, else the small native window.
     @objc fileprivate func showSettings() {
-        let w = settings ?? SettingsWindow()
-        settings = w
-        w.present()
+        engine.api.probe(home: engine.config.home) { [weak self] probe in
+            guard let self else { return }
+            var reachable = false
+            if case .ours = probe { reachable = true }
+            switch SettingsDestination.choose(engineReachable: reachable, inFirstRun: self.firstRun != nil) {
+            case .page:
+                self.settings?.orderOut(nil)
+                self.showWindow(route: WindowRoute.settings)
+            case .fallback:
+                let w = self.settings ?? SettingsWindow { [weak self] in self?.engine.ensureRunning() }
+                self.settings = w
+                self.render()
+                w.present()
+            }
+        }
     }
 
     @objc private func quickCapture() {
@@ -280,8 +284,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: polling
 
     private func refresh() {
-        let probeNumber = themeSync.beginProbe()
-        let hiddenProbe = hiddenSync.beginProbe()
         engine.api.probe(home: engine.config.home) { [weak self] probe in
             guard let self else { return }
             var h: Health?
@@ -294,11 +296,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let rules = h?.rules { self.notifier?.rules = rules }
             let showCI = UserDefaults.standard.bool(forKey: SettingKey.showCIStatus)
             if CIStatusSetting.needsSync(engine: h?.ciSetting, wanted: showCI) { self.engine.api.setCIStatus(showCI) }
-            self.themeSync.sync(h?.theme, probe: probeNumber)
-            self.hiddenSync.sync(h?.hiddenProjects, probe: hiddenProbe)
+            ThemeSetting.adopt(h?.theme, defaults: .standard)
             self.applyThemeLook()
             if h == nil { self.engine.engineUnreachable() }
             self.render()
+            // The engine came back while the fallback window was up: the real Settings can open now.
+            if h != nil, self.firstRun == nil, let w = self.settings, w.isVisible {
+                w.orderOut(nil)
+                self.showWindow(route: WindowRoute.settings)
+            }
         }
     }
 
@@ -347,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         statusLine.title = gitProblem.map { "\(state) — git \($0)" } ?? state
         statusLine.toolTip = where_
+        settings?.setStatus(statusLine.title)
         if let o = backupOverride, o.until > Date() { backupLine.title = o.text } else {
             backupOverride = nil
             backupLine.title = backingUp ? "Backing up…" : healthy ? BackupText.line(git) : "Backup status unavailable"
@@ -427,8 +434,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openHome() { showWindow(route: "#/") }
 
-    @objc private func backUpNow() {
-        guard !backingUp else { return }
+    @objc private func backUpNow() { runBackup { _ in } }
+
+    /// Back Up Now in the menu and on the Settings page; `done` gets the line the menu shows afterwards.
+    private func runBackup(_ done: @escaping (String) -> Void) {
+        guard !backingUp else { return done("Already backing up") }
         backingUp = true
         backupOverride = nil
         render()
@@ -442,6 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.backupOverride = (text, Date().addingTimeInterval(15))
             self.refresh()
             self.render()
+            done(text)
         }
     }
 
@@ -451,11 +462,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func newIssue() { showWindow(route: "#/new") }
 
     @objc private func toggleLaunchAtLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() } else { try SMAppService.mainApp.register() }
-        } catch {
-            EngineSupervisor.log("launch at login: \(error.localizedDescription)")
-        }
+        LaunchAtLogin.set(!LaunchAtLogin.isOn)
+        window?.settingsChanged()
     }
 
     /// scripts/install.sh sets this on every install (unless SKIP_LOGIN_ITEM=1); the app must register itself.
@@ -506,7 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showWindow(route: String?) {
         if let firstRun { return firstRun.show() }
-        let w = window ?? TrackerWindow(base: engine.api.base)
+        let w = window ?? TrackerWindow(base: engine.api.base) { [weak self] done in self?.runBackup(done) }
         window = w
         w.apply(currentThemeLook)
         w.show(route: route)
@@ -559,12 +567,16 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
     private var loaded = false
     private var mouseMonitor: Any?
     private var look: WindowLook?
+    private let settingsBridge: SettingsBridgeHandler
 
-    init(base: URL) {
+    init(base: URL, backup: @escaping (@escaping (String) -> Void) -> Void) {
         self.base = base
         let config = WKWebViewConfiguration()
         config.applicationNameForUserAgent = "TrackerApp/1" // the web UI hides its "Open in AI Task Tracking" link
+        settingsBridge = SettingsBridgeHandler(engine: base, backup: backup)
+        config.userContentController.addScriptMessageHandler(settingsBridge, contentWorld: .page, name: SettingsBridge.handlerName)
         web = WKWebView(frame: .zero, configuration: config)
+        settingsBridge.web = web
         web.allowsBackForwardNavigationGestures = true
         super.init(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
                    styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -605,6 +617,9 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
             return NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: c.a)
         }
     }
+
+    /// Launch at login changed outside the page: tell it. (UserDefaults changes reach the bridge by themselves.)
+    func settingsChanged() { settingsBridge.push() }
 
     @objc func goBack(_ sender: Any?) { web.goBack() }
     @objc func goForward(_ sender: Any?) { web.goForward() }

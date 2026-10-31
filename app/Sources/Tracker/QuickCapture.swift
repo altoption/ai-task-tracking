@@ -77,17 +77,20 @@ final class QuickCapturePanel: NSPanel, NSTextFieldDelegate {
                 if self.projects.isEmpty { self.show("The AI Task Tracking engine is not answering", error: true) }
                 return
             }
-            // Keep the current choice by its slug in the new list (projects may have been added or renamed since).
-            let keep = self.projects.indices.contains(self.projectPopup.indexOfSelectedItem)
-                ? self.projects[self.projectPopup.indexOfSelectedItem].slug : nil
-            // Hidden projects (Settings ▸ Hidden projects) aren't offered, like everywhere else in the app.
-            let hidden = HiddenProjectsSetting.hidden(.standard)
-            self.projects = list.compactMap { p in (p["slug"] as? String).map { ($0, p["name"] as? String ?? $0) } }
-                .filter { !hidden.contains($0.slug) }
-            self.projectPopup.removeAllItems()
-            self.projectPopup.addItems(withTitles: self.projects.map(\.name))
-            let want = keep ?? UserDefaults.standard.string(forKey: SettingKey.lastCaptureProject)
-            if let i = self.projects.firstIndex(where: { $0.slug == want }) { self.projectPopup.selectItem(at: i) }
+            // Hidden projects (Settings ▸ Projects) aren't offered, like everywhere else in the app; without an answer
+            // about them, the list stays as it was rather than offering them.
+            self.api.hiddenProjects { [weak self] hidden in
+                guard let self, let hidden else { return }
+                // Keep the current choice by its slug in the new list (projects may have been added or renamed since).
+                let keep = self.projects.indices.contains(self.projectPopup.indexOfSelectedItem)
+                    ? self.projects[self.projectPopup.indexOfSelectedItem].slug : nil
+                self.projects = list.compactMap { p in (p["slug"] as? String).map { ($0, p["name"] as? String ?? $0) } }
+                    .filter { !hidden.contains($0.slug) }
+                self.projectPopup.removeAllItems()
+                self.projectPopup.addItems(withTitles: self.projects.map(\.name))
+                let want = keep ?? UserDefaults.standard.string(forKey: SettingKey.lastCaptureProject)
+                if let i = self.projects.firstIndex(where: { $0.slug == want }) { self.projectPopup.selectItem(at: i) }
+            }
         }
     }
 

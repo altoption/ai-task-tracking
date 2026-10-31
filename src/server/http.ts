@@ -328,7 +328,7 @@ async function ciRoute(ci: ServerOpts['ci'], req: Request): Promise<Response> {
   return json(ci.health())
 }
 
-/** `POST /api/theme` `{ "theme": "light" }` — choose the UI theme (the owner only: the app's Settings and ⌘K). */
+/** `POST /api/theme` `{ "theme": "light" }` — choose the UI theme (the owner only: the Settings page, the sidebar and ⌘K). */
 async function themeRoute(store: Store, req: Request): Promise<Response> {
   if (req.headers.get('x-tracker-agent') === '1') return fail(403, 'agents cannot change the theme')
   let body: { theme?: unknown }
@@ -344,7 +344,7 @@ async function themeRoute(store: Store, req: Request): Promise<Response> {
 
 /**
  * `POST /api/hidden-projects` `{ "project": "<slug>", "hidden": true }` — hide or unhide one project folder in the UIs
- * (the owner only: the app's Settings and the project page). One change per request, so the app and a browser
+ * (the owner only: the Settings page and the project page). One change per request, so the app and a browser
  * changing different projects at once don't undo each other. Answers with the list as /api/health reports it.
  */
 async function hiddenProjectsRoute(store: Store, req: Request): Promise<Response> {
@@ -411,7 +411,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
               // CI status: on/off, the app's setting as last heard, and a one-line reason when off or failing ("gh not signed in").
               ...(opts.ci ? { ci: opts.ci.health() } : {}),
               theme: themeHealth(store),
-              // For the app's Settings: every project and the hidden ones (`hiddenProjects` in config.yml).
+              // Every project and the hidden ones (`hiddenProjects` in config.yml).
               hiddenProjects: hiddenHealth(store),
             })
           }

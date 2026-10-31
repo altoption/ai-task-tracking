@@ -5,6 +5,8 @@ import Foundation
 public enum WindowRoute {
     /// The docs site the engine serves at /docs/ (Help in the menus).
     public static let docs = "docs/"
+    /// The Settings page.
+    public static let settings = "#/settings"
 
     /// True when the window must load `route` as a URL; false when setting `location.hash` on the page it shows is
     /// enough (a hash route while the window already shows the UI at the engine's root).

@@ -18,6 +18,7 @@ import { UNINSTALL_USAGE } from '../src/setup/uninstall'
 import { agentTools } from '../src/mcp/surface'
 import { defaultConfig } from '../src/store/metaFiles'
 import { builtinThemes, DEFAULT_THEME } from '../src/engine/themes'
+import { APP_GROUPS, LOGIN_KEY, SETTINGS_TABS, type AppGroup, type SettingsTab } from '../ui/settingsModel'
 
 const ROOT = join(import.meta.dir, '..')
 export const OUT_DIR = join(ROOT, 'site', 'src', 'content', 'docs', 'reference')
@@ -269,31 +270,31 @@ function mcpPage(): string {
 // ---------- Settings ----------
 
 export const SETTINGS_SWIFT = 'app/Sources/TrackerCore/Settings.swift'
-export const WINDOW_SWIFT = 'app/Sources/Tracker/SettingsWindow.swift' // in the app's Swift target folder
 export const HOTKEY_SWIFT = 'app/Sources/Tracker/HotKey.swift'
+export const MODEL_TS = 'ui/settingsModel.ts'
 
-interface SettingRow { section: string; label: string; key: string | null; def: string }
+interface SettingRow { section: string; label: string; key: string | null; def: string; where: string }
 
 export async function settingsRows(): Promise<SettingRow[]> {
   const read = (p: string) => readFile(join(ROOT, p), 'utf8')
-  return parseSettings(await read(SETTINGS_SWIFT), await read(WINDOW_SWIFT), await read(HOTKEY_SWIFT))
+  return parseSettings(await read(SETTINGS_SWIFT), await read(HOTKEY_SWIFT), APP_GROUPS)
 }
 
-/** The Settings rows from the text of Settings.swift, SettingsWindow.swift and HotKey.swift. */
-export function parseSettings(core: string, win: string, hot: string): SettingRow[] {
+/** The Settings rows: the page's rows (ui/settingsModel.ts), with defaults from Settings.swift and shortcuts from HotKey.swift. */
+export function parseSettings(core: string, hot: string, groups: Record<SettingsTab, AppGroup[]>): SettingRow[] {
 
   // SettingKey: `public static let name = "name"`; keys under a comment saying "not shown in Settings" are internal.
   const keyBlock = /public enum SettingKey \{([\s\S]*?)\n\}/.exec(core)?.[1]
   if (!keyBlock) throw new Error(`${SETTINGS_SWIFT}: no SettingKey enum`)
-  const keys = new Map<string, string>() // Swift name -> UserDefaults key
+  const keys = new Set<string>()
   const internal = new Set<string>()
   let hidden = false
   for (const line of keyBlock.split('\n')) {
     if (/^\s*\/\//.test(line)) { hidden = /not shown in Settings/.test(line); continue }
     if (!/\bstatic let\b/.test(line)) continue
     const m = /public static let (\w+) = "([^"]+)"/.exec(line)
-    if (!m) throw new Error(`${SETTINGS_SWIFT}: can't read the key "${line.trim()}"`)
-    keys.set(m[1]!, m[2]!)
+    if (!m || m[1] !== m[2]) throw new Error(`${SETTINGS_SWIFT}: can't read the key "${line.trim()}"`)
+    keys.add(m[1]!)
     if (hidden) internal.add(m[1]!)
   }
   if (!keys.size) throw new Error(`${SETTINGS_SWIFT}: no keys parsed from SettingKey`)
@@ -317,70 +318,46 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
     }))
   }
 
-  // The window, in order: sections, the login checkbox, checkboxes and popups bound to SettingKeys.
-  const init = /\binit\(\) \{([\s\S]*?)\n\s*contentView = /.exec(win)?.[1]
-  if (!init) throw new Error(`${WINDOW_SWIFT}: no init() body`)
-  const loginLabel = /loginCheck = NSButton\(checkboxWithTitle: "([^"]+)"/.exec(win)?.[1]
+  // Which HotKeyPreset list each shortcut menu offers: `SettingKey.x` -> `HotKeyPreset.y` (SettingsBridgeHandler reads the same pairs).
+  const presetOf: Record<string, string> = { openWindowHotKeyPreset: 'openWindow', quickCaptureHotKeyPreset: 'quickCapture' }
+
   const rows: SettingRow[] = []
   const labelled = new Set<string>()
-  let section = ''
-  const token = /section\(stack, "([^"]+)"\)|addArrangedSubview\(loginCheck\)|(?:check\(|\()SettingKey\.(\w+), "([^"]+)"\)|popup\(SettingKey\.(\w+), HotKeyPreset\.(\w+)\)|themePopup\(SettingKey\.(\w+), "([^"]+)"\)|hiddenProjectsList\(SettingKey\.(\w+), "([^"]+)"\)/g
-  let lastToggle = ''
-  for (const m of init.matchAll(token)) {
-    if (m[1]) { section = m[1]; continue }
-    if (m[0].includes('loginCheck')) {
-      if (!loginLabel) throw new Error(`${WINDOW_SWIFT}: loginCheck has no title`)
-      rows.push({ section, label: loginLabel, key: null, def: '— (the app\'s macOS login item, not a UserDefaults key)' })
-      continue
-    }
-    if (m[2]) {
-      const name = m[2], label = m[3]!
-      const key = keys.get(name)
-      if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
-      const d = defaults.get(name)
-      if (d !== 'true' && d !== 'false') throw new Error(`${SETTINGS_SWIFT}: SettingKey.${name} has no boolean default`)
-      rows.push({ section, label, key, def: d === 'true' ? 'on' : 'off' })
-      labelled.add(name); lastToggle = label
-      continue
-    }
-    if (m[4]) {
-      const name = m[4], list = presets.get(m[5]!)
-      const key = keys.get(name)
-      if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
-      if (!list?.length) throw new Error(`${HOTKEY_SWIFT}: no presets in HotKeyPreset.${m[5]}`)
-      const d = /^"([^"]+)"$/.exec(defaults.get(name) ?? '')?.[1]
-      const chosen = list.find((p) => p.id === d)
-      if (!chosen) throw new Error(`${SETTINGS_SWIFT}: SettingKey.${name} default "${d}" isn't a HotKeyPreset.${m[5]} id`)
-      const others = list.filter((p) => p !== chosen).map((p) => p.label)
-      rows.push({ section, label: `${lastToggle}: shortcut`, key, def: `${chosen.label} (also ${others.join(', ')})` })
-      labelled.add(name)
-      continue
-    }
-    if (m[6]) {
-      // The Theme popup lists the engine's themes; the choice is `theme` in config.yml, mirrored in this key.
-      const name = m[6], key = keys.get(name)
-      if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
-      // ThemeSetting.defaultTheme is the engine's DEFAULT_THEME (tests/engine/themes.test.ts keeps them equal).
-      const raw = defaults.get(name) ?? ''
-      const d = raw === 'ThemeSetting.defaultTheme' ? DEFAULT_THEME : /^"([^"]+)"$/.exec(raw)?.[1]
-      const t = builtinThemes().find((x) => x.id === d)
-      if (!t) throw new Error(`${SETTINGS_SWIFT}: SettingKey.${name} default "${d}" isn't a built-in theme`)
+  const APP = 'Only in the app'
+  for (const { id, name: section } of SETTINGS_TABS) {
+    // The engine's settings, stored in config.yml, come first on their tabs.
+    if (id === 'appearance') {
+      const t = builtinThemes().find((x) => x.id === DEFAULT_THEME)!
       const others = builtinThemes().filter((x) => x.id !== t.id).map((x) => x.name)
-      rows.push({ section, label: m[7]!, key, def: `${t.name} (also ${others.join(', ')} and your theme files; saved as \`theme\` in config.yml)` })
-      labelled.add(name)
-      continue
+      rows.push({ section, label: 'Theme', key: '`theme` in config.yml', def: `${t.name} (also ${others.join(', ')} and your theme files)`, where: 'App and browser' })
     }
-    if (m[8]) {
-      // The Hidden projects list: one checkbox per project; the choice is `hiddenProjects` in config.yml, mirrored here.
-      const name = m[8], key = keys.get(name)
-      if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
-      rows.push({ section, label: m[9]!, key, def: 'none (one checkbox per project, and No project; saved as \`hiddenProjects\` in config.yml)' })
-      labelled.add(name)
+    if (id === 'projects') rows.push({ section, label: 'Hidden projects', key: '`hiddenProjects` in config.yml', def: 'none (one switch per project, and No project)', where: 'App and browser' })
+    let lastToggle = ''
+    for (const row of groups[id].flatMap((g) => g.rows)) {
+      if (row.kind === 'note') continue
+      if (row.kind === 'backupNow') { rows.push({ section, label: row.label, key: null, def: '— (an action)', where: APP }); continue }
+      if (row.key === LOGIN_KEY) { rows.push({ section, label: row.label, key: null, def: '— (the app\'s macOS login item, not a UserDefaults key)', where: `${APP}; also in its fallback window` }); continue }
+      if (!keys.has(row.key)) throw new Error(`${MODEL_TS}: ${row.key} isn't a SettingKey in ${SETTINGS_SWIFT}`)
+      labelled.add(row.key)
+      if (row.kind === 'switch') {
+        const d = defaults.get(row.key)
+        if (d !== 'true' && d !== 'false') throw new Error(`${SETTINGS_SWIFT}: SettingKey.${row.key} has no boolean default`)
+        rows.push({ section, label: row.label, key: `\`${row.key}\``, def: d === 'true' ? 'on' : 'off', where: APP })
+        lastToggle = row.label
+        continue
+      }
+      const list = presets.get(presetOf[row.key] ?? '')
+      if (!list?.length) throw new Error(`${HOTKEY_SWIFT}: no presets for ${row.key}`)
+      const d = /^"([^"]+)"$/.exec(defaults.get(row.key) ?? '')?.[1]
+      const chosen = list.find((p) => p.id === d)
+      if (!chosen) throw new Error(`${SETTINGS_SWIFT}: SettingKey.${row.key} default "${d}" isn't one of its presets`)
+      const others = list.filter((p) => p !== chosen).map((p) => p.label)
+      rows.push({ section, label: `${lastToggle}: shortcut`, key: `\`${row.key}\``, def: `${chosen.label} (also ${others.join(', ')})`, where: APP })
     }
   }
-  for (const name of keys.keys()) {
+  for (const name of keys) {
     if (internal.has(name) || labelled.has(name)) continue
-    throw new Error(`SettingKey.${name} (${SETTINGS_SWIFT}) has no label in ${WINDOW_SWIFT}: add it to the window, or put it under a "not shown in Settings" comment`)
+    throw new Error(`SettingKey.${name} (${SETTINGS_SWIFT}) has no row in ${MODEL_TS}: add one, or put it under a "not shown in Settings" comment`)
   }
   for (const name of defaults.keys()) if (!keys.has(name)) throw new Error(`${SETTINGS_SWIFT}: a default for unknown SettingKey.${name}`)
   return rows
@@ -389,17 +366,22 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
 async function settingsPage(): Promise<string> {
   const rows = await settingsRows()
   const parts = [
-    'Every control in the app\'s Settings window (⌘, or **Settings…** in the menu), with its default. Each one is',
-    'stored in the app\'s UserDefaults domain under its key: `defaults read io.github.altoption.ai-task-tracking <key>`.',
+    'Every control on the Settings page (the gear in the sidebar, `#/settings`; in the app also ⌘, or **Settings…** in',
+    'the menu), with its default. Theme and Hidden projects are stored in config.yml, so they work in the app and in a',
+    'browser. The others are stored in the app\'s UserDefaults domain under their key (`defaults read',
+    'io.github.altoption.ai-task-tracking <key>`), which the engine can\'t read: a browser shows them as *Only in the app*.',
+    '',
+    'When the engine can\'t be reached, ⌘, opens a small window instead, with Launch at login and how to get the engine',
+    'back; it switches to the page once the engine answers.',
   ]
   for (const section of [...new Set(rows.map((r) => r.section))]) {
-    parts.push('', `## ${section}`, '', table(['Setting', 'Default', 'Key'], rows.filter((r) => r.section === section).map((r) => [cell(r.label), cell(r.def), r.key ? code(r.key) : '—'])))
+    parts.push('', `## ${section}`, '', table(['Setting', 'Default', 'Where', 'Stored as'], rows.filter((r) => r.section === section).map((r) => [cell(r.label), cell(r.def), cell(r.where), r.key ?? '—'])))
   }
   return page({
     title: 'Settings',
-    description: 'Every toggle in the app\'s Settings window, its default and its UserDefaults key.',
+    description: 'Every control on the Settings page, its default, where it works and where it is stored.',
     order: 4,
-    source: [SETTINGS_SWIFT, WINDOW_SWIFT, HOTKEY_SWIFT],
+    source: [MODEL_TS, SETTINGS_SWIFT, HOTKEY_SWIFT],
     body: parts.join('\n'),
   })
 }
@@ -415,8 +397,8 @@ const CONFIG_DOCS: Record<string, string> = {
   stalled: 'When open work counts as stalled and joins Needs you. `idleHours`: In Progress with no edit or comment for this long. `windowDays`, `reopens`, `sessions`: in that many days, reopened (back to In Progress from Done, Canceled, Duplicate, Todo or Backlog; never from Waiting) at least `reopens` times, or more than `sessions` agent sessions since it was last Done. 0 turns a rule off.',
   ci: 'CI status on linked GitHub PRs, fetched in the background with your `gh`. `enabled`: false turns it off (no `gh` calls, no badges, nothing in Needs you). `refreshMinutes`: how often an open PR is re-checked; merged and closed PRs are checked until their checks settle, then never again.',
   nextNumber: 'Project key → the next issue number. Maintained by the engine.',
-  hiddenProjects: 'Project slugs hidden from the app window, the browser UI and the menu bar (\`_none\` is the issues without a project). They appear nowhere except by direct link: not in the sidebar, lists, Home, saved views, the board, the activity feed, counts (a visible epic\'s sub-issue count and progress leave them out), filter and group options, search, Needs you or quick capture, and no notifications; a visible issue names a hidden child, parent, blocker or related issue by id only. A direct link (\`#/issue/ID\`, \`aitt://issue/ID\`, the project page) or an exact id in ⌘K still opens them, and agents see no change. Set it from the app\'s Settings ▸ Hidden projects (the only place for \`_none\`) or a project page\'s Hide project / Unhide. A view setting, not access control: the endpoint turns away requests marked as an agent\'s, a header check rather than enforcement. A slug that names no project is ignored.',
-  theme: 'The UI theme, the same in the browser and the app window: `graphite`, `dark`, `light`, `system` (Match macOS), `midnight`, `plum`, `paper`, `high-contrast`, or the id of a theme file in `themes/` (`themes/ocean.yml` is `ocean`). Without a `theme`, and for an unknown id, the UI shows Graphite. Set it from the app\'s Settings or ⌘K ▸ Theme; see the Themes guide.',
+  hiddenProjects: 'Project slugs hidden from the app window, the browser UI and the menu bar (\`_none\` is the issues without a project). They appear nowhere except by direct link: not in the sidebar, lists, Home, saved views, the board, the activity feed, counts (a visible epic\'s sub-issue count and progress leave them out), filter and group options, search, Needs you or quick capture, and no notifications; a visible issue names a hidden child, parent, blocker or related issue by id only. A direct link (\`#/issue/ID\`, \`aitt://issue/ID\`, the project page) or an exact id in ⌘K still opens them, and agents see no change. Set it from Settings ▸ Projects (the only place for \`_none\`) or a project page\'s Hide project / Unhide. A view setting, not access control: the endpoint turns away requests marked as an agent\'s, a header check rather than enforcement. A slug that names no project is ignored.',
+  theme: 'The UI theme, the same in the browser and the app window: `graphite`, `dark`, `light`, `system` (Match macOS), `midnight`, `plum`, `paper`, `high-contrast`, or the id of a theme file in `themes/` (`themes/ocean.yml` is `ocean`). Without a `theme`, and for an unknown id, the UI shows Graphite. Set it from Settings ▸ Appearance, the sidebar\'s theme menu or ⌘K ▸ Theme; see the Themes guide.',
 }
 
 function configPage(): string {
