@@ -89,5 +89,6 @@ describe('showing the window', () => {
     expect(chips.map((c) => c.text)).toEqual(['Status is Done', 'Closed in the last 7 days'])
     expect(chips[1]!.keys).toEqual(['closedWithinDays'])
     expect(activeChips({ closedWithinDays: 1 }, [], { projects: [], issues: new Map() })[0]!.text).toBe('Closed in the last day')
+    for (const bad of ['7', 0, -1, 1.5]) expect(activeChips({ closedWithinDays: bad as number }, [], { projects: [], issues: new Map() })).toEqual([])
   })
 })

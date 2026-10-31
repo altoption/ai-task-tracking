@@ -34,6 +34,12 @@ export function statusTypeOf(statuses: StatusDef[]): (name: string) => StatusTyp
   return (name) => m.get(name) ?? 'backlog'
 }
 
+/** The filter's rolling closed window in days, or undefined when there is none: views are hand-editable, so anything but a positive whole number is no window, everywhere. */
+export function closedWindowDays(f: Pick<Filter, 'closedWithinDays'>): number | undefined {
+  const d: unknown = f.closedWithinDays
+  return typeof d === 'number' && Number.isInteger(d) && d > 0 ? d : undefined
+}
+
 /** Pure: every criterion must match; list criteria match any listed value. Closed issues pass only with `includeDone`, an explicit `status` list or `closedWithinDays`. */
 export function filterPredicate<T extends FilterIssue>(f: Filter, ctx: FilterCtx<T>): (i: T) => boolean {
   const type = statusTypeOf(ctx.statuses)
@@ -43,9 +49,9 @@ export function filterPredicate<T extends FilterIssue>(f: Filter, ctx: FilterCtx
   const workspace = set(f.workspace), priority = set(f.priority), milestone = set(f.milestone)
   const date = (s?: string) => (s ? Date.parse(s) : NaN)
   const updatedAfter = date(f.updatedAfter), createdAfter = date(f.createdAfter)
-  const days = f.closedWithinDays
-  const closedSince = typeof days === 'number' && days > 0 && Number.isFinite(days) ? (ctx.now ?? Date.now()) - days * 86_400_000 : NaN
-  const rolling = !Number.isNaN(closedSince)
+  const days = closedWindowDays(f)
+  const closedSince = days ? (ctx.now ?? Date.now()) - days * 86_400_000 : NaN
+  const rolling = !!days
   return (i) => {
     if (status) { if (!status.has(i.status)) return false } else if (!f.includeDone && !rolling && !open(i)) return false
     if (rolling && (open(i) || !(Date.parse(ctx.closedAt?.(i) ?? i.updated) >= closedSince))) return false

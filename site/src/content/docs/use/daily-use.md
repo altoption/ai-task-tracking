@@ -124,15 +124,17 @@ The app adds four saved views to your data folder the first time the engine star
 | **Active by Project** | issues in a started status, leaving out the ones that wait for you (Waiting) | board, by project |
 | **Unblock First** | open issues that block other open issues | list, by priority |
 | **High Priority** | open Urgent and High issues | board, by project |
-| **Shipped This Week** | issues in a completed status, closed in the last 7 days | list, by project |
+| **Shipped This Week** | issues in a completed status, closed in the last 7 days | list, by project, newest close first |
 
-They use the status names in your `config.yml`, so renamed statuses work. They are ordinary files in `views/`: change
+They use the status names in your `config.yml` when they are added; if you rename a status later, edit the view too.
+They are ordinary files in `views/`: change
 one and save it, or delete its `.yml` file and it stays deleted. A view you already have with the same file name or the
 same name is left as it is, and that default isn't added. `views/.default-views-offered` lists what has been offered;
 remove a line to be offered that view again at the next start.
 
 **Closed in the last N days** (the filter menu, under **Dates**) is a window that moves with today. It shows only closed
-issues, by when they were closed: a later comment doesn't bring an issue back, and reopening one takes it out. With no
+issues, by when they were closed: a later comment doesn't bring an issue back, reopening one takes it out, and a canceled
+issue that is then finished counts from when it was finished. With no
 **Status** filter, canceled and duplicate issues count as closed too. Issues closed before the activity log began, or
 on another Mac, go by their last update unless they were imported with a close date. The **Completed issues** display
 option has no effect on a view with this filter, as on a view that names statuses.

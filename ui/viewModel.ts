@@ -6,7 +6,7 @@
  */
 import type { FeedEvent } from '../src/engine/eventlog'
 import type { CompletedWindow, Filter, IssueSummary, LabelDef, StatusDef, View, ViewDisplay } from '../src/model'
-import { CLOSED_TYPES, filterPredicate, matchesText, statusTypeOf } from '../src/shared/filter'
+import { CLOSED_TYPES, closedWindowDays, filterPredicate, matchesText, statusTypeOf } from '../src/shared/filter'
 import { byIssueNumber } from './issuePage'
 
 export interface ViewCtx {
@@ -48,7 +48,7 @@ export const PROPERTIES: { key: string; label: string }[] = [
 ]
 export const ORDERINGS = [
   { value: 'priority', label: 'Priority' }, { value: 'updated', label: 'Last updated' },
-  { value: 'created', label: 'Created' }, { value: 'manual', label: 'Manual (ID)' },
+  { value: 'created', label: 'Created' }, { value: 'closed', label: 'Closed' }, { value: 'manual', label: 'Manual (ID)' },
 ]
 /** Grouping choices: fixed ones plus one per label group. */
 export function groupingOptions(labels: Pick<LabelDef, 'group'>[]): { value: string; label: string }[] {
@@ -69,6 +69,10 @@ export function comparator(orderBy: string): (a: IssueSummary, b: IssueSummary) 
   switch (orderBy) {
     case 'updated': return (a, b) => desc(a.updated, b.updated) || byIssueNumber(a, b)
     case 'created': return (a, b) => desc(a.created, b.created) || byIssueNumber(a, b)
+    case 'closed': { // newest close first; by date, since imported close dates may be written differently
+      const at = (i: IssueSummary) => Date.parse(i.closedAt ?? '') || 0
+      return (a, b) => at(b) - at(a) || byIssueNumber(a, b)
+    }
     case 'manual': return byIssueNumber
     default: return (a, b) => prioRank(a.priority) - prioRank(b.priority) || desc(a.updated, b.updated) || byIssueNumber(a, b)
   }
@@ -92,7 +96,9 @@ function dimension(by: string, filter: Filter, ctx: Required<Pick<ViewCtx, 'stat
     const cands = filter.status?.length
       ? [...ctx.statuses.map((s) => s.name).filter((n) => filter.status!.includes(n)), ...filter.status.filter((n) => !ctx.statuses.some((s) => s.name === n))]
       : ctx.statuses.filter((s) => showDone || !CLOSED_TYPES.has(type(s.name))).map((s) => s.name)
-    return { keysOf: (i) => [i.status], label: (k) => k, candidates: cands, rest: alpha }
+    // A rolling closed window shows closed issues only, so open columns could never fill.
+    const candidates = closedWindowDays(filter) ? cands.filter((n) => CLOSED_TYPES.has(type(n))) : cands
+    return { keysOf: (i) => [i.status], label: (k) => k, candidates, rest: alpha }
   }
   if (by === 'priority') {
     const cands = filter.priority?.length ? PRIORITY_ORDER.filter((p) => filter.priority!.includes(Number(p))) : PRIORITY_ORDER
@@ -152,7 +158,8 @@ export function applyView(issues: IssueSummary[], v: Pick<View, 'filter' | 'disp
   const type = statusTypeOf(ctx.statuses)
   const closed = (i: IssueSummary) => CLOSED_TYPES.has(type(i.status))
   // Completed-issues window (display) applies when the filter doesn't name statuses or its own closed window.
-  const win = !f.status?.length && !f.closedWithinDays && d.completed ? d.completed : undefined
+  const rolling = !!closedWindowDays(f)
+  const win = !f.status?.length && !rolling && d.completed ? d.completed : undefined
   const showDone = win ? win !== 'none' : !!f.includeDone
   const keep = filterPredicate<IssueSummary>({ ...f, includeDone: showDone }, {
     statuses: ctx.statuses, get: (id) => byId.get(id), workspaces: (i) => i.workspaces, blocks: (i) => i.blocks,
@@ -169,9 +176,9 @@ export function applyView(issues: IssueSummary[], v: Pick<View, 'filter' | 'disp
   const cmp = comparator(d.orderBy)
   out.sort(cmp)
   const full = { ...ctx, byId }
-  const cols = bucket(out, dimension(d.groupBy, f, full, cmp, showDone), !!d.showEmptyColumns)
+  const cols = bucket(out, dimension(d.groupBy, f, full, cmp, showDone || rolling), !!d.showEmptyColumns)
   const rowsBy = d.layout === 'board' && d.rowsBy && d.rowsBy !== NONE ? d.rowsBy : null
-  const rowDim = rowsBy ? dimension(rowsBy, f, full, cmp, showDone) : null
+  const rowDim = rowsBy ? dimension(rowsBy, f, full, cmp, showDone || rolling) : null
   const groups: ViewGroup[] = cols.buckets.map((b) => (rowDim ? { ...b, rows: bucket(b.issues, rowDim, false).buckets } : b))
   return { groups, hidden: cols.hidden, total: out.length }
 }
@@ -269,7 +276,8 @@ export function viewToQuery(state: ViewState, base: ViewState): string {
   if (f.parent !== undefined) p.set('parent', f.parent ?? '-')
   for (const [k, q] of FILTER_BOOLS) if (f[k] !== undefined) p.set(q, f[k] ? '1' : '0')
   for (const [k, q] of FILTER_STRINGS) if (f[k]) p.set(q, f[k]!)
-  if (f.closedWithinDays) p.set('closed', String(f.closedWithinDays))
+  const closedDaysOut = closedWindowDays(f)
+  if (closedDaysOut) p.set('closed', String(closedDaysOut))
   return p.toString()
 }
 
@@ -300,8 +308,8 @@ export function viewFromQuery(query: string, base: ViewState): ViewState {
   if (parent) filter.parent = parent === '-' ? null : parent // empty = absent
   for (const [k, q] of FILTER_BOOLS) { const b = bool(q); if (b !== undefined) filter[k] = b }
   for (const [k, q] of FILTER_STRINGS) { const s = p.get(q); if (s) filter[k] = s }
-  const closedDays = Number(p.get('closed'))
-  if (Number.isInteger(closedDays) && closedDays > 0) filter.closedWithinDays = closedDays
+  const closedDays = closedWindowDays({ closedWithinDays: Number(p.get('closed')) })
+  if (closedDays) filter.closedWithinDays = closedDays
   return { filter, display }
 }
 

@@ -94,7 +94,7 @@ export class Store {
   private feedStart = Infinity
   /** Per issue, from the feed log: when it last moved into a completed status (ms). Never pruned. */
   private doneTimes = new Map<string, number>()
-  /** Per issue, from the feed log: when it last went from open to any closed status (ms); NaN once it has been reopened. */
+  /** Per issue, from the feed log: when it was last closed (ms; `rememberClose`); NaN once it has been reopened. */
   private closedTimes = new Map<string, number>()
 
   /** Issue serializer (a seam so tests can inject a broken one; writes are verified against it). */
@@ -486,11 +486,11 @@ export class Store {
           else console.error(`[store] could not add the default view ${v.slug}: ${errMsg(e)}`)
         }
       }
-      if (record.length > offered.length) await writeOfferedViews(this.root, record)
-      if (added) {
-        await this.loadViews()
-        this.emit({ kind: 'meta', note: 'add default views' })
-      }
+      const marked = record.length > offered.length
+      if (marked) await writeOfferedViews(this.root, record)
+      if (added) await this.loadViews()
+      // The watcher ignores dot files, so this event is what gets the marker committed when no view was added.
+      if (added || marked) this.emit({ kind: 'meta', note: added ? 'add default views' : 'record default views offered' })
     } catch (e) {
       console.error(`[store] could not add the default views: ${errMsg(e)}`)
     }
@@ -657,10 +657,11 @@ export class Store {
         return
       }
       this.setIssue(issue)
-      this.emit({ kind: 'issue', issue, ...(prev ? { prev } : {}), actor: EXTERNAL })
       const at = now()
       const events = prev ? diffFeed(prev, issue, EXTERNAL, at) : [{ at, actor: EXTERNAL, id: issue.id, kind: 'created' as const, text: issue.title }]
+      // Log first: a hand edit doesn't bump `updated`, so the issue event's close time has to come from the log.
       for (const f of events) await this.feed(f)
+      this.emit({ kind: 'issue', issue, ...(prev ? { prev } : {}), actor: EXTERNAL })
     })
   }
 
@@ -833,16 +834,28 @@ export class Store {
     if (t < this.feedStart) this.feedStart = t
   }
 
+  /**
+   * A close is a move from an open status (or none logged), or from a non-completed closed one into a completed one:
+   * Canceled then Done was finished now; Done then Canceled keeps its time. Names no longer in the config (a renamed
+   * status) say nothing, so a rename is neither a close nor a reopen.
+   */
+  private rememberClose(id: string, from: string | undefined, to: string, t: number): void {
+    const typeOf = (name: string) => this.config.statuses.find((x) => x.name === name)?.type
+    const toType = typeOf(to)
+    if (!toType) return
+    if (!CLOSED_TYPES.has(toType)) { this.closedTimes.set(id, NaN); return }
+    const fromType = from ? typeOf(from) : undefined
+    if (from && !fromType) return
+    if (!fromType || !CLOSED_TYPES.has(fromType) || (toType === 'completed' && fromType !== 'completed')) this.closedTimes.set(id, t)
+  }
+
   private remember(e: FeedEvent): void {
     const t = Date.parse(e.at)
     if (!Number.isFinite(t)) return
     this.noteFeedStart(e.at)
     this.lastWrite.set(e.id, Math.max(t, this.lastWrite.get(e.id) ?? 0))
     if (e.kind === 'status' && e.to && this.config.statuses.find((x) => x.name === e.to)?.type === 'completed') this.doneTimes.set(e.id, t)
-    if (e.kind === 'status' && e.to) {
-      if (!this.isClosedStatus(e.to)) this.closedTimes.set(e.id, NaN)
-      else if (!e.from || !this.isClosedStatus(e.from)) this.closedTimes.set(e.id, t)
-    }
+    if (e.kind === 'status' && e.to) this.rememberClose(e.id, e.from, e.to, t)
     const session = e.actor.actor === 'agent' && e.actor.session ? e.actor.session : undefined
     if (e.kind !== 'status' && !session) return
     const h: HistoryEntry = { t }
