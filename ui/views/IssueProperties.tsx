@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { IssueSummary } from '../../src/model'
-import { listedProjects, searchIssues, useTracker, type IssueDetail } from '../client'
+import { listedProjects, projectName, searchIssues, useTracker, type IssueDetail } from '../client'
 import { ConceptIcon, PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
 import { Picker, type PickOption } from '../components/Picker'
 import { CiBadgeLine } from '../components/Ci'
@@ -17,14 +17,16 @@ const fmtDate = (iso: string) => {
 
 /** A linked issue in the sidebar: status, id, title (or a note when the id doesn't exist). */
 export function IssueChip({ id, onRemove }: { id: string; onRemove?: () => void }) {
-  const { issues, config } = useTracker()
+  const { issues, config, hidden } = useTracker()
   const i = issues.get(id)
+  // Not in the live store: in a hidden project (the link still opens it), or really missing.
+  const note = hidden.issues.has(id) ? 'in a hidden project' : 'not found'
   return (
     <div className="rel-row">
       <a href={href({ name: 'issue', id })} className="rel-link" title={i?.title}>
-        {i ? <StatusIcon status={i.status} config={config} size={12} /> : <ConceptIcon concept="warning" size={12} />}
+        {i ? <StatusIcon status={i.status} config={config} size={12} /> : <ConceptIcon concept={hidden.issues.has(id) ? 'project' : 'warning'} size={12} />}
         <span className="id">{id}</span>
-        <span className="t">{i ? i.title : 'not found'}</span>
+        <span className={i ? 't' : 't muted'}>{i ? i.title : note}</span>
       </a>
       {onRemove && <button type="button" className="rel-x" onClick={onRemove} aria-label={`Remove ${id}`}>×</button>}
     </div>
@@ -114,7 +116,7 @@ export function IssueProperties({ issue, save }: { issue: IssueDetail; save: Sav
 
       <Section title="Project" error={errors.project}>
         <Picker label="Project" options={projectOpts} selected={[issue.project]} onPick={(v) => { if (v !== issue.project) void run('project', { project: v }) }}
-          trigger={<><ConceptIcon concept="project" /><span className={project && issue.project !== '_none' ? '' : 'muted'}>{project && issue.project !== '_none' ? project.name : 'No project'}</span></>} />
+          trigger={<><ConceptIcon concept="project" /><span className={issue.project !== '_none' ? '' : 'muted'}>{issue.project !== '_none' ? projectName(state, issue.project) : 'No project'}</span></>} />
         <Picker label="Milestone" className="indent" options={milestoneOpts} selected={[issue.milestone ?? '']} onPick={(v) => void run('project', { milestone: v || null })}
           trigger={<><ConceptIcon concept="milestone" /><span className={issue.milestone ? '' : 'muted'}>{issue.milestone ?? 'Set milestone'}</span></>} />
       </Section>

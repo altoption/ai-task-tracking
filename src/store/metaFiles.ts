@@ -29,6 +29,7 @@ export function defaultConfig(): Config {
     ci: { ...DEFAULT_CI },
     nextNumber: {},
     theme: DEFAULT_THEME,
+    hiddenProjects: [],
   }
 }
 
@@ -186,7 +187,15 @@ async function patchYamlFile(path: string, obj: Record<string, unknown>, default
 
 // ---------- config ----------
 
-const CONFIG_KEYS = ['port', 'statuses', 'workspaces', 'needsYou', 'stalled', 'ci', 'nextNumber', 'theme']
+const CONFIG_KEYS = ['port', 'statuses', 'workspaces', 'needsYou', 'stalled', 'ci', 'nextNumber', 'theme', 'hiddenProjects']
+
+/** `hiddenProjects`: a list of slugs, trimmed and deduplicated; anything else (a string, numbers, empties) is dropped. */
+function normalizeHidden(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const x of raw) if (typeof x === 'string' && x.trim() && !out.includes(x.trim())) out.push(x.trim())
+  return out
+}
 
 export async function readConfig(root: string): Promise<Config> {
   const d = defaultConfig()
@@ -201,6 +210,7 @@ export async function readConfig(root: string): Promise<Config> {
     ci: normalizeCi(raw.ci),
     nextNumber: raw.nextNumber ?? d.nextNumber,
     theme: typeof raw.theme === 'string' && raw.theme.trim() ? raw.theme.trim() : d.theme,
+    hiddenProjects: normalizeHidden(raw.hiddenProjects),
     ...(extra ? { extra } : {}),
   }
 }

@@ -23,6 +23,7 @@ The data folder's `config.yml`. A missing key takes its default; unknown top-lev
 | `ci` | {"enabled":true,"refreshMinutes":2} | CI status on linked GitHub PRs, fetched in the background with your `gh`. `enabled`: false turns it off (no `gh` calls, no badges, nothing in Needs you). `refreshMinutes`: how often an open PR is re-checked; merged and closed PRs are checked until their checks settle, then never again. |
 | `nextNumber` | {} | Project key → the next issue number. Maintained by the engine. |
 | `theme` | "dark" | The UI theme, the same in the browser and the app window: `dark`, `light`, `system` (Match macOS), `midnight`, `paper`, `high-contrast`, or the id of a theme file in `themes/` (`themes/ocean.yml` is `ocean`). An unknown id shows Dark. Set it from the app's Settings or ⌘K ▸ Theme; see the Themes guide. |
+| `hiddenProjects` | [] | Project slugs hidden from the app window, the browser UI and the menu bar (`_none` is the issues without a project): not in the sidebar, lists, Home, saved views, the board, counts, filter and group options, search or Needs you, and no notifications. A direct link (`#/issue/ID`, `aitt://issue/ID`, the project page) still opens them, and agents see no change. Set it from the app's Settings ▸ Hidden projects or a project page's Hide project / Unhide; a slug that names no project is ignored. |
 
 ## Default statuses
 
@@ -47,4 +48,5 @@ stalled: {"idleHours":24,"windowDays":7,"reopens":2,"sessions":3}
 ci: {"enabled":true,"refreshMinutes":2}
 nextNumber: {}
 theme: "dark"
+hiddenProjects: []
 ```

@@ -73,6 +73,8 @@ describe('http api', () => {
       },
       // For the app's window and Settings popup: the theme shown and each theme's base and background.
       theme: { selected: 'dark', effective: 'dark', themes: expect.arrayContaining([{ id: 'dark', name: 'Dark', base: 'dark', bg: '#101012' }, { id: 'system', name: 'Match macOS', base: 'system' }]) },
+      // For the app's Settings ▸ Hidden projects: every project by name, then "No project", and the hidden slugs.
+      hiddenProjects: { selected: [], projects: [expect.objectContaining({ slug: expect.any(String) }), expect.anything(), { slug: '_none', name: 'No project' }] },
     })
     const h: any = await (await fetch(`${base}/api/home`)).json()
     expect(body.needsYou).toBe(h.needsYou.length)

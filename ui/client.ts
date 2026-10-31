@@ -27,10 +27,20 @@ export type WireEvent =
   | { kind: 'error'; path: string; message: string }
   | { kind: 'feed'; event: FeedEvent }
   | { kind: 'ci'; changes: Record<string, CiBadge | null> }
+  /** An issue in a hidden project changed (src/server/http.ts `wireEvent`): no summary, only which one. */
+  | { kind: 'hidden'; id: string; project: string }
+
+/**
+ * What the engine left out of the snapshot because its project is hidden (`hiddenProjects` in config.yml): the hidden
+ * projects that exist, by name, and their issue ids. Only for direct links (a breadcrumb's name, "in a hidden
+ * project" on a link); filters, groups, lists and counts never read it.
+ */
+export interface HiddenInfo { projects: { slug: string; name: string }[]; issues: ReadonlySet<string> }
 
 export interface Snapshot {
   issues: IssueSummary[]; config: Config | null; labels: LabelDef[]; projects: Project[]; views: ViewDef[]; errors: FileError[]
   themes?: ThemesInfo
+  hidden?: { projects: { slug: string; name: string }[]; issues: string[] }
 }
 
 export interface TrackerState {
@@ -42,6 +52,9 @@ export interface TrackerState {
   errors: FileError[]
   /** Null until a snapshot (from an engine that has themes) arrives. */
   themes: ThemesInfo | null
+  hidden: HiddenInfo
+  /** Bumped by every `hidden` event: a page showing a hidden issue or project by direct link refetches on it. */
+  hiddenRev: number
   /** Newest first. */
   feed: FeedEvent[]
   /** A snapshot has been applied. */
@@ -55,13 +68,19 @@ export interface TrackerState {
 export const FEED_LIMIT = 200
 
 export function emptyState(): TrackerState {
-  return { issues: new Map(), config: null, labels: [], projects: [], views: [], errors: [], themes: null, feed: [], ready: false, needsSnapshot: false, connected: false }
+  return {
+    issues: new Map(), config: null, labels: [], projects: [], views: [], errors: [], themes: null, hidden: NO_HIDDEN, hiddenRev: 0,
+    feed: [], ready: false, needsSnapshot: false, connected: false,
+  }
 }
+
+const NO_HIDDEN: HiddenInfo = { projects: [], issues: new Set() }
 
 export function fromSnapshot(s: Snapshot, feed: FeedEvent[] = []): TrackerState {
   return {
     issues: new Map(s.issues.map((i) => [i.id, i])),
     config: s.config, labels: s.labels, projects: s.projects, views: s.views, errors: s.errors, themes: s.themes ?? null,
+    hidden: s.hidden ? { projects: s.hidden.projects, issues: new Set(s.hidden.issues) } : NO_HIDDEN, hiddenRev: 0,
     feed: feed.slice(0, FEED_LIMIT), ready: true, needsSnapshot: false, connected: false,
   }
 }
@@ -79,14 +98,23 @@ export function applyEvent(state: TrackerState, e: WireEvent): TrackerState {
       issues.set(e.issue.id, e.issue)
       // A watcher reload of a previously broken file clears its error but events don't say which path: refetch.
       const needsSnapshot = state.needsSnapshot || (state.errors.length > 0 && isExternal(e.actor))
-      return { ...state, issues, needsSnapshot }
+      return { ...state, issues, needsSnapshot, hidden: withoutHidden(state.hidden, e.issue.id) }
+    }
+    case 'hidden': {
+      // Moved into a hidden project (or changed there): the UI drops it and remembers the id for links to it.
+      const known = state.hidden.issues.has(e.id)
+      const issues = state.issues.has(e.id) ? new Map(state.issues) : state.issues
+      if (issues !== state.issues) issues.delete(e.id)
+      const hidden = known ? state.hidden : { ...state.hidden, issues: new Set([...state.hidden.issues, e.id]) }
+      return { ...state, issues, hidden, hiddenRev: state.hiddenRev + 1 }
     }
     case 'removed': {
       const needsSnapshot = state.needsSnapshot || (state.errors.length > 0 && isExternal(e.actor))
-      if (!state.issues.has(e.id)) return needsSnapshot === state.needsSnapshot ? state : { ...state, needsSnapshot }
+      const hidden = withoutHidden(state.hidden, e.id)
+      if (!state.issues.has(e.id)) return needsSnapshot === state.needsSnapshot && hidden === state.hidden ? state : { ...state, needsSnapshot, hidden }
       const issues = new Map(state.issues)
       issues.delete(e.id)
-      return { ...state, issues, needsSnapshot }
+      return { ...state, issues, needsSnapshot, hidden }
     }
     case 'meta':
       return state.needsSnapshot ? state : { ...state, needsSnapshot: true }
@@ -116,6 +144,23 @@ export function applyEvent(state: TrackerState, e: WireEvent): TrackerState {
     default:
       return state
   }
+}
+
+function withoutHidden(h: HiddenInfo, id: string): HiddenInfo {
+  if (!h.issues.has(id)) return h
+  const issues = new Set(h.issues)
+  issues.delete(id)
+  return { ...h, issues }
+}
+
+/** Pure: is this project slug hidden (`hiddenProjects` in config.yml)? */
+export function isHiddenProject(state: Pick<TrackerState, 'config'>, slug: string): boolean {
+  return !!state.config?.hiddenProjects?.includes(slug)
+}
+
+/** Pure: a project's name for a link, hidden or not (the slug when unknown). */
+export function projectName(state: Pick<TrackerState, 'projects' | 'hidden'>, slug: string): string {
+  return state.projects.find((p) => p.slug === slug)?.name ?? state.hidden.projects.find((p) => p.slug === slug)?.name ?? slug
 }
 
 /** The `_none` folder holds issues without a project; it is not listed as a project. */
@@ -205,6 +250,20 @@ export async function setTheme(id: string): Promise<void> {
     method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify({ theme: id }),
   })
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `setting the theme failed (${r.status})`)
+}
+
+/** Hide or unhide a project folder in the UIs (POST /api/hidden-projects, the owner's). Every open UI follows through `meta`. */
+export async function setProjectHidden(slug: string, hidden: boolean): Promise<void> {
+  const r = await fetch('/api/hidden-projects', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify({ project: slug, hidden }),
+  })
+  if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `${hidden ? 'hiding' : 'unhiding'} the project failed (${r.status})`)
+}
+
+/** `/api/projects/:slug`: one project by its link, hidden or not, with its issues. */
+export interface ProjectDetail { project: Project; hidden: boolean; issues: IssueSummary[] }
+export function getProject(slug: string): Promise<ProjectDetail> {
+  return getJSON<ProjectDetail>(`/api/projects/${encodeURIComponent(slug)}`)
 }
 
 export interface ActivityEntry { at: string; actor: string; workspace?: string; branch?: string; body: string }
