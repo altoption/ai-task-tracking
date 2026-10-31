@@ -215,7 +215,7 @@ exec /bin/mv "$@"
 const procs: { kill(): void; pid: number }[] = []
 afterAll(() => { for (const p of procs) p.kill() })
 
-async function bundle(dir: string, version: string) {
+async function bundle(dir: string, version: string, aitt?: string) {
   const app = join(dir, 'AI Task Tracking.app')
   await mkdir(join(app, 'Contents', 'MacOS'), { recursive: true })
   await mkdir(join(app, 'Contents', 'Resources'), { recursive: true })
@@ -229,7 +229,7 @@ async function bundle(dir: string, version: string) {
 </dict></plist>
 `)
   await copyFile('/bin/sleep', join(app, 'Contents', 'MacOS', 'AITaskTracking'))
-  await writeFile(join(app, 'Contents', 'Resources', 'aitt'), `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} "$@"\n`)
+  await writeFile(join(app, 'Contents', 'Resources', 'aitt'), aitt ?? `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} "$@"\n`)
   await chmod(join(app, 'Contents', 'Resources', 'aitt'), 0o755)
   expect(Bun.spawnSync(['codesign', '--force', '--sign', '-', app]).exitCode).toBe(0)
   return app
@@ -244,13 +244,13 @@ async function running(app: string) {
   return p
 }
 
-async function e2e(opts: { appsInHome?: boolean } = {}) {
+async function e2e(opts: { appsInHome?: boolean; aitt?: string } = {}) {
   const base = await realpath(await mkdtemp(join(tmpdir(), 'aitt-install-e2e-')))
   temps.push(base)
   const home = join(base, 'home'), stubs = join(base, 'stubs'), assets = join(base, 'assets'), tmp = join(base, 'tmp')
   for (const d of [home, stubs, assets, tmp]) await mkdir(d)
   for (const [n, t] of Object.entries(E2E_STUBS)) { await writeFile(join(stubs, n), t); await chmod(join(stubs, n), 0o755) }
-  const built = await bundle(join(base, 'build'), '0.1.0')
+  const built = await bundle(join(base, 'build'), '0.1.0', opts.aitt)
   const zip = join(assets, 'AI-Task-Tracking-0.1.0-macos.zip')
   expect(Bun.spawnSync(['ditto', '-c', '-k', '--keepParent', built, zip]).exitCode).toBe(0)
   Bun.spawnSync(['bash', '-c', 'cd "$1" && shasum -a 256 AI-Task-Tracking-0.1.0-macos.zip > AI-Task-Tracking-0.1.0-macos.zip.sha256', '_', assets])
@@ -422,5 +422,18 @@ describe('install.sh release path (end to end, nothing built)', () => {
       expect(await exists(join(t.base, 'seen'))).toBe(true) // it was held while the swap ran
       expect(await exists(join(t.apps, '.aitt-install.lock'))).toBe(false)
     })
+  })
+
+  test('a new build that does not run: the old app is neither quit nor replaced', async () => {
+    const t = await e2e({ aitt: '#!/bin/bash\nexit 1\n' })
+    await bundle(t.apps, '0.0.9')
+    const old = await running(t.app)
+    const r = await t.install(['--yes'])
+    expect(r.code).toBe(1)
+    expect(r.out).toContain("the new app doesn't run; nothing was replaced")
+    expect(() => process.kill(old.pid, 0)).not.toThrow()
+    expect((await t.calls()).some((c) => c.startsWith('osascript-jxa'))).toBe(false)
+    expect(await t.version()).toBe('0.0.9')
+    expect(await t.leftovers()).toEqual([])
   })
 })

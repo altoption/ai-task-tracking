@@ -260,10 +260,12 @@ take_lock() {
   aitt_die "could not take the install lock $lock. Nothing was replaced."
 }
 
-# swap_in NEW_APP: NEW_APP is a complete bundle in a stage folder inside APP_DIR. Quit only the copies in APP_DIR,
-# then rename: the old app aside, the new one in place (the old one comes back if that fails), the old one removed.
+# swap_in NEW_APP: NEW_APP is a complete bundle in a stage folder inside APP_DIR. Check that it runs, then quit only
+# the copies in APP_DIR and rename: the old app aside, the new one in place (the old one comes back if that fails),
+# the old one removed.
 swap_in() {
   local new="$1" old
+  "$new/Contents/Resources/aitt" --version >/dev/null 2>&1 </dev/null || aitt_die "the new app doesn't run; nothing was replaced"
   WAS_RUNNING="$(app_pids "$APP")"
   quit_app "$APP" || exit 1
   old="$(dirname "$new")/previous.app"
