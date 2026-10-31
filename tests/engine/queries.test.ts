@@ -173,7 +173,10 @@ describe('queries', () => {
 
 describe('stalled (config.stalled)', () => {
   const H = 3_600_000
-  /** The fixture turns idle off (its dates are fixed); these tests use the defaults. Q-1 is In Progress since 2026-10-01. */
+  /**
+   * The fixture turns idle off (its dates are fixed); these tests use the defaults. Q-1 is In Progress since
+   * 2026-10-01 and is an epic: its newest change, counting its child Q-2 and grandchild Q-3, is 2026-10-03T10:00Z.
+   */
   async function open(root?: string) {
     const s = await Store.open(root ?? await miniCopy())
     s.config.stalled = { ...DEFAULT_STALLED }
@@ -183,7 +186,7 @@ describe('stalled (config.stalled)', () => {
 
   test('idle In Progress goes to Needs you with its reason, computed in the same pass as the other buckets', async () => {
     const s = await open()
-    const now = at('2026-10-02T17:00:00Z') // Q-1 last changed 31 h before
+    const now = at('2026-10-04T17:00:00Z') // Q-1's newest change (its grandchild Q-3) was 31 h before
     const h = home(s, now)
     expect(ids(h.needsYou)).toEqual(['Q-1', 'Q-5'])
     expect(ids(h.inProgress)).toEqual([])
@@ -193,7 +196,7 @@ describe('stalled (config.stalled)', () => {
     expect(list.find((x) => x.issue.id === 'Q-1')).toMatchObject({ why: 'stalled', stalled: 'idle 31 h in In Progress' })
     expect(list.find((x) => x.issue.id === 'Q-5')).toEqual({ issue: s.get('Q-5')!, why: 'Waiting' })
     // A day minus a millisecond after the last change it is not idle yet.
-    expect(home(s, at('2026-10-02T10:00:00Z') - 1).stalled.size).toBe(0)
+    expect(home(s, at('2026-10-04T10:00:00Z') - 1).stalled.size).toBe(0)
   })
 
   test('a stalled issue that already needs you keeps its status as why, and stalled as well', async () => {
@@ -256,9 +259,41 @@ describe('stalled (config.stalled)', () => {
     expect(s.hasHistory('Q-2')).toBe(false)
   })
 
+  test('an epic is not idle while its descendants change (ATT-37)', async () => {
+    const s = await open()
+    const epic = () => s.get('Q-1')!
+    // Q-1 changed 2026-10-01, Q-2 (child) 10-02, Q-3 (grandchild) 10-03: idle counts from the grandchild.
+    expect(stalledOf(s, at('2026-10-03T10:00:00Z') + 24 * H - 1)(epic())).toBeNull()
+    expect(stalledOf(s, at('2026-10-03T10:00:00Z') + 25 * H)(epic())).toBe('idle 25 h in In Progress')
+    // Work on a grandchild today resets the epic's idle time.
+    await s.addComment('Q-3', 'progress', agent)
+    expect(stalledOf(s)(epic())).toBeNull()
+    expect(stalledOf(s, Date.now() + 24 * H)(epic())).toBe('idle 24 h in In Progress')
+    // A leaf is unaffected: its own last change counts.
+    await s.updateIssue('Q-3', { status: 'In Progress' }, agent)
+    expect(stalledOf(s, Date.now() + 24 * H)(s.get('Q-3')!)).toBe('idle 24 h in In Progress')
+  })
+
+  test('an epic whose open children all need the owner or are blocked is waiting on them, not idle (ATT-37)', async () => {
+    const s = await open()
+    const later = (h: number) => Date.now() + h * H
+    // Q-1's only child Q-2 (open, Todo) is neither: the epic idles from its newest descendant change.
+    await s.addComment('Q-2', 'note', agent)
+    expect(stalledOf(s, later(30))(s.get('Q-1')!)).toBe('idle 30 h in In Progress')
+    await s.updateIssue('Q-2', { status: 'Waiting' }, agent) // asks the owner
+    expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
+    await s.updateIssue('Q-2', { status: 'Todo', labels: ['Blocked'] }, agent) // blocked
+    expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
+    await s.updateIssue('Q-2', { labels: ['Needs decision'] }, agent) // a Needs-you label counts as asking too
+    expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
+    // Closed children don't count: with Q-2 Done the epic has no open children and idles again.
+    await s.updateIssue('Q-2', { status: 'Done', labels: [] }, agent)
+    expect(stalledOf(s, later(30))(s.get('Q-1')!)).toBe('idle 30 h in In Progress')
+  })
+
   test('needsYouList can leave out stalled-only issues before the cut (the menu with the stalled setting off)', async () => {
     const s = await open()
-    const now = at('2026-10-02T17:00:00Z')
+    const now = at('2026-10-04T17:00:00Z')
     expect(needsYouList(s, 1, now).map((x) => x.issue.id)).toEqual(['Q-1'])
     expect(needsYouList(s, 1, now, { stalled: false }).map((x) => x.issue.id)).toEqual(['Q-5'])
   })

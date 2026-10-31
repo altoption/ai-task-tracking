@@ -3,7 +3,8 @@
  * a short reason (or null) out. No I/O; the store keeps each issue's history in memory (`IssueHistory`).
  *
  * - Idle: the issue is in the working status (In Progress) and nothing changed on it (any edit or comment, by
- *   anyone) for `idleHours` or more. 0 turns it off.
+ *   anyone) for `idleHours` or more. 0 turns it off. For an epic the caller passes its newest change among its
+ *   descendants, or `now` while its open children all wait on the owner (`stalledOf` in queries.ts).
  * - Churning: in the last `windowDays`, the issue was reopened (back into In Progress from Done, Canceled, Duplicate,
  *   Todo or Backlog, after having been in it) at least `reopens` times, or more than `sessions` distinct agent
  *   sessions worked on it since it was last Done. A round trip through Waiting or another Needs-you status is asking
