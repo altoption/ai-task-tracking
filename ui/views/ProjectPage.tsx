@@ -95,6 +95,7 @@ function Name({ project }: { project: Project }) {
 }
 
 function Milestones({ project, progress }: { project: Project; progress: ReturnType<typeof milestoneProgress> }) {
+  const { config } = useTracker()
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
@@ -117,7 +118,6 @@ function Milestones({ project, progress }: { project: Project; progress: ReturnT
       <ul className="milestones">
         {project.milestones.map((m) => {
           const p = progress.get(m.name) ?? { done: 0, total: 0 }
-          const pct = p.total ? Math.round((p.done / p.total) * 100) : 0
           return (
             <li key={m.name} className="milestone-row">
               <span className="milestone-dot" />
@@ -128,8 +128,10 @@ function Milestones({ project, progress }: { project: Project; progress: ReturnT
                   ? <input type="date" aria-label={`Target date for ${m.name}`} value={m.target ?? ''} onChange={(e) => { if (e.target.value) void run({ name: m.name, targetDate: e.target.value }) }} />
                   : null}
               </label>
-              <span className="m-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${m.name} progress`}><span style={{ width: `${pct}%` }} /></span>
-              <span className="m-count muted small">{p.done}/{p.total}</span>
+              <span className="m-count muted small">
+                <ProgressRing done={p.done} total={p.total} config={config} noun="issues" />
+                <span aria-hidden="true">{p.done}/{p.total}</span>
+              </span>
             </li>
           )
         })}
@@ -243,7 +245,7 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
           {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {statusError && <span className="form-error" role="alert">{statusError}</span>}
-        <span className="muted small project-count">{total > 0 && <ProgressRing done={done} total={total} config={state.config} noun="issues" />}{done}/{total} issues done{scope.kind !== 'all' ? ' in this workspace' : ''}</span>
+        <span className="muted small project-count">{total > 0 && <ProgressRing done={done} total={total} config={state.config} noun="issues" decorative />}{done}/{total} issues done{scope.kind !== 'all' ? ' in this workspace' : ''}</span>
       </header>
       <div className="project-body">
         <MarkdownBlock key={project.slug} source={project.description} ctx={ctx} label="Project description" emptyLabel="Add description…"
