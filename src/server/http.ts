@@ -83,9 +83,20 @@ function ciProblems(s: Store, i: Issue): { ciProblems?: Record<string, string> }
 export function wireEvent(s: Store, e: ChangeEvent): unknown {
   if (e.kind === 'meta' || e.kind === 'removed') return e
   const hidden = hiddenSlugs(s)
-  const touched = (i: Issue) => ({ kind: 'hidden', id: i.id, project: i.project, ...(i.parent ? { parent: i.parent } : {}) })
+  const touched = (i: Issue, prev?: Issue) => {
+    // What else a page may be showing it on: the project and parent it left, and issues it newly (un)blocks or relates to.
+    const rel = prev
+      ? [...symDiff(prev.blockedBy, i.blockedBy), ...symDiff(prev.related, i.related)]
+      : [...i.blockedBy, ...i.related]
+    return {
+      kind: 'hidden', id: i.id, project: i.project, ...(i.parent ? { parent: i.parent } : {}),
+      ...(prev && prev.project !== i.project ? { prevProject: prev.project } : {}),
+      ...(prev?.parent && prev.parent !== i.parent ? { prevParent: prev.parent } : {}),
+      ...(rel.length ? { rel: [...new Set(rel)] } : {}),
+    }
+  }
   if (e.kind === 'issue') {
-    if (hidden.has(e.issue.project)) return touched(e.issue)
+    if (hidden.has(e.issue.project)) return touched(e.issue, e.prev)
     const visible = visibleTest(s)
     const { issue, prev, comment, ...rest } = e
     return { ...rest, issue: summarize(s, issue, visible), ...(prev ? { prev: summarize(s, prev, visible) } : {}), ...(comment ? { comment } : {}) }
@@ -102,6 +113,11 @@ export function wireEvent(s: Store, e: ChangeEvent): unknown {
   }
   if (e.kind === 'error' || e.kind === 'file') return inHiddenFolder(s, e.path) ? null : e
   return e
+}
+
+/** Ids in exactly one of the two lists. */
+function symDiff(a: string[], b: string[]): string[] {
+  return [...a.filter((x) => !b.includes(x)), ...b.filter((x) => !a.includes(x))]
 }
 
 /**

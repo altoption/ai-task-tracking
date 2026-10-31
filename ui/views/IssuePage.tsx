@@ -44,7 +44,9 @@ function useIssueDetail(id: string) {
     const keys = [id, `c:${id}`]
     if (detail) {
       if (detail.parent) keys.push(detail.parent)
-      keys.push(...detail.blockedBy, ...detail.related, ...detail.blocks, ...detail.children.map((c) => c.id), ...detail.ancestors.map((a) => a.id))
+      keys.push(...detail.blockedBy, ...detail.related, ...detail.blocks, ...detail.ancestors.map((a) => a.id))
+      // Children, and their children (a hidden issue's page shows its sub-issues' own sub-issues too).
+      for (const c of detail.children) keys.push(c.id, `c:${c.id}`)
     }
     return keys
   }, [id, detail])

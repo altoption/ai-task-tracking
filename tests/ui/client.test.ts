@@ -3,7 +3,7 @@ import { rm } from 'node:fs/promises'
 import { Store } from '../../src/engine/store'
 import { startServer, type RunningServer } from '../../src/server/http'
 import type { IssueSummary } from '../../src/model'
-import { applyEvent, emptyState, fromSnapshot, inScope, hiddenRevOf, isHiddenProject, listedProjects, projectName, type Snapshot, type WireEvent } from '../../ui/client'
+import { applyEvent, emptyState, fromSnapshot, inScope, hiddenRevOf, isHiddenProject, listedProjects, reloaded, projectName, type Snapshot, type WireEvent } from '../../ui/client'
 import { miniCopy } from '../engine/helpers'
 
 const YOU = { actor: 'you' as const }
@@ -104,6 +104,19 @@ describe('hidden projects in the client (the engine leaves them out; the client 
     expect(hiddenRevOf(s2, ['Q-1', 'c:Q-1'])).toBe('c:Q-1:1,')
     expect(hiddenRevOf(s2, ['p:secret'])).toBe('p:secret:2,')
     expect(hiddenRevOf(s2, ['Q-5', 'c:Q-5', 'p:other'])).toBe('')
+  })
+
+  test('snapshot reload then replay: hidden revisions carry over, so a queued event still moves the signature', () => {
+    const s1 = applyEvent(fromSnapshot(base()), { kind: 'hidden', id: 'H-1', project: 'secret' })
+    expect(hiddenRevOf(s1, ['H-1'])).toBe('H-1:1,')
+    // loadSnapshot: reload, then replay the event that arrived while the snapshot was in flight.
+    const s2 = applyEvent(reloaded(s1, base()), { kind: 'hidden', id: 'H-1', project: 'secret' })
+    expect(hiddenRevOf(s2, ['H-1'])).toBe('H-1:2,')
+  })
+
+  test('a hidden event also bumps the project and parent it left and the issues it newly blocks or relates to', () => {
+    const s = applyEvent(fromSnapshot(base()), { kind: 'hidden', id: 'H-1', project: 'b', prevProject: 'a', parent: 'E-2', prevParent: 'E-1', rel: ['X-1'] })
+    expect(hiddenRevOf(s, ['p:a', 'p:b', 'c:E-1', 'c:E-2', 'X-1'])).toBe('p:a:1,p:b:1,c:E-1:1,c:E-2:1,X-1:1,')
   })
 
   test('an issue event (moved out of a hidden project) or a removal clears the hidden id', () => {
