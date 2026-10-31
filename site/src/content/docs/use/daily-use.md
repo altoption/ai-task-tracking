@@ -123,20 +123,27 @@ issue's own status icon still tells you whether the issue itself is closed.
 ## Hidden projects
 
 Hide a project you don't want to see right now: tick it in **Settings ▸ Hidden projects**, or click **Hide project**
-on its page. **No project** in that list hides the issues that have no project. The choice is saved as
-`hiddenProjects` in `config.yml`, so the app window and the browser always agree.
+on its page. **No project** in that list hides the issues that have no project; it has no page, so only Settings can
+hide it. The choice is saved as `hiddenProjects` in `config.yml`, so the app window and the browser always agree.
 
-A hidden project's issues leave the sidebar, All issues, Home (Needs you, In progress, Ready next, Blocked), saved
-views, the board and every count. Filters and grouping stop offering the project, and any label, milestone or
-workspace that only it uses. ⌘K search leaves its issues out, and so do the menu-bar number, the menu's Needs-you
-list, quick capture's project list and notifications.
+A hidden project appears nowhere except by direct link. Its issues leave the sidebar, All issues, Home (Needs you, In
+progress, Ready next, Blocked), saved views, the board, the activity feed and every count: a visible epic's sub-issue
+count and progress ring leave hidden sub-issues out (with only hidden ones, it shows no ring), and Home's "unblocks"
+and "blocked by" name only visible issues. Filters and grouping stop offering the project, and any label, milestone
+or workspace that only it uses. ⌘K search leaves its issues out, and so do the menu-bar number, the menu's Needs-you
+list, quick capture's project list and notifications. While No project is hidden, quick capture doesn't offer it
+either.
 
 Hiding only changes what *you* see:
 
 - **Links still open it.** An issue link (`#/issue/ATT-12`, `aitt://issue/ATT-12`), the project's page and an exact
-  issue id typed in ⌘K open as usual, with a quiet "This project is hidden" line and **Unhide**. A visible issue's
-  parent, blockers and related issues still show a hidden one's id ("in a hidden project") and open it.
-- **Agents see no change.** Every agent tool returns hidden projects' issues as before.
+  issue id typed in ⌘K open as usual, with a quiet "This project is hidden" line and **Unhide**. A hidden issue's own
+  page shows its real sub-issues and parents.
+- **A visible issue names hidden ones by id only.** Its sub-issues, parents (in the breadcrumb), blockers and related
+  issues that are hidden show the id and "in a hidden project", and open it.
+- **Agents see no change.** Every agent tool returns hidden projects' issues as before. Hiding is a view setting, not
+  access control. Requests marked as coming from an agent can't hide or unhide a project, but that is a header
+  check, not enforcement: any program on this Mac can still read the data folder or ask the engine.
 - **Unhiding brings everything back straight away**, in every open window, without a reload. Hiding the project of
   the page you're on keeps you on it.
 - A saved view filtered to a hidden project says so ("Filtered to a hidden project") instead of looking empty.
