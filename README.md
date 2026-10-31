@@ -4,10 +4,10 @@ AI Task Tracking is a local issue tracker for working with AI agents on a Mac. I
 a window of Home, lists, boards and projects, and agents reach it through an MCP server named
 `ai-task-tracking`: Claude Code, Codex CLI, Cursor, VS Code, Windsurf, Gemini CLI and Claude Desktop. Agents file
 issues, plan epics with steps, comment as they work and hand decisions back to you; Home shows what needs you
-and a live feed of every change, tagged with the repo and branch it came from. Everything is plain Markdown and
+and what your agents got done, one card per agent session with its tool, repo and branch. Everything is plain Markdown and
 YAML files in a folder on your Mac (a git repo), optionally backed up to a private GitHub repo.
 
-![Home in AI Task Tracking: the issues that need you, what's in progress, ready next and blocked, and a live feed of agent activity](site/src/assets/screenshots/home.png)
+![Home in AI Task Tracking: the issues that need you, what's in progress, ready next and blocked, and Agent activity: today's counts, when agents worked, a question that waits on you, and a card per agent session](site/src/assets/screenshots/home.png)
 
 ## Requirements
 
@@ -75,7 +75,8 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   Pick one or turn them off in Settings.
 - **In the window.** **Home** shows *Needs you* (issues waiting for your decision or review, and work that has
   stalled: idle in In Progress for a day, or reopened again and again; tune it under `stalled:` in `config.yml`; and
-  work whose linked PR's checks fail), *In progress*, *Ready next*, *Blocked* and a live feed of agent activity. All issues, projects and saved views are
+  work whose linked PR's checks fail), *In progress*, *Ready next*, *Blocked* and Agent activity (one card per agent session, one row per issue with its title, status path and latest
+  note; counts for today or 7 days; see [Agent activity](site/src/content/docs/use/daily-use.md#agent-activity)). All issues, projects and saved views are
   in the sidebar, as lists or boards. Keys: `c` new issue, `/` or ⌘K search, `g h` Home, `g i` all issues, ⌘[ / ⌘] back and
   forward (also the ← → buttons at the top of the sidebar, beside ⌂ Home), ⌘\ collapses the sidebar to icons and
   back.

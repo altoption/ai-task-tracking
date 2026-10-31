@@ -53,7 +53,31 @@ Open with ⌘, or **Settings…** in the menu. Every change applies straight awa
 - *In progress*;
 - *Ready next*;
 - *Blocked*;
-- a live feed of agent activity, each change tagged with the repo it came from.
+- **Agent activity**, what your agents got done, live (below).
+
+### Agent activity
+
+The column on the right tells you what your agents got done, not every write they made.
+
+- **The overview**: how many issues were finished and started, how many wait on you, and how many agents worked (and
+  how many are working now). Click a count to show only those. Under it, a strip shows when agents worked over the
+  last 24 hours, one bar per hour, colored by tool.
+- **Waits on you**: issues an agent handed back to you in this range (moved to a Needs-you status such as Waiting, or
+  given a Needs-you label) that still need you, with the agent's question and **Open**. Everything that needs you,
+  including older items, stalled work and failing checks, stays in Needs you on the left.
+- **One card per agent session**: the tool (Claude Code, Codex, Cursor…, or "Agent in" and the repo, such as "Agent in web-app", when the tool
+  wasn't recorded), the repo and branch, when it ran, how many writes it made, and a green dot while it's still writing
+  (within the last 10 minutes). Click the header to fold a card. Your own changes, from the app, the browser or by
+  hand, share one **You** card per day.
+- **One row per issue**: its status icon, id and title, and the path it took in that session (Backlog → In Progress →
+  Done; "created" when the session created it). Internal writes, such as a plan change, fold away. The latest note
+  shows as a one-line quote; click it (or press Enter on it) to read it all. GitHub PR and commit links in the notes
+  become chips. Sub-issues touched in the same session sit under their epic, which shows its progress ring. Click a
+  row to open the issue.
+- **Today / 7 days** switches the range, and days separate the cards (Today, Yesterday, then dates). The chips above
+  the cards show Everything, Finished, Started, With notes or Needs you.
+
+Hidden projects stay out of all of it.
 
 All issues, projects and saved views are in the sidebar, as lists or boards. At the top of the sidebar:
 
@@ -69,7 +93,7 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
 menu-bar menu open these docs, which the app serves at `http://127.0.0.1:7477/docs/`; from a terminal, `aitt docs`
 opens them in the browser.
 
-![Home: Needs you (two Waiting issues, two marked stalled and one with failing PR checks, with the reasons), In progress, Ready next, Blocked, and the live feed of agent activity](../../../assets/screenshots/home.png)
+![Home: Needs you (Waiting issues, stalled work and failing PR checks, with the reasons), In progress, Ready next and Blocked; on the right, Agent activity with today's counts, the hourly strip, a question that waits on you, and a card per agent session](../../../assets/screenshots/home.png)
 
 A project shows its description, milestones and documents above its issues, grouped by status:
 
