@@ -20,7 +20,7 @@ CLONE="" TMP_DIRS=() APP="" SWAP_OLD="" WAS_RUNNING="" INSTALL_LOCK=""
 usage() {
   cat <<'USAGE'
 Install AI Task Tracking on this Mac (macOS 13+, Apple Silicon or Intel). Re-running it upgrades: the app is
-quit and replaced; your data folder and settings stay.
+quit and replaced, and reopened only if it was running; your data folder and settings stay.
 
   curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/install.sh | bash
   … | bash -s -- [options]       (options when piped)
@@ -28,14 +28,14 @@ quit and replaced; your data folder and settings stay.
 
 It checks what this Mac has, shows what it will do, and asks once. Then it installs the latest notarized
 release (or builds from source when there is none, it fails verification, or --from-source; Bun is then
-installed if missing), links ~/.local/bin/aitt, runs `aitt setup` and opens the app.
+installed if missing), links ~/.local/bin/aitt, runs `aitt setup` and, on a first install, opens the app.
 
 Options:
   --yes             don't ask; take the defaults
   --dry-run         only show what was found and what would happen
   --from-source     build from source even when a release is available
   --version <tag>   that release (or source tag) instead of the latest, e.g. v0.2.0
-  --no-launch       don't open the app at the end
+  --no-launch       don't open the app, at the end or after a failure
   --connect <tools> connect these other agent tools (comma-separated, as in aitt setup --connect); a scratch
                     install connects none otherwise
 Environment:
@@ -199,7 +199,11 @@ print_table() {
   else
     row "AI Task Tracking" "not installed" "install to $APP_DIR"
   fi
-  row "Then" "" "link ~/.local/bin/aitt, run aitt setup$([ "$LAUNCH" = 1 ] && echo ', open the app')"
+  local opening=""
+  if [ "$LAUNCH" = 1 ]; then
+    if [ -n "$INSTALLED_VER" ]; then opening=', reopen the app if it was running'; else opening=', open the app'; fi
+  fi
+  row "Then" "" "link ~/.local/bin/aitt, run aitt setup$opening"
   should_register "$APP_DIR" || row "" "" "(scratch folder: not registered with macOS or agent tools, no app settings)"
   if [ ${#BLOCKERS[@]} -gt 0 ]; then
     echo
@@ -350,12 +354,14 @@ post_install() {
     defaults write "$AITT_BUNDLE_ID" trackerHome -string "$home"
     defaults write "$AITT_BUNDLE_ID" enableLoginItemOnLaunch -bool true
   fi
-  if [ "$LAUNCH" = 1 ]; then open "$APP"; fi
+  # An upgrade reopens the app only if it was running.
+  local opened=0
+  if [ "$LAUNCH" = 1 ] && { [ -z "$INSTALLED_VER" ] || [ -n "$WAS_RUNNING" ]; }; then open "$APP"; opened=1; fi
   echo
   echo "✓ AI Task Tracking $(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null || true) is installed: $APP"
   echo "  data: $home"
   echo "  menu bar: the AI Task Tracking icon; ⌥⌘I opens it. Terminal: aitt (aitt setup to change settings)."
-  [ "$LAUNCH" = 1 ] || echo "  Not opened (--no-launch): open \"$APP\""
+  [ "$opened" = 1 ] || echo "  Not opened: open \"$APP\""
 }
 
 main() {
