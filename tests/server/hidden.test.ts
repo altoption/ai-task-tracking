@@ -167,6 +167,10 @@ describe('UI endpoints leave hidden projects out', () => {
     expect((wireEvent(store, { kind: 'issue', issue: q2, prev: { ...q2, project: 'support' }, actor }) as any).kind).toBe('issue')
     expect(wireEvent(store, { kind: 'feed', event: { at: 'x', actor, id: 'Q-5', kind: 'status' } })).toEqual({ kind: 'hidden', id: 'Q-5', project: 'support' })
     expect((wireEvent(store, { kind: 'feed', event: { at: 'x', actor, id: 'Q-2', kind: 'status' } }) as any).kind).toBe('feed')
+    // Moved between hidden projects, out of a parent, and newly blocking a visible issue: the event names what it left.
+    const q6 = store.get('Q-6')!
+    expect(wireEvent(store, { kind: 'issue', issue: { ...q5, parent: null, related: ['Q-2'] }, prev: { ...q6, project: 'other-hidden', parent: 'Q-1', related: [] }, actor }))
+      .toEqual({ kind: 'hidden', id: 'Q-5', project: 'support', prevProject: 'other-hidden', prevParent: 'Q-1', rel: ['Q-2'] })
     expect(wireEvent(store, { kind: 'ci', changes: { 'Q-5': null } })).toBeNull()
     expect(wireEvent(store, { kind: 'ci', changes: { 'Q-5': null, 'Q-2': null } })).toEqual({ kind: 'ci', changes: { 'Q-2': null } })
   })

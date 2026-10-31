@@ -28,7 +28,7 @@ export type WireEvent =
   | { kind: 'feed'; event: FeedEvent }
   | { kind: 'ci'; changes: Record<string, CiBadge | null> }
   /** An issue in a hidden project changed (src/server/http.ts `wireEvent`): no summary, only which one and where. */
-  | { kind: 'hidden'; id: string; project: string; parent?: string }
+  | { kind: 'hidden'; id: string; project: string; parent?: string; prevProject?: string; prevParent?: string; rel?: string[] }
 
 /**
  * What the engine left out of the snapshot because its project is hidden (`hiddenProjects` in config.yml): the hidden
@@ -54,7 +54,8 @@ export interface TrackerState {
   themes: ThemesInfo | null
   hidden: HiddenInfo
   /**
-   * Per key, how many `hidden` events touched it: the issue id, `p:<project>` and `c:<parent>`. A page showing a hidden
+   * Per key, how many `hidden` events touched it: the issue id, `p:<project>`, `c:<parent>` (also the project and parent
+   * it left) and the ids it newly blocks or relates to. Kept across snapshot reloads. A page showing a hidden
    * issue, its parent, a relation or a hidden project refetches when one of its keys moves (hiddenRevOf), and only then.
    */
   hiddenRevs: ReadonlyMap<string, number>
@@ -92,6 +93,14 @@ const isExternal = (a: Actor) => a.workspace === 'external'
 const sameFeed = (a: FeedEvent, b: FeedEvent) =>
   a.at === b.at && a.id === b.id && a.kind === b.kind && a.from === b.from && a.to === b.to && a.text === b.text
 
+/**
+ * Pure: the state after a snapshot reload. `hiddenRevs` carry over: they only ever go up, so an event replayed after
+ * the reload still moves a hidden page's signature.
+ */
+export function reloaded(state: TrackerState, s: Snapshot, feed: FeedEvent[] = []): TrackerState {
+  return { ...fromSnapshot(s, feed), hiddenRevs: state.hiddenRevs, connected: state.connected }
+}
+
 /** Pure: the state after one SSE event. Returns the same object when nothing changed. */
 export function applyEvent(state: TrackerState, e: WireEvent): TrackerState {
   if (!state.ready) return state
@@ -110,7 +119,11 @@ export function applyEvent(state: TrackerState, e: WireEvent): TrackerState {
       if (issues !== state.issues) issues.delete(e.id)
       const hidden = known ? state.hidden : { ...state.hidden, issues: new Set([...state.hidden.issues, e.id]) }
       const hiddenRevs = new Map(state.hiddenRevs)
-      for (const k of [e.id, `p:${e.project}`, ...(e.parent ? [`c:${e.parent}`] : [])]) hiddenRevs.set(k, (hiddenRevs.get(k) ?? 0) + 1)
+      const keys = [
+        e.id, `p:${e.project}`, ...(e.parent ? [`c:${e.parent}`] : []), ...(e.prevProject ? [`p:${e.prevProject}`] : []),
+        ...(e.prevParent ? [`c:${e.prevParent}`] : []), ...(e.rel ?? []),
+      ]
+      for (const k of keys) hiddenRevs.set(k, (hiddenRevs.get(k) ?? 0) + 1)
       return { ...state, issues, hidden, hiddenRevs }
     }
     case 'removed': {
@@ -318,7 +331,7 @@ async function loadSnapshot(): Promise<void> {
   queue = []
   try {
     const [snap, feed] = await Promise.all([getJSON<Snapshot>('/api/snapshot'), getJSON<FeedEvent[]>(`/api/feed?limit=${FEED_LIMIT}`)])
-    let next: TrackerState = { ...fromSnapshot(snap, feed), connected: state.connected }
+    let next = reloaded(state, snap, feed)
     for (const e of queue) next = applyEvent(next, e)
     queue = null
     set(next)
