@@ -80,7 +80,11 @@ final class QuickCapturePanel: NSPanel, NSTextFieldDelegate {
             // Hidden projects (Settings ▸ Projects) aren't offered, like everywhere else in the app; without an answer
             // about them, the list stays as it was rather than offering them.
             self.api.hiddenProjects { [weak self] hidden in
-                guard let self, let hidden else { return }
+                guard let self else { return }
+                guard let hidden else {
+                    if HiddenProjects.captureHasNoAnswer(hidden: nil, shown: self.projects.count) { self.show("The AI Task Tracking engine is not answering", error: true) }
+                    return
+                }
                 // Keep the current choice by its slug in the new list (projects may have been added or renamed since).
                 let keep = self.projects.indices.contains(self.projectPopup.indexOfSelectedItem)
                     ? self.projects[self.projectPopup.indexOfSelectedItem].slug : nil

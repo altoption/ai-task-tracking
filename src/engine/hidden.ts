@@ -98,7 +98,7 @@ export function visibleNextNumber(s: Store): Record<string, number> {
 }
 
 /**
- * For the app's Settings list (`hiddenProjects` in /api/health): every project by name, then `_none` ("No project"),
+ * `hiddenProjects` in /api/health (quick capture in the app reads the slugs): every project by name, then `_none` ("No project"),
  * and the hidden slugs as configured.
  */
 export function hiddenHealth(s: Store): { selected: string[]; projects: { slug: string; name: string }[] } {

@@ -8,10 +8,14 @@ import TrackerCore
 final class SettingsWindow: NSWindow {
     private let loginCheck = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
     private let statusLabel = NSTextField(labelWithString: "")
+    /// Not during first run: the engine isn't meant to start yet, so these would only mislead.
+    private var engineHelp: [NSView] = []
     private let retry: () -> Void
+    private let loginChanged: () -> Void
 
-    init(retry: @escaping () -> Void) {
+    init(retry: @escaping () -> Void, loginChanged: @escaping () -> Void) {
         self.retry = retry
+        self.loginChanged = loginChanged
         super.init(contentRect: NSRect(x: 0, y: 0, width: 420, height: 100), styleMask: [.titled, .closable],
                    backing: .buffered, defer: false)
         title = "AI Task Tracking Settings"
@@ -25,11 +29,11 @@ final class SettingsWindow: NSWindow {
 
         statusLabel.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         stack.addArrangedSubview(statusLabel)
-        stack.addArrangedSubview(note("Settings is a page in the main window, and the engine serves it. It opens here by itself once the engine answers."))
-        let button = NSButton(title: "Try Starting the Engine", target: self, action: #selector(tryAgain))
-        stack.addArrangedSubview(button)
-        stack.addArrangedSubview(note("Still stopped? Quit AI Task Tracking and open it again. The log is in ~/Library/Logs/AI Task Tracking/engine.log."))
-        stack.setCustomSpacing(18, after: stack.arrangedSubviews.last!)
+        engineHelp = [note("Settings is a page in the main window, and the engine serves it. It opens here by itself once the engine answers."),
+                      NSButton(title: "Try Starting the Engine", target: self, action: #selector(tryAgain)),
+                      note("Still stopped? Quit AI Task Tracking and open it again. The log is in ~/Library/Logs/AI Task Tracking/engine.log.")]
+        engineHelp.forEach(stack.addArrangedSubview)
+        stack.setCustomSpacing(18, after: engineHelp.last!)
         loginCheck.target = self
         loginCheck.action = #selector(toggleLogin(_:))
         stack.addArrangedSubview(loginCheck)
@@ -37,6 +41,12 @@ final class SettingsWindow: NSWindow {
         contentView = stack
         setContentSize(stack.fittingSize)
         center()
+    }
+
+    /// Show or hide what's about starting the engine, for first run.
+    func setEngineHelpShown(_ shown: Bool) {
+        engineHelp.forEach { $0.isHidden = !shown }
+        if let content = contentView { setContentSize(content.fittingSize) }
     }
 
     func present() {
@@ -61,5 +71,6 @@ final class SettingsWindow: NSWindow {
     @objc private func toggleLogin(_ sender: NSButton) {
         LaunchAtLogin.set(sender.state == .on)
         sender.state = LaunchAtLogin.isOn ? .on : .off
+        loginChanged()
     }
 }

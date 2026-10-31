@@ -19,14 +19,22 @@ final class SettingsBridgeTests: XCTestCase {
 
     // MARK: who may ask
 
-    private func accepts(scheme: String? = "http", host: String? = "127.0.0.1", port: Int? = 7477, main: Bool = true, path: String? = "/") -> Bool {
-        SettingsBridge.acceptsSender(scheme: scheme, host: host, port: port, isMainFrame: main, path: path, engine: engine)
+    private func accepts(scheme: String? = "http", host: String? = "127.0.0.1", port: Int? = 7477, main: Bool = true,
+                         url: String? = "http://127.0.0.1:7477/#/settings") -> Bool {
+        SettingsBridge.acceptsSender(scheme: scheme, host: host, port: port, isMainFrame: main, url: url.flatMap(URL.init(string:)), engine: engine)
     }
 
     func testTheEnginesPageIsAccepted() {
         XCTAssertTrue(accepts())
-        XCTAssertTrue(accepts(path: ""))
-        XCTAssertTrue(accepts(path: nil))
+        XCTAssertTrue(accepts(url: "http://127.0.0.1:7477/"))
+        XCTAssertTrue(accepts(url: "http://127.0.0.1:7477/#/settings/backup"))
+    }
+
+    /// As a real WKWebView reports it: the engine's origin, the main frame, and this URL (path "").
+    func testASameOriginBlobPageIsRefused() {
+        XCTAssertFalse(accepts(url: "blob:http://127.0.0.1:7477/649a2cf3-ab68-4c89-9c20-b45536e0f867"))
+        XCTAssertFalse(accepts(url: nil))
+        XCTAssertFalse(accepts(url: "http://127.0.0.1:7477"), "path \"\"")
     }
 
     func testAnyOtherOriginIsRefused() {
@@ -36,13 +44,14 @@ final class SettingsBridgeTests: XCTestCase {
         XCTAssertFalse(accepts(port: 7499))
         XCTAssertFalse(accepts(port: nil))
         // A sandboxed attachment under /files/: the engine's CSP makes its origin opaque.
-        XCTAssertFalse(accepts(scheme: "", host: "", port: 0, path: "/files/x/y.svg"))
+        XCTAssertFalse(accepts(scheme: "", host: "", port: 0, url: "http://127.0.0.1:7477/files/x/y.svg"))
     }
 
     func testAFrameOrAnotherPageOfTheEngineIsRefused() {
         XCTAssertFalse(accepts(main: false))
-        XCTAssertFalse(accepts(path: "/docs/"))
-        XCTAssertFalse(accepts(path: "/files/p/a.svg"))
+        XCTAssertFalse(accepts(url: "http://127.0.0.1:7477/docs/"))
+        XCTAssertFalse(accepts(url: "http://127.0.0.1:7477/files/p/a.svg"))
+        XCTAssertFalse(accepts(url: "http://127.0.0.1:7499/"), "another engine's page, whatever the origin says")
     }
 
     // MARK: what it may ask
@@ -131,5 +140,158 @@ final class SettingsBridgeTests: XCTestCase {
         XCTAssertEqual(SettingsDestination.choose(engineReachable: true, inFirstRun: false), .page)
         XCTAssertEqual(SettingsDestination.choose(engineReachable: false, inFirstRun: false), .fallback)
         XCTAssertEqual(SettingsDestination.choose(engineReachable: true, inFirstRun: true), .fallback)
+    }
+
+    func testTheFallbackSwitchesToThePageOnlyWhenThePageWouldOpen() {
+        let rule = SettingsDestination.fallbackSwitchesToPage
+        XCTAssertTrue(rule(true, true, false))
+        XCTAssertFalse(rule(false, true, false), "the window isn't up")
+        XCTAssertFalse(rule(true, false, false), "no engine")
+        XCTAssertFalse(rule(true, true, true), "first run: setup comes first")
+    }
+
+    func testFirstRunNeverStartsTheEngineFromTheFallback() {
+        XCTAssertFalse(SettingsDestination.fallbackMayStartEngine(inFirstRun: true))
+        XCTAssertTrue(SettingsDestination.fallbackMayStartEngine(inFirstRun: false))
+    }
+
+    func testQuickCaptureSaysSoWhenItCantTellWhatIsHidden() {
+        XCTAssertTrue(HiddenProjects.captureHasNoAnswer(hidden: nil, shown: 0))
+        XCTAssertFalse(HiddenProjects.captureHasNoAnswer(hidden: nil, shown: 2), "what it showed stays")
+        XCTAssertFalse(HiddenProjects.captureHasNoAnswer(hidden: [], shown: 0))
+    }
+
+    // MARK: the session: replies, pushes, effects
+
+    private final class Harness {
+        let d: UserDefaults
+        var loginOn = false, loginProblem: String?, loginAsked: [Bool] = [], backups = 0, themeChanges = 0
+        var replies: [(value: Any?, error: String?)] = []
+        var finishBackup: ((String) -> Void)?
+        var session: SettingsBridgeSession!
+        let page = SettingsBridgeSession.Sender(scheme: "http", host: "127.0.0.1", port: 7477, isMainFrame: true, url: URL(string: "http://127.0.0.1:7477/#/settings"))
+        let root = URL(string: "http://127.0.0.1:7477/#/settings")
+
+        init(_ d: UserDefaults, engine: URL, presets: [String: [SettingsBridge.Preset]]) {
+            self.d = d
+            session = SettingsBridgeSession(engine: engine, defaults: d, presets: presets,
+                login: .init(isOn: { [unowned self] in self.loginOn }, problem: { [unowned self] in self.loginProblem },
+                             set: { [unowned self] in self.loginAsked.append($0) }),
+                backup: { [unowned self] done in self.backups += 1; self.finishBackup = done },
+                themeChanged: { [unowned self] in self.themeChanges += 1 })
+        }
+        func send(_ body: Any, from sender: SettingsBridgeSession.Sender? = nil) {
+            session.handle(body, from: sender ?? page) { [unowned self] v, e in self.replies.append((v, e)) }
+        }
+        var lastValues: [String: Any]? { (replies.last?.value as? [String: Any])?["values"] as? [String: Any] }
+    }
+    private func harness() -> Harness { Harness(scratchDefaults(), engine: engine, presets: presets) }
+
+    func testARefusedSenderChangesNothingAndHearsWhy() {
+        let h = harness()
+        let blob = SettingsBridgeSession.Sender(scheme: "http", host: "127.0.0.1", port: 7477, isMainFrame: true, url: URL(string: "blob:http://127.0.0.1:7477/x"))
+        h.send(set(SettingKey.showInDock, false), from: blob)
+        XCTAssertEqual(h.replies.last?.error, "not allowed")
+        XCTAssertTrue(h.d.bool(forKey: SettingKey.showInDock))
+    }
+
+    func testAnInvalidRequestChangesNothingAndHearsWhy() {
+        let h = harness()
+        h.send(set("home", "/tmp"))
+        XCTAssertEqual(h.replies.last?.error, "unknown setting or invalid value")
+        XCTAssertNil(h.d.object(forKey: "home"))
+    }
+
+    func testASetWritesUserDefaultsAndAnswersTheNewState() {
+        let h = harness()
+        h.send(set(SettingKey.showInDock, false))
+        XCTAssertFalse(h.d.bool(forKey: SettingKey.showInDock))
+        XCTAssertEqual(h.lastValues?[SettingKey.showInDock] as? Bool, false)
+        h.send(set(SettingKey.openWindowHotKeyPreset, "optCmdT"))
+        XCTAssertEqual(h.d.string(forKey: SettingKey.openWindowHotKeyPreset), "optCmdT")
+    }
+
+    /// The review's bug: a reply didn't count as telling the page, so a later change back to the last pushed state was
+    /// taken for "nothing new" and the page stayed wrong.
+    func testAChangeAfterAReplyStillReachesThePage() throws {
+        let h = harness()
+        h.loginOn = false
+        _ = h.session.pushScript(current: h.root) // the page heard "off"
+        h.send(set(SettingsBridge.loginKey, true))
+        h.loginOn = true
+        h.send(["op": "get"]) // the page hears "on" by reply
+        h.loginOn = false // the menu turns it off
+        XCTAssertNotNil(h.session.pushScript(current: h.root), "the page thinks it's on")
+    }
+
+    func testAPushRepeatsNothing() {
+        let h = harness()
+        h.send(["op": "get"])
+        XCTAssertNil(h.session.pushScript(current: h.root), "the reply told it")
+        h.d.set(false, forKey: SettingKey.showInDock)
+        let script = h.session.pushScript(current: h.root)
+        XCTAssertTrue(script?.contains("aitt:app-settings") == true)
+        XCTAssertNil(h.session.pushScript(current: h.root))
+    }
+
+    func testAPushGoesOnlyToTheEnginesPage() {
+        let h = harness()
+        for other in ["http://127.0.0.1:7477/docs/", "blob:http://127.0.0.1:7477/x", "about:blank", "https://example.com/"] {
+            XCTAssertNil(h.session.pushScript(current: URL(string: other)), other)
+        }
+        XCTAssertNil(h.session.pushScript(current: nil))
+        XCTAssertNotNil(h.session.pushScript(current: h.root), "and nothing was marked as told meanwhile")
+    }
+
+    func testAFailedLaunchAtLoginSaysWhy() throws {
+        let h = harness()
+        h.loginProblem = "Operation not permitted"
+        h.send(set(SettingsBridge.loginKey, true))
+        XCTAssertEqual(h.loginAsked, [true])
+        XCTAssertEqual(h.lastValues?[SettingsBridge.loginKey] as? Bool, false, "the switch tells the truth")
+        let reply = try XCTUnwrap(h.replies.last?.value as? [String: Any])
+        XCTAssertEqual((reply["problems"] as? [String: String])?[SettingsBridge.loginKey], "Operation not permitted")
+        h.loginProblem = nil
+        h.send(["op": "get"])
+        XCTAssertEqual((h.replies.last?.value as? [String: Any])?["problems"] as? [String: String], [:])
+    }
+
+    func testBackupAnswersWithItsLineWhenDone() {
+        let h = harness()
+        h.send(["op": "backupNow"])
+        XCTAssertEqual(h.backups, 1)
+        XCTAssertTrue(h.replies.isEmpty, "not before it finishes")
+        h.finishBackup?("Backed up just now")
+        XCTAssertEqual((h.replies.last?.value as? [String: String])?["text"], "Backed up just now")
+        XCTAssertEqual(h.replies.count, 1)
+    }
+
+    func testAThemeChangeReachesTheApp() {
+        let h = harness()
+        h.send(["op": "themeChanged"])
+        XCTAssertEqual(h.themeChanges, 1)
+        h.send(["op": "themeChanged"], from: .init(scheme: "http", host: "127.0.0.1", port: 7477, isMainFrame: false, url: h.root))
+        XCTAssertEqual(h.themeChanges, 1, "not from a frame")
+    }
+
+    // MARK: an older app's keys
+
+    func testOldKeysAreRemovedAndUnsentPicksHandedBack() {
+        let d = scratchDefaults()
+        d.set("paper", forKey: SettingKey.theme)
+        d.set(true, forKey: "themePending")
+        d.set(["alpha": true], forKey: "hiddenProjectsPending")
+        d.set(["alpha"], forKey: "hiddenProjects")
+        d.set([["slug": "alpha", "name": "Alpha"]], forKey: "hiddenProjectsList")
+        XCTAssertEqual(LegacySettings.take(d), LegacySettings.Pending(theme: "paper", hidden: ["alpha": true]))
+        for key in ["themePending", "hiddenProjectsPending", "hiddenProjects", "hiddenProjectsList"] { XCTAssertNil(d.object(forKey: key), key) }
+        XCTAssertEqual(d.string(forKey: SettingKey.theme), "paper", "the mirror stays")
+        XCTAssertEqual(LegacySettings.take(d), LegacySettings.Pending(), "only once")
+    }
+
+    func testAThemeThatWasntPendingIsNotSent() {
+        let d = scratchDefaults()
+        d.set("paper", forKey: SettingKey.theme)
+        XCTAssertNil(LegacySettings.take(d).theme)
     }
 }
