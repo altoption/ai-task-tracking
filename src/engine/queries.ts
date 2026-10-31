@@ -70,11 +70,34 @@ function blockedTest(isOpen: (id: string) => boolean): (i: Issue) => boolean {
 /**
  * Stalled test (config.stalled, src/engine/stalled.ts) at `now`: the reason, or null. Reads only memory.
  * Blocked wins: an issue with an open blocker (or the Blocked label) is waiting, not stalled.
+ * An epic's work happens in its children, so for idle time an issue with children counts its newest change among
+ * itself and all its descendants, and one whose open children all need the owner or are blocked is waiting on them,
+ * not idle. The churn rules stay per issue.
  */
 export function stalledOf(s: Store, now = Date.now()): (i: Issue) => string | null {
   const ctx = stalledCtx({ rules: s.config.stalled, statuses: s.config.statuses, needsYouStatuses: s.config.needsYou.statuses, now })
-  const isBlocked = blockedTest(openTest(s))
-  return (i) => (isBlocked(i) ? null : stalledReason(i, s.lastChange(i), s.history(i.id), ctx))
+  const isOpen = openTest(s)
+  const isBlocked = blockedTest(isOpen)
+  const needsYou = needsYouOf(s)
+  const activeAt = (i: Issue): number => {
+    // Only the working status can be idle; skip the walk for everything else.
+    if (i.status !== ctx.working) return s.lastChange(i)
+    const open = s.children(i.id).filter((c) => isOpen(c))
+    if (open.length && open.every((c) => needsYou(c) || isBlocked(c))) return now
+    let t = s.lastChange(i)
+    const seen = new Set([i.id])
+    const stack = s.children(i.id)
+    while (stack.length) {
+      const c = stack.pop()!
+      if (seen.has(c.id)) continue
+      seen.add(c.id)
+      const ct = s.lastChange(c)
+      if (ct > t || Number.isNaN(t)) t = ct
+      stack.push(...s.children(c.id))
+    }
+    return t
+  }
+  return (i) => (isBlocked(i) ? null : stalledReason(i, activeAt(i), s.history(i.id), ctx))
 }
 
 /**
