@@ -35,12 +35,14 @@ async function serve(): Promise<void> {
   const server = startServer(store, { port: store.port, version: pkg.version, git, ci })
   console.log(`aitt ${pkg.version} serving ${root} on http://127.0.0.1:${server.port}`)
   // After git's startup, so the views get their own commit; never holds up or fails the start.
-  void git.ready.catch(() => {}).then(() => store.seedDefaultViews())
+  const seeded = git.ready.catch(() => {}).then(() => store.seedDefaultViews())
   let stopping = false
   const onSignal = async () => {
     if (stopping) return
     stopping = true
     await ci.stop().catch(() => {})
+    // A seed still running would write its marker after the last commit; shutdown's own deadline still holds.
+    await Promise.race([seeded, Bun.sleep(5000)])
     process.exit(await shutdown({ server, watcher, git, deadlineMs: 5000 }))
   }
   process.on('SIGTERM', onSignal)
