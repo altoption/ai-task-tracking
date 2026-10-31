@@ -74,6 +74,7 @@ export default defineConfig({
             { slug: 'guides/agent-sessions' },
             { slug: 'guides/agent-rules' },
             { slug: 'guides/other-agent-tools' },
+            { slug: 'guides/themes' },
           ],
         },
         {

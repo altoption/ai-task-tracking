@@ -94,6 +94,8 @@ Mac's activity log does (see [Picking up where a session stopped](/docs/guides/a
 
 ![The sidebar collapsed to icons beside a project page](../../../assets/screenshots/sidebar-collapsed.png)
 
+⌘K also switches the theme: type "theme" and pick one (see [Themes](/docs/guides/themes/)).
+
 ## Stalled work
 
 Work can stall without anyone saying so: an agent session ends mid-task, or an issue keeps bouncing between agents.
