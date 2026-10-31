@@ -453,6 +453,12 @@ a.ov-event-main:hover { text-decoration: underline; }
 .crumb.current { overflow: hidden; text-overflow: ellipsis; }
 .crumb.current .t { color: var(--text); }
 .crumbs .id { color: var(--muted); }
+.copy-id { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 4px; font: inherit; background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.copy-id .icon { opacity: .6; }
+.copy-id:hover { background: var(--hover); color: var(--text); }
+.copy-id:hover .icon, .copy-id:focus-visible .icon { opacity: 1; }
+.copy-status { flex: none; color: var(--muted); font-size: 12px; }
+.copy-status:empty { display: none; }
 .issue-menu { position: relative; margin-left: auto; }
 .menu-right { left: auto; right: 0; }
 .menu .danger { color: var(--danger); }

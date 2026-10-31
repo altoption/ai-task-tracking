@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { JSDOM } from 'jsdom'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { CopyId, copyText } from '../../ui/components/CopyId'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, LabelDef } from '../../src/model'
 import { activityItems, buildTree, filterOptions, labelOptions, treeProgress } from '../../ui/issuePage'
@@ -171,5 +174,20 @@ describe('pickers', () => {
     const opts = labelOptions(labels)
     expect(filterOptions(opts, 'sco app').map((o) => o.value)).toEqual(['Scope/App'])
     expect(filterOptions(opts, '').length).toBe(3)
+  })
+})
+
+describe('copying the issue ID', () => {
+  test('the breadcrumb ID is a labelled button with room to announce the result', () => {
+    const html = renderToStaticMarkup(createElement(CopyId, { id: 'ATT-56' }))
+    expect(html).toContain('<button type="button" class="id copy-id" title="Copy ID" aria-label="Copy ID ATT-56">ATT-56')
+    expect(html).toContain('role="status"')
+  })
+  test('copyText writes the text, and reports a refusal or a missing clipboard', async () => {
+    const written: string[] = []
+    expect(await copyText('ATT-56', { writeText: async (t) => { written.push(t) } })).toBe(true)
+    expect(written).toEqual(['ATT-56'])
+    expect(await copyText('ATT-56', { writeText: async () => { throw new Error('denied') } })).toBe(false)
+    expect(await copyText('ATT-56', undefined as never)).toBe(false)
   })
 })

@@ -112,6 +112,8 @@ A project shows its description, milestones and documents above its issues, grou
 
 ![A project page with its issues grouped by status](../../../assets/screenshots/project.png)
 
+Click the ID at the top of an issue page to copy it.
+
 An issue page has the description (checklists included), sub-issues, its attempts ("3 attempts · 2 tools": one per
 agent session, which opens into each session's tool, repo, branch, writes and the status it left the issue in), the
 activity with each agent's repo and branch, and the properties and relations on the right. Attempts start when this

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary } from '../../src/model'
 import { callTool, getIssue, getIssueFeed, hiddenRevOf, isHiddenProject, isStub, NO_PROJECT, projectName, useTracker, type HiddenStub, type IssueDetail } from '../client'
+import { CopyId } from '../components/CopyId'
 import { ConceptIcon, Icon, ProgressPill, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { HiddenNotice } from './HiddenNotice'
@@ -333,7 +334,7 @@ export function IssuePage({ id }: { id: string }) {
           {[...detail.ancestors].reverse().map((a) => (
             <span key={a.id} className="crumb"><a href={href({ name: 'issue', id: a.id })} title={isStub(a) ? 'In a hidden project' : a.title}><span className="id">{a.id}</span> {isStub(a) ? <span className="t muted">in a hidden project</span> : <span className="t">{a.title}</span>}</a><span className="sep">›</span></span>
           ))}
-          <span className="crumb current"><span className="id">{detail.id}</span> <span className="t">{detail.title}</span></span>
+          <span className="crumb current"><CopyId id={detail.id} /> <span className="t">{detail.title}</span></span>
         </nav>
         <IssueMenu id={detail.id} url={detail.url} childCount={summary?.childCount ?? detail.children.length} />
       </header>
