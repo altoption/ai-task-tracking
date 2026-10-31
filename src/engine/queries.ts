@@ -67,6 +67,8 @@ function needsYouOf(s: Store): (i: Issue) => boolean {
 export const REQUEST_MAX = 200
 /** How much of a comment plainLine reads: its patterns can go quadratic, and Home runs them on every load. */
 const REQUEST_SCAN_MAX = REQUEST_MAX * 8
+/** An issue's `created` and its first log line are written moments apart. */
+const FEED_START_SLACK_MS = 60_000
 
 /**
  * A comment as one line of plain text: links and images become their text; heading, quote and list marks, code ticks
@@ -86,7 +88,7 @@ function plainLine(body: string): string {
  * isn't the question), on one line, shortened to REQUEST_MAX with "…"; only for an item in Needs you by status or
  * label, since a stalled-only or CI-only item's comments are status notes. `waitingSince`: for a Needs-you status, when
  * it moved there (the newest logged move, if it went to this status), or when it was created if it never moved; none
- * when the log disagrees with the status, and none for a label-only item.
+ * when the log disagrees with the status or doesn't reach back to the issue's creation, and none for a label-only item.
  */
 export function needsYouRequest(s: Store, i: Issue): { request?: string; waitingSince?: string } {
   const out: { request?: string; waitingSince?: string } = {}
@@ -97,7 +99,8 @@ export function needsYouRequest(s: Store, i: Issue): { request?: string; waiting
   if (s.config.needsYou.statuses.includes(i.status)) {
     const last = s.lastMove(i.id)
     if (last?.to === i.status) out.waitingSince = new Date(last.t).toISOString()
-    else if (!s.statusMoved(i.id)) out.waitingSince = i.created
+    // Created before the log begins (it was reset or removed): a move may be missing, so the wait is unknown.
+    else if (!s.statusMoved(i.id) && Date.parse(i.created) >= s.feedStartsAt - FEED_START_SLACK_MS) out.waitingSince = i.created
   }
   return out
 }

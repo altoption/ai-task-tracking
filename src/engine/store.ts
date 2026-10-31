@@ -89,6 +89,7 @@ export class Store {
   /** Per issue, from the feed log: status moves and agent-session writes (pruned to the stalled window), and the newest write time. */
   private hist = new Map<string, IssueHistory>()
   private lastWrite = new Map<string, number>()
+  private feedStart = Infinity
   /** Per issue, from the feed log: when it last moved into a completed status (ms). Never pruned. */
   private doneTimes = new Map<string, number>()
 
@@ -160,6 +161,8 @@ export class Store {
   doneAt(id: string): number | undefined { return this.doneTimes.get(id) }
   /** Agent sessions that worked on `id` (from the feed log, since it began), oldest first by last write. */
   attempts(id: string): Attempt[] { return this.hist.get(id)?.attempts() ?? [] }
+  /** When the feed log begins (Infinity while empty): older issues' moves may be missing from it. */
+  get feedStartsAt(): number { return this.feedStart }
   /** Whether a status move of `id` was logged (false: it is still in the status it was created in, as far as the log knows). */
   statusMoved(id: string): boolean { return this.hist.get(id)?.moved ?? false }
   /** The newest status move of `id` in the feed log, however old. */
@@ -755,14 +758,21 @@ export class Store {
       if (!line.trim()) continue
       try {
         const e = JSON.parse(line) as FeedEvent
+        this.noteFeedStart(e?.at)
         if (e && typeof e.id === 'string' && e.actor && this.issues.has(e.id)) this.remember(e) // deleted issues are forgotten
       } catch { /* partial or corrupt line */ }
     }
   }
 
+  private noteFeedStart(at: unknown): void {
+    const t = typeof at === 'string' ? Date.parse(at) : NaN
+    if (t < this.feedStart) this.feedStart = t
+  }
+
   private remember(e: FeedEvent): void {
     const t = Date.parse(e.at)
     if (!Number.isFinite(t)) return
+    this.noteFeedStart(e.at)
     this.lastWrite.set(e.id, Math.max(t, this.lastWrite.get(e.id) ?? 0))
     if (e.kind === 'status' && e.to && this.config.statuses.find((x) => x.name === e.to)?.type === 'completed') this.doneTimes.set(e.id, t)
     const session = e.actor.actor === 'agent' && e.actor.session ? e.actor.session : undefined
