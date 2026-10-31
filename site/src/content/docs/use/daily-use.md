@@ -59,21 +59,23 @@ Open with ⌘, or **Settings…** in the menu. Every change applies straight awa
 
 The column on the right tells you what your agents got done, not every write they made.
 
-- **The overview**: how many issues were finished and started, how many wait on you, and how many agents worked (and
-  how many are working now). Click a count to show only those. Under it, a strip shows when agents worked over the
-  last 24 hours, one bar per hour, colored by tool.
-- **Waits on you**: issues an agent handed back to you in this range (moved to a Needs-you status such as Waiting, or
-  given a Needs-you label) that still need you, with the agent's question and **Open**. Everything that needs you,
-  including older items, stalled work and failing checks, stays in Needs you on the left.
-- **One card per agent session**: the tool (Claude Code, Codex, Cursor…, or "Agent in" and the repo, such as "Agent in web-app", when the tool
-  wasn't recorded), the repo and branch, when it ran, how many writes it made, and a green dot while it's still writing
-  (within the last 10 minutes). Click the header to fold a card. Your own changes, from the app, the browser or by
-  hand, share one **You** card per day.
+- **The overview**: how many issues were finished, how many were started and not finished yet, how many wait on you,
+  and how many agent sessions worked (and how many are working now). Click a count to show only those; Agents shows
+  only the agent sessions' cards. Under it, a strip shows when agents worked, colored by tool: for Today, one bar per
+  hour from midnight (hours still to come stay blank); for 7 days, one bar per day.
+- **Waits on you**: issues an agent handed back to you in this range that still need you: the agent moved it to a
+  Needs-you status such as Waiting, created it there, or added a Needs-you label. It shows the agent's question and
+  **Open**. Your own moves don't count. Everything that needs you, including older items, stalled work and failing
+  checks, stays in Needs you on the left.
+- **One card per agent session**: the tool (Claude Code, Codex, Cursor…, or "Agent in" and the repo, such as "Agent in
+  web-app", when the tool wasn't recorded), the repo and branch, when it ran, how many writes it made, and a green dot
+  while it's still writing (within the last 10 minutes). Click the header to fold a card; a long card shows its first
+  10 rows and **Show N more**. Your own changes, from the app, the browser or by hand, share one **You** card per day.
 - **One row per issue**: its status icon, id and title, and the path it took in that session (Backlog → In Progress →
   Done; "created" when the session created it). Internal writes, such as a plan change, fold away. The latest note
   shows as a one-line quote; click it (or press Enter on it) to read it all. GitHub PR and commit links in the notes
   become chips. Sub-issues touched in the same session sit under their epic, which shows its progress ring. Click a
-  row to open the issue.
+  row to open the issue; a deleted issue's row is struck through.
 - **Today / 7 days** switches the range, and days separate the cards (Today, Yesterday, then dates). The chips above
   the cards show Everything, Finished, Started, With notes or Needs you.
 
