@@ -27,8 +27,8 @@ export type WireEvent =
   | { kind: 'error'; path: string; message: string }
   | { kind: 'feed'; event: FeedEvent }
   | { kind: 'ci'; changes: Record<string, CiBadge | null> }
-  /** An issue in a hidden project changed (src/server/http.ts `wireEvent`): no summary, only which one. */
-  | { kind: 'hidden'; id: string; project: string }
+  /** An issue in a hidden project changed (src/server/http.ts `wireEvent`): no summary, only which one and where. */
+  | { kind: 'hidden'; id: string; project: string; parent?: string }
 
 /**
  * What the engine left out of the snapshot because its project is hidden (`hiddenProjects` in config.yml): the hidden
@@ -53,8 +53,11 @@ export interface TrackerState {
   /** Null until a snapshot (from an engine that has themes) arrives. */
   themes: ThemesInfo | null
   hidden: HiddenInfo
-  /** Bumped by every `hidden` event: a page showing a hidden issue or project by direct link refetches on it. */
-  hiddenRev: number
+  /**
+   * Per key, how many `hidden` events touched it: the issue id, `p:<project>` and `c:<parent>`. A page showing a hidden
+   * issue, its parent, a relation or a hidden project refetches when one of its keys moves (hiddenRevOf), and only then.
+   */
+  hiddenRevs: ReadonlyMap<string, number>
   /** Newest first. */
   feed: FeedEvent[]
   /** A snapshot has been applied. */
@@ -69,7 +72,7 @@ export const FEED_LIMIT = 200
 
 export function emptyState(): TrackerState {
   return {
-    issues: new Map(), config: null, labels: [], projects: [], views: [], errors: [], themes: null, hidden: NO_HIDDEN, hiddenRev: 0,
+    issues: new Map(), config: null, labels: [], projects: [], views: [], errors: [], themes: null, hidden: NO_HIDDEN, hiddenRevs: new Map(),
     feed: [], ready: false, needsSnapshot: false, connected: false,
   }
 }
@@ -80,7 +83,7 @@ export function fromSnapshot(s: Snapshot, feed: FeedEvent[] = []): TrackerState 
   return {
     issues: new Map(s.issues.map((i) => [i.id, i])),
     config: s.config, labels: s.labels, projects: s.projects, views: s.views, errors: s.errors, themes: s.themes ?? null,
-    hidden: s.hidden ? { projects: s.hidden.projects, issues: new Set(s.hidden.issues) } : NO_HIDDEN, hiddenRev: 0,
+    hidden: s.hidden ? { projects: s.hidden.projects, issues: new Set(s.hidden.issues) } : NO_HIDDEN, hiddenRevs: new Map(),
     feed: feed.slice(0, FEED_LIMIT), ready: true, needsSnapshot: false, connected: false,
   }
 }
@@ -106,7 +109,9 @@ export function applyEvent(state: TrackerState, e: WireEvent): TrackerState {
       const issues = state.issues.has(e.id) ? new Map(state.issues) : state.issues
       if (issues !== state.issues) issues.delete(e.id)
       const hidden = known ? state.hidden : { ...state.hidden, issues: new Set([...state.hidden.issues, e.id]) }
-      return { ...state, issues, hidden, hiddenRev: state.hiddenRev + 1 }
+      const hiddenRevs = new Map(state.hiddenRevs)
+      for (const k of [e.id, `p:${e.project}`, ...(e.parent ? [`c:${e.parent}`] : [])]) hiddenRevs.set(k, (hiddenRevs.get(k) ?? 0) + 1)
+      return { ...state, issues, hidden, hiddenRevs }
     }
     case 'removed': {
       const needsSnapshot = state.needsSnapshot || (state.errors.length > 0 && isExternal(e.actor))
@@ -151,6 +156,13 @@ function withoutHidden(h: HiddenInfo, id: string): HiddenInfo {
   const issues = new Set(h.issues)
   issues.delete(id)
   return { ...h, issues }
+}
+
+/** Pure: a signature of the `hidden` events that touched these keys (see `hiddenRevs`); changes only when one did. */
+export function hiddenRevOf(state: Pick<TrackerState, 'hiddenRevs'>, keys: Iterable<string>): string {
+  let out = ''
+  for (const k of keys) { const n = state.hiddenRevs.get(k); if (n) out += `${k}:${n},` }
+  return out
 }
 
 /** Pure: is this project slug hidden (`hiddenProjects` in config.yml)? */
@@ -268,9 +280,13 @@ export function getProject(slug: string): Promise<ProjectDetail> {
 
 export interface ActivityEntry { at: string; actor: string; workspace?: string; branch?: string; body: string }
 /** `/api/issues/:id`: the full issue plus children, ancestors (nearest first) and the issues it blocks. */
+/** A hidden issue linked from a visible one's page (a child or an ancestor): only its id. */
+export interface HiddenStub { id: string; hidden: true }
+export const isStub = (x: IssueSummary | HiddenStub): x is HiddenStub => 'hidden' in x && x.hidden === true
 export type IssueDetail = Omit<IssueSummary, 'childCount' | 'progress'> & {
   description: string; activity: ActivityEntry[]; extra: Record<string, unknown>; url: string
-  children: IssueSummary[]; ancestors: IssueSummary[]
+  /** A visible issue's hidden children and ancestors are stubs; a hidden issue (opened by its link) gets them all. */
+  children: (IssueSummary | HiddenStub)[]; ancestors: (IssueSummary | HiddenStub)[]
   /** PR url → its CI status, when CI status is on and known (src/engine/ci.ts). */
   ci?: Record<string, CiStatus>
   /** PR url → why it has no CI status ("no access with gh"). */

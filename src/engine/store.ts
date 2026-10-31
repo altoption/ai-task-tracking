@@ -738,7 +738,9 @@ export class Store {
   }
 
   /** Append to the feed log (a cache: failures never fail the write) and emit it. */
-  private async feed(event: FeedEvent): Promise<void> {
+  private async feed(e: FeedEvent): Promise<void> {
+    const project = e.project ?? this.issues.get(e.id)?.project
+    const event = project ? { ...e, project } : e
     this.remember(event)
     await appendEvent(this.root, event).catch((err) => console.error('[store] feed append failed:', errMsg(err)))
     this.emit({ kind: 'feed', event })

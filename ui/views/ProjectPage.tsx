@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IssueSummary, Project } from '../../src/model'
-import { callTool, getProject, inScope, isHiddenProject, NO_PROJECT, setProjectHidden, useScope, useTracker, type ProjectDetail } from '../client'
+import { callTool, getProject, hiddenRevOf, inScope, isHiddenProject, NO_PROJECT, setProjectHidden, useScope, useTracker, type ProjectDetail } from '../client'
 import { ConceptIcon, Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
@@ -212,18 +212,19 @@ function Documents({ project, ctx }: { project: Project; ctx: MdContext }) {
 
 /**
  * A hidden project by its link: `/api/projects/:slug`, refetched when the snapshot changes (project edits, hiding and
- * unhiding) or anything in a hidden project changes (`hiddenRev`). Null until loaded; `missing` when it doesn't exist.
+ * unhiding) or an issue of this project changes (its `p:<slug>` key in hiddenRevs). Null until loaded; `missing` when it doesn't exist.
  */
 function useDirectProject(slug: string, on: boolean): { detail: ProjectDetail | null; missing: boolean } {
   const state = useTracker()
   const [detail, setDetail] = useState<ProjectDetail | null>(null)
   const [missing, setMissing] = useState(false)
+  const hiddenSig = hiddenRevOf(state, [`p:${slug}`])
   useEffect(() => {
     if (!on) return
     let live = true
     getProject(slug).then((d) => { if (live) { setDetail(d); setMissing(false) } }, () => { if (live) setMissing(true) })
     return () => { live = false }
-  }, [on, slug, state.hiddenRev, state.config, state.projects])
+  }, [on, slug, hiddenSig, state.config, state.projects])
   return { detail: on && detail?.project.slug === slug ? detail : null, missing: on && missing }
 }
 

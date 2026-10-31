@@ -574,6 +574,7 @@ span.tree-toggle { transform: none; }
 .hidden-note .ghost-btn.inline { margin-left: 2px; }
 .view-hidden-note { padding: 6px 20px; }
 .project-hide { flex: none; }
+.tree-hidden { padding-left: 8px; }
 .proj-section { margin-top: 28px; }
 .proj-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .proj-section h2, .proj-issues-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; }

@@ -236,6 +236,97 @@ describe('POST /api/hidden-projects', () => {
   })
 })
 
+describe('nothing of a hidden project reaches the UI through visible issues', () => {
+  // The reviewer's scenario: Q-5 (support, Waiting) becomes a child of Q-1, and support is hidden.
+  beforeEach(async () => {
+    await store.updateIssue('Q-5', { parent: 'Q-1' }, { actor: 'you' })
+    await store.setProjectHidden('support', true)
+  })
+
+  test('a visible epic counts only visible children; its page lists hidden ones as id-only stubs', async () => {
+    const q1 = (await get('/api/snapshot')).issues.find((i: any) => i.id === 'Q-1')
+    expect(q1.childCount).toBe(1) // Q-2 only
+    expect(q1.progress).toEqual({ done: 0, total: 2 }) // Q-2 and Q-3, not Q-5
+    const d = await get('/api/issues/Q-1')
+    expect(d.children).toContainEqual({ id: 'Q-5', hidden: true })
+    expect(d.children.find((c: any) => c.id === 'Q-2').title).toBeDefined()
+    expect(JSON.stringify(d)).not.toContain('warranty')
+    for (const path of ['/api/home', '/api/search?q=epic']) expect(JSON.stringify(await get(path))).not.toContain('warranty')
+  })
+
+  test('every child hidden: no count and no progress', async () => {
+    await store.updateIssue('Q-2', { parent: null }, { actor: 'you' })
+    const q1 = (await get('/api/snapshot')).issues.find((i: any) => i.id === 'Q-1')
+    expect(q1.childCount).toBe(0)
+    expect(q1.progress).toEqual({ done: 0, total: 0 })
+  })
+
+  test('a hidden parent in a visible issue\'s breadcrumb is a stub', async () => {
+    await store.updateIssue('Q-4', { parent: 'Q-5' }, { actor: 'you' })
+    const d = await get('/api/issues/Q-4')
+    expect(d.ancestors[0]).toEqual({ id: 'Q-5', hidden: true })
+    expect(d.ancestors[1].id).toBe('Q-1') // Q-5's own parent is visible: a normal crumb
+    expect(JSON.stringify(d)).not.toContain('warranty')
+  })
+
+  test('a hidden issue opened by its link shows its real ancestors and children', async () => {
+    await store.updateIssue('Q-6', { parent: 'Q-5' }, { actor: 'you' })
+    const d = await get('/api/issues/Q-5')
+    expect(d.ancestors.map((a: any) => [a.id, typeof a.title])).toEqual([['Q-1', 'string']])
+    expect(d.children.map((c: any) => [c.id, typeof c.title])).toEqual([['Q-6', 'string']])
+  })
+
+  test('home: unblocks and blockers count only visible issues', async () => {
+    const before = (await get('/api/home')).readyNext.find((x: any) => x.issue.id === 'Q-3').unblocks
+    await store.updateIssue('Q-5', { blockedBy: ['Q-3'] }, { actor: 'you' }) // Q-3 also unblocks hidden Q-5
+    await store.updateIssue('Q-2', { blockedBy: ['Q-5'] }, { actor: 'you' }) // Q-2 is blocked by hidden Q-5
+    const h = await get('/api/home')
+    expect(h.readyNext.find((x: any) => x.issue.id === 'Q-3').unblocks).toBe(before)
+    expect(h.blocked.find((x: any) => x.issue.id === 'Q-2').blockers).toEqual([])
+    // Agents still see the hidden blocker.
+    const next: any = await callTool(store, 'whats_next', {}, { actor: { actor: 'agent' } })
+    expect(next.blocked.find((x: any) => x.id === 'Q-2').blockers).toEqual(['Q-5'])
+  })
+
+  test('feed: a deleted issue of a hidden project stays out (new entries record their project)', async () => {
+    const created: any = await callTool(store, 'save_issue', { title: 'Doomed secret', project: 'support', labels: ['Bug'] }, { actor: { actor: 'you' } })
+    await store.deleteIssue(created.id, { actor: 'you' })
+    await Bun.sleep(50)
+    const feed = await get('/api/feed?limit=50')
+    expect(JSON.stringify(feed)).not.toContain('Doomed secret')
+    const own = await get(`/api/feed?id=${created.id}`) // one issue's history still answers
+    expect(own[0].project).toBe('support')
+    const created2: any = await callTool(store, 'save_issue', { title: 'Visible one', project: 'acme-app', labels: ['Bug'] }, { actor: { actor: 'you' } })
+    await Bun.sleep(50)
+    expect((await get('/api/feed?limit=1')).map((e: any) => e.id)).toEqual([created2.id])
+    // Over the stream: the deleted hidden issue's feed entry isn't sent.
+    expect(wireEvent(store, { kind: 'feed', event: { at: 'x', actor: { actor: 'you' }, id: created.id, kind: 'created', text: 'Doomed secret', project: 'support' } })).toBeNull()
+    // An old entry without a project, of a deleted issue: today's behaviour (sent).
+    expect(wireEvent(store, { kind: 'feed', event: { at: 'x', actor: { actor: 'you' }, id: 'Q-99', kind: 'created' } })).not.toBeNull()
+  })
+
+  test('file errors and file events inside a hidden project\'s folder are left out', async () => {
+    const bad = join(root, 'projects', 'support', 'issues', 'Q-50.md')
+    await writeFile(bad, '---\nid: [broken\n')
+    await store.reloadFile(bad)
+    expect(store.errors.has(bad)).toBe(true)
+    expect((await get('/api/snapshot')).errors.map((e: any) => e.path)).not.toContain(bad)
+    expect(wireEvent(store, { kind: 'error', path: bad, message: 'x' })).toBeNull()
+    expect(wireEvent(store, { kind: 'file', path: 'projects/support/files/a.png' })).toBeNull()
+    expect(wireEvent(store, { kind: 'file', path: 'projects/acme-app/files/a.png' })).not.toBeNull()
+    expect(wireEvent(store, { kind: 'file', path: 'AGENTS.md' })).not.toBeNull()
+  })
+
+  test('config.nextNumber leaves out keys only hidden projects use', async () => {
+    const lab = await store.upsertProject({ name: 'Secret Lab' })
+    expect(store.config.nextNumber[lab.key]).toBeDefined()
+    await store.setProjectHidden(lab.slug, true)
+    const nn = (await get('/api/snapshot')).config.nextNumber
+    expect(nn[lab.key]).toBeUndefined()
+    expect(nn.Q).toBe(7) // shared with the visible acme-app: kept
+  })
+})
+
 describe('agents see no change', () => {
   test('tool results (as MCP and /api/tool get them) are identical with a project hidden', async () => {
     const calls: [string, Record<string, unknown>][] = [

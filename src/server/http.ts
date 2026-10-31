@@ -6,7 +6,9 @@ import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
 import { allThemes, selectedTheme } from '../engine/themes'
-import { hiddenHealth, hiddenProjectsOut, hiddenSlugs, visibleParts, visibleTest } from '../engine/hidden'
+import {
+  feedVisibleTest, hiddenHealth, hiddenProjectsOut, hiddenSlugs, inHiddenFolder, visibleNextNumber, visibleParts, visibleTest,
+} from '../engine/hidden'
 import { ancestors, home, needsYouCount, needsYouList, progress, search, writerWorkspaces } from '../engine/queries'
 import type { ChangeEvent, Store } from '../engine/store'
 import { callTool, issueOut, ToolError, type ToolCtx } from '../tools/handlers'
@@ -22,14 +24,26 @@ const PLACEHOLDER = `<!doctype html><meta charset="utf-8"><title>AI Task Trackin
 <body style="font:16px system-ui;max-width:36rem;margin:4rem auto;padding:0 1rem">
 <h1>AI Task Tracking is running</h1><p>The UI has not been built yet (<code>ui/dist</code> is missing). The JSON API is available under <code>/api</code>.</p></body>`
 
-export function summarize(s: Store, i: Issue): IssueSummary {
+/**
+ * An issue without its body. With `visible` (the UI's summaries; src/engine/hidden.ts), children, progress and the
+ * issues it blocks count only issues in visible projects, so a visible epic says nothing about hidden children.
+ */
+export function summarize(s: Store, i: Issue, visible?: (i: Issue) => boolean): IssueSummary {
   const { description: _d, activity: _a, extra: _e, path: _p, ...rest } = i
   const ci = ciBadge(s.ci, i)
+  const shown = (id: string) => { const x = s.get(id); return !x || visible!(x) }
   return {
-    ...rest, childCount: s.children(i.id).length, progress: progress(s, i.id), blocks: s.blocks(i.id), workspaces: writerWorkspaces(i),
+    ...rest,
+    childCount: visible ? s.children(i.id).filter(visible).length : s.children(i.id).length,
+    progress: progress(s, i.id, visible),
+    blocks: visible ? s.blocks(i.id).filter(shown) : s.blocks(i.id),
+    workspaces: writerWorkspaces(i),
     ...(ci ? { ci } : {}),
   }
 }
+
+/** A hidden issue linked from a visible one (a child or an ancestor): only its id, shown as "in a hidden project". */
+export interface HiddenStub { id: string; hidden: true }
 
 
 /**
@@ -37,16 +51,18 @@ export function summarize(s: Store, i: Issue): IssueSummary {
  * `stalled: <reason>` and `ciReason: "CI failing on PR #12"` when those apply.
  */
 function homeOut(s: Store) {
-  const h = home(s, Date.now(), { visible: visibleTest(s) })
+  const visible = visibleTest(s)
+  const h = home(s, Date.now(), { visible })
+  const sum = (i: Issue) => summarize(s, i, visible)
   return {
     needsYou: h.needsYou.map((i) => {
       const reason = h.stalled.get(i.id)
       const ci = h.ci.get(i.id)
-      return { ...summarize(s, i), ...(reason ? { stalled: reason } : {}), ...(ci ? { ciReason: ci } : {}) }
+      return { ...sum(i), ...(reason ? { stalled: reason } : {}), ...(ci ? { ciReason: ci } : {}) }
     }),
-    inProgress: h.inProgress.map((i) => summarize(s, i)),
-    readyNext: h.readyNext.map((x) => ({ issue: summarize(s, x.issue), unblocks: x.unblocks })),
-    blocked: h.blocked.map((x) => ({ issue: summarize(s, x.issue), blockers: x.blockers })),
+    inProgress: h.inProgress.map(sum),
+    readyNext: h.readyNext.map((x) => ({ issue: sum(x.issue), unblocks: x.unblocks })),
+    blocked: h.blocked.map((x) => ({ issue: sum(x.issue), blockers: x.blockers })),
   }
 }
 
@@ -59,28 +75,32 @@ function ciProblems(s: Store, i: Issue): { ciProblems?: Record<string, string> }
 /**
  * SSE/wire form of a store event: issue events carry summaries, never full issues. The stream feeds the UI and the
  * app's notifications, so hidden projects (src/engine/hidden.ts) stay out of it: a change to an issue in a hidden
- * project goes out only as `{ kind: 'hidden', id, project }` (the UI drops the issue if it had it, and a page showing
- * it by direct link refetches), feed events of hidden issues become the same, and CI changes leave them out. Null:
- * send nothing.
+ * project goes out only as `{ kind: 'hidden', id, project, parent? }` (the UI drops the issue if it had it, and a
+ * page showing it, its parent or a relation refetches), feed events of hidden issues become the same (a deleted one's
+ * are dropped), CI changes leave them out, and file errors and file events inside a hidden project's folder aren't
+ * sent. Null: send nothing.
  */
 export function wireEvent(s: Store, e: ChangeEvent): unknown {
-  if (e.kind !== 'issue' && e.kind !== 'feed' && e.kind !== 'ci') return e
+  if (e.kind === 'meta' || e.kind === 'removed') return e
   const hidden = hiddenSlugs(s)
-  const touched = (i: { id: string; project: string }) => ({ kind: 'hidden', id: i.id, project: i.project })
+  const touched = (i: Issue) => ({ kind: 'hidden', id: i.id, project: i.project, ...(i.parent ? { parent: i.parent } : {}) })
   if (e.kind === 'issue') {
     if (hidden.has(e.issue.project)) return touched(e.issue)
+    const visible = visibleTest(s)
     const { issue, prev, comment, ...rest } = e
-    return { ...rest, issue: summarize(s, issue), ...(prev ? { prev: summarize(s, prev) } : {}), ...(comment ? { comment } : {}) }
+    return { ...rest, issue: summarize(s, issue, visible), ...(prev ? { prev: summarize(s, prev, visible) } : {}), ...(comment ? { comment } : {}) }
   }
   if (!hidden.size) return e
   if (e.kind === 'feed') {
     const i = s.get(e.event.id)
-    return i && hidden.has(i.project) ? touched(i) : e
+    if (i) return hidden.has(i.project) ? touched(i) : e
+    return feedVisibleTest(s)!(e.event) ? e : null
   }
   if (e.kind === 'ci') {
     const changes = Object.fromEntries(Object.entries(e.changes).filter(([id]) => { const i = s.get(id); return !i || !hidden.has(i.project) }))
     return Object.keys(changes).length ? { ...e, changes } : null
   }
+  if (e.kind === 'error' || e.kind === 'file') return inHiddenFolder(s, e.path) ? null : e
   return e
 }
 
@@ -91,13 +111,16 @@ export function wireEvent(s: Store, e: ChangeEvent): unknown {
  */
 export function buildSnapshot(s: Store) {
   const v = visibleParts(s)
+  const visible = visibleTest(s)
+  const nextNumber = visibleNextNumber(s)
+  const config = v.workspaces === s.config.workspaces && nextNumber === s.config.nextNumber ? s.config : { ...s.config, workspaces: v.workspaces, nextNumber }
   return {
-    issues: v.issues.map((i) => summarize(s, i)),
-    config: v.workspaces === s.config.workspaces ? s.config : { ...s.config, workspaces: v.workspaces },
+    issues: v.issues.map((i) => summarize(s, i, visible)),
+    config,
     labels: v.labels,
     projects: v.projects,
     views: s.views,
-    errors: [...s.errors].map(([path, message]) => ({ path, message })),
+    errors: [...s.errors].filter(([path]) => !inHiddenFolder(s, path)).map(([path, message]) => ({ path, message })),
     themes: themesOut(s),
     hidden: { projects: hiddenProjectsOut(s), issues: v.hiddenIds },
   }
@@ -388,23 +411,28 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
             const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 50
             const id = url.searchParams.get('id')
             // One issue's history answers for any issue (a direct link); the general feed leaves hidden projects out.
-            const visible = id ? undefined : visibleTest(store)
-            const all = readFeed(store.root, id || visible ? Infinity : limit)
-            if (id) return json(all.filter((e) => e.id === id).slice(0, limit))
-            if (!visible) return json(all)
-            return json(all.filter((e) => { const i = store.get(e.id); return !i || visible(i) }).slice(0, limit))
+            // Either way reading stops once `limit` entries matched.
+            if (id) return json(readFeed(store.root, limit, (e) => e.id === id))
+            return json(readFeed(store.root, limit, feedVisibleTest(store)))
           }
-          if (p === '/api/search') return json(search(store, url.searchParams.get('q') ?? '', 50, visibleTest(store)).map((i) => summarize(store, i)))
+          if (p === '/api/search') {
+            const visible = visibleTest(store)
+            return json(search(store, url.searchParams.get('q') ?? '', 50, visible).map((i) => summarize(store, i, visible)))
+          }
           const pm = /^\/api\/projects\/([^/]+)$/.exec(p)
           if (pm) {
             // A direct read (the project page's link), hidden or not: the project, whether it is hidden, its issues.
+            // A hidden project was asked for by its path, so its issues count all their children; a visible one's
+            // count only visible children, like everywhere else in the UI.
             let slug: string
             try { slug = decodeURIComponent(pm[1]!) } catch { return fail(400, 'malformed project slug') }
             const project = store.projects.get(slug)
             if (!project) return fail(404, `project ${pm[1]} not found`)
+            const hidden = hiddenSlugs(store).has(slug)
+            const visible = hidden ? undefined : visibleTest(store)
             return json({
-              project, hidden: hiddenSlugs(store).has(slug),
-              issues: store.all().filter((i) => i.project === slug).map((i) => summarize(store, i)),
+              project, hidden,
+              issues: store.all().filter((i) => i.project === slug).map((i) => summarize(store, i, visible)),
             })
           }
           const m = /^\/api\/issues\/([^/]+)$/.exec(p)
@@ -414,10 +442,16 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
             const i = store.get(id)
             if (!i) return fail(404, `issue ${m[1]} not found`)
             const ci = issueCi(store.ci, i)
+            // A visible issue's hidden children and ancestors are stubs (id only, "in a hidden project"), and its
+            // summaries count only visible children. A hidden issue was opened by its link, so it shows its real
+            // children and ancestors.
+            const all = visibleTest(store)
+            const visible = all && all(i) ? all : undefined
+            const out = (x: Issue): IssueSummary | HiddenStub => (visible && !visible(x) ? { id: x.id, hidden: true } : summarize(store, x, visible))
             return json({
               ...issueOut(store, i),
-              children: store.children(i.id).map((c) => summarize(store, c)),
-              ancestors: ancestors(store, i.id).map((a) => summarize(store, a)),
+              children: store.children(i.id).map(out),
+              ancestors: ancestors(store, i.id).map(out),
               blocks: store.blocks(i.id),
               // One per agent session that worked on it, oldest first (src/engine/attempts.ts).
               attempts: attemptsOf(store, i),

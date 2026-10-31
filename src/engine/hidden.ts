@@ -4,7 +4,9 @@
  * HTTP server applies it on those UI endpoints only. MCP tools and `/api/tool/*` never look at it, and direct reads
  * (one issue, one project) still answer.
  */
+import { isAbsolute, relative, sep } from 'node:path'
 import type { Issue, LabelDef, Project } from '../model'
+import type { FeedEvent } from './eventlog'
 import { writerWorkspaces } from './queries'
 import { NO_PROJECT, type Store } from './store'
 
@@ -58,6 +60,40 @@ export function visibleParts(s: Store): {
     labels: s.labels.filter((l) => shownLabels.has(l.name) || !hiddenLabels.has(l.name)),
     workspaces: Object.fromEntries(Object.entries(s.config.workspaces).filter(([w, slug]) => !hidden.has(slug) || shownWorkspaces.has(w))),
   }
+}
+
+/**
+ * Feed entries the UI may see: by the issue's current project, else (a deleted issue) the project recorded on the
+ * entry; an old entry of a deleted issue with no project recorded passes. Undefined when nothing is hidden.
+ */
+export function feedVisibleTest(s: Store): ((e: FeedEvent) => boolean) | undefined {
+  const hidden = hiddenSlugs(s)
+  if (!hidden.size) return undefined
+  return (e) => {
+    const p = s.get(e.id)?.project ?? e.project
+    return !p || !hidden.has(p)
+  }
+}
+
+/** Is this file (absolute, or relative to the data folder) inside a hidden project's folder? */
+export function inHiddenFolder(s: Store, path: string): boolean {
+  const hidden = hiddenSlugs(s)
+  if (!hidden.size) return false
+  const rel = isAbsolute(path) ? relative(s.root, path) : path
+  const parts = rel.split(sep)
+  return parts[0] === 'projects' && parts.length > 2 && hidden.has(parts[1]!)
+}
+
+/**
+ * config.nextNumber without the keys only hidden projects use (a key a visible project shares stays); the same object
+ * when nothing changes.
+ */
+export function visibleNextNumber(s: Store): Record<string, number> {
+  const hidden = hiddenSlugs(s)
+  const shown = new Set([...s.projects.values()].filter((p) => !hidden.has(p.slug)).map((p) => p.key))
+  const keys = new Set([...hidden].flatMap((slug) => { const p = s.projects.get(slug); return p && !shown.has(p.key) ? [p.key] : [] }))
+  if (!keys.size) return s.config.nextNumber
+  return Object.fromEntries(Object.entries(s.config.nextNumber).filter(([k]) => !keys.has(k)))
 }
 
 /**
