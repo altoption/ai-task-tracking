@@ -85,14 +85,17 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
   a badge on the issue page, a dot on rows, and failing checks in Needs you. Without `gh` nothing shows.
 - **Themes.** Graphite (the default), Dark, Light, Match macOS, Midnight, Plum, Paper and High contrast, or your own theme file
-  (`themes/<name>.yml` in the data folder). Pick one in Settings ▸ Theme or with ⌘K ▸ "Theme: …"; the browser and the
+  (`themes/<name>.yml` in the data folder). Pick one in Settings ▸ Appearance or with ⌘K ▸ "Theme: …"; the browser and the
   app window switch together. See [Themes](site/src/content/docs/guides/themes.md).
-- **Hidden projects.** Hide a project you don't want to see (Settings ▸ Hidden projects, or Hide project on its page):
+- **Hidden projects.** Hide a project you don't want to see (Settings ▸ Projects, or Hide project on its page):
   it leaves the sidebar, lists, Home, search, the board and the menu bar. Its links still open it, with Unhide, and
   agents see no change. See [Hidden projects](site/src/content/docs/use/daily-use.md#hidden-projects).
 - **Attempts and handoff.** The issue page counts the agent sessions that worked on an issue ("3 attempts · 2
   tools"); when an agent opens In Progress work, `get_issue` leads with where the last session stopped.
-- **Settings** (⌘,): launch at login; show in the Dock; show Needs-you issues in the menu; show stalled work in
+- **Settings**: a page in the main window (the gear in the sidebar, or ⌘, in the app) with tabs for General, Appearance,
+  Notifications, Projects, Shortcuts and Backup. The theme and hidden projects work in the app and in a browser; the
+  rest is stored by the app, so a browser shows it as "Only in the app". With the engine down, ⌘, opens a small window
+  with Launch at login and how to get the engine back. On the page: launch at login; show in the Dock; show Needs-you issues in the menu; show stalled work in
   Needs you (the menu-bar number, menu and notifications); show CI status; the theme; hidden projects; notify me about agent activity, and for which events: an agent needs you, finishes an issue, or creates one (off by default); the two
   shortcuts; back up to GitHub before quitting. Every setting and its default:
   [the Settings reference](site/src/content/docs/reference/settings.md).

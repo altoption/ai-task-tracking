@@ -33,16 +33,31 @@ Change them or turn them off in Settings.
 
 ## Settings
 
-Open with ⌘, **Settings…** in the menu, or the gear at the bottom of the sidebar. Every change applies straight away.
+Settings is a page in the main window: the gear at the bottom of the sidebar, in the app and in a browser (`#/settings`,
+or `#/settings/appearance` for one tab). In the app, ⌘, **Settings…** in the menu and `aitt://settings` open it too.
+Every change applies straight away, and an open page follows changes made elsewhere.
 
-- **General**: Launch at login; Show in the Dock; Show Needs-you issues in the menu; Show stalled work in Needs you
-  (see [Stalled work](#stalled-work)); Show CI status (see [CI status](#ci-status-on-pull-requests)).
-- **Hidden projects**: one checkbox per project (and No project); see [Hidden projects](#hidden-projects).
+![The Settings page, Appearance tab](../../../assets/screenshots/settings.png)
+
+- **General**: the status of the engine (and where your data is), the backup and the last agent write. Launch at login;
+  Show in the Dock; Show Needs-you issues in the menu; Show stalled work in Needs you (see [Stalled work](#stalled-work));
+  Show CI status (see [CI status](#ci-status-on-pull-requests)).
+- **Appearance**: a card for every theme, including Match macOS and your theme files; see
+  [Themes](/docs/guides/themes/).
 - **Notifications**: Notify me about agent activity, and for which events: an agent needs me (Waiting, Needs
   decision/review, stalled), an agent finished an issue (Done), an agent created an issue (off by default).
+- **Projects**: one switch per project (and No project); see [Hidden projects](#hidden-projects). The tab shows how many
+  are hidden.
 - **Shortcuts**: the two global shortcuts above.
 - **Backup**: Back up to GitHub before quitting. When off, quitting still commits your changes; it just doesn't wait
-  for the push.
+  for the push. **Back up now** does it straight away.
+
+**In a browser**, Appearance and Projects work as they do in the app, because they're saved in `config.yml`. Everything
+else is stored by the app on this Mac, where the engine can't read it, so its rows say *Only in the app*.
+
+**When the engine can't be reached**, ⌘, opens a small window instead: the engine's status, a button to try starting
+it, what to do if that fails, and Launch at login. It switches to the page once the engine answers. Every setting and
+its default: [the Settings reference](/docs/reference/settings/).
 
 ## In the window
 
@@ -161,7 +176,7 @@ issue's own status icon still tells you whether the issue itself is closed.
 
 ## Hidden projects
 
-Hide a project you don't want to see right now: tick it in **Settings ▸ Hidden projects**, or click **Hide project**
+Hide a project you don't want to see right now: turn on its switch in **Settings ▸ Projects**, or click **Hide project**
 on its page. **No project** in that list hides the issues that have no project; it has no page, so only Settings can
 hide it. The choice is saved as `hiddenProjects` in `config.yml`, so the app window and the browser always agree.
 

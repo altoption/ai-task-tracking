@@ -307,6 +307,7 @@ async function main(): Promise<void> {
         },
       },
       { file: 'home-light.png', route: '#/', theme: 'light' },
+      { file: 'settings.png', route: '#/settings/appearance', prepare: (page) => page.waitForSelector('.settings-theme').then(() => {}) },
       // Last: the collapsed state is saved in the context's localStorage and would carry into later shots.
       { file: 'sidebar-collapsed.png', route: `#/project/${website}`, prepare: (page) => page.click('[aria-label="Collapse sidebar"]') },
     ]
