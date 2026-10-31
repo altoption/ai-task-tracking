@@ -1,7 +1,7 @@
 import { realpathSync, statSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import type { Actor, Issue, IssueSummary } from '../model'
-import { readFeed } from '../engine/eventlog'
+import { readFeed, type FeedEvent } from '../engine/eventlog'
 import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
@@ -16,6 +16,8 @@ import { toolSchemas } from '../tools/schemas'
 import { defaultDocs, defaultUi, type UiSource } from './uiAssets'
 
 const HEARTBEAT_MS = 15_000
+/** The most feed entries one `?since=` read returns (7 days of a busy week fit; the UI says when it's cut). */
+export const FEED_SINCE_MAX = 5000
 const SSE_QUEUE_LIMIT = 256 // undrained chunks tolerated per client
 const UI_DIST = resolve(import.meta.dir, '../../ui/dist')
 const DOCS_DIST = resolve(import.meta.dir, '../../site/dist/docs')
@@ -423,9 +425,16 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
           }
           if (p === '/api/events') return sseResponse(store, req.signal)
           if (p === '/api/feed') {
+            // `?since=<iso>` (Home's Agent activity: today or the last 7 days) reads back to that time, up to
+            // FEED_SINCE_MAX entries; otherwise up to 1000.
+            const since = Date.parse(url.searchParams.get('since') ?? '')
             const n = Number(url.searchParams.get('limit') ?? 50)
-            const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 50
+            const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), Number.isNaN(since) ? 1000 : FEED_SINCE_MAX) : 50
             const id = url.searchParams.get('id')
+            if (!Number.isNaN(since) && !id) {
+              const older = (e: FeedEvent) => Date.parse(e.at) < since
+              return json(readFeed(store.root, limit, feedVisibleTest(store), older))
+            }
             // One issue's history answers for any issue (a direct link); the general feed leaves hidden projects out.
             // Either way reading stops once `limit` entries matched.
             if (id) return json(readFeed(store.root, limit, (e) => e.id === id))

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { IssueSummary, PlanSlot } from '../../src/model'
 import { callTool, inScope, useScope, useTracker, type TrackerState } from '../client'
-import { PLAN_SLOTS, boardColumns, feedActor, feedInScope, feedLine, needsYouWhy, relTime, scopeHome, type HomeData, type NeedsYouItem } from '../home'
+import { PLAN_SLOTS, boardColumns, needsYouWhy, relTime, scopeHome, type HomeData, type NeedsYouItem } from '../home'
 import { href } from '../router'
 import { CiDot } from '../components/Ci'
+import { Activity } from './Activity'
 import { isOpen } from './Sidebar'
 
-const FEED_SHOWN = 50
 const COLUMN_TITLE = { now: 'Now', next: 'Next', later: 'Later' } as const
 
 async function fetchHome(): Promise<HomeData> {
@@ -109,10 +109,6 @@ export function Home() {
     return m
   }, [data, state.config])
 
-  const feed = useMemo(() => state.feed
-    .filter((e) => feedInScope(e, state.issues.get(e.id), scope, state.config))
-    .slice(0, FEED_SHOWN), [state.feed, state.issues, scope, state.config])
-
   const columns = useMemo(() => boardColumns(
     [...state.issues.values()].filter((i) => isOpen(state, i.status) && inScope(i, scope, state.config)), overrides,
   ), [state.issues, state.config, scope, overrides]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,19 +163,7 @@ export function Home() {
             </>
           )}
         </div>
-        <aside className="home-feed">
-          <h4>Agent activity · live</h4>
-          {feed.length === 0 && <div className="home-empty">No activity yet.</div>}
-          {feed.map((e, n) => {
-            const who = feedActor(e)
-            return (
-              <a key={`${n}|${e.at}|${e.id}|${e.kind}`} className="home-row feed-row" href={href({ name: 'issue', id: e.id })}>
-                <span className="tm">{relTime(e.at, now)}</span>
-                <span><span className={who.kind === 'agent' ? 'ag' : 'ag hand'}>{who.label}</span> {feedLine(e, (id) => state.issues.get(id)?.parent)}</span>
-              </a>
-            )
-          })}
-        </aside>
+        <Activity needsYou={home?.needsYou ?? null} now={now} />
       </div>
       <div className="home-board">
         {PLAN_SLOTS.map((slot) => (
