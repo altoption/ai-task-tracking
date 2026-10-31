@@ -1,6 +1,11 @@
 import Foundation
 
 public enum DeepLink {
+    /// `aitt://settings` opens the Settings window, not a page.
+    public static func isSettings(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "aitt" && url.host?.lowercased() == "settings"
+    }
+
     /// `aitt://issue/Q-123` → `#/issue/Q-123`, `aitt://project/<slug>` → `#/project/<slug>`, `aitt://new` → `#/new`;
     /// any other aitt:// URL opens Home. nil for other schemes.
     public static func route(for url: URL) -> String? {

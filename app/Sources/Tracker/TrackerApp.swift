@@ -110,7 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// aitt://issue/Q-1, aitt://project/<slug>, aitt://new (registered in Info.plist by app/build.sh).
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls { if let route = DeepLink.route(for: url) { showWindow(route: route) } }
+        for url in urls {
+            if DeepLink.isSettings(url) { showSettings() } else if let route = DeepLink.route(for: url) { showWindow(route: route) }
+        }
     }
 
     /// Quit: when there is something to commit or push (and "Back up to GitHub before quitting" is on), cancel this
@@ -263,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notifier?.apply()
     }
 
-    @objc private func showSettings() {
+    @objc fileprivate func showSettings() {
         let w = settings ?? SettingsWindow()
         settings = w
         w.present()
@@ -669,12 +671,15 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
     }
 
     // The web view only ever shows the engine. Any other navigation, in any frame, is cancelled; a link click
-    // to an http/https/mailto target opens in the default handler, other schemes are ignored.
+    // to an http/https/mailto target opens in the default handler, aitt://settings opens Settings, other schemes are
+    // ignored.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { return decisionHandler(.cancel) }
         if isEngine(url) || ["about", "blob"].contains(url.scheme?.lowercased() ?? "") { return decisionHandler(.allow) }
-        if action.navigationType == .linkActivated { Self.openExternally(url) }
+        if action.navigationType == .linkActivated {
+            if DeepLink.isSettings(url) { (NSApp.delegate as? AppDelegate)?.showSettings() } else { Self.openExternally(url) }
+        }
         decisionHandler(.cancel)
     }
 

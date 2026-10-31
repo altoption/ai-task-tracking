@@ -149,6 +149,8 @@ kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--borde
 .file-errors summary { cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .file-errors ul { margin: 6px 0 0; padding-left: 14px; color: var(--muted); max-height: 30vh; overflow: auto; }
 .file-errors li { margin-bottom: 4px; word-break: break-word; }
+.sidebar-tools { display: flex; align-items: center; gap: 2px; }
+.sidebar-tools .spacer { flex: 1; }
 .conn { display: flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--faint); font-size: 11px; }
 .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
 .conn.on .conn-dot { background: var(--ok); }
@@ -171,6 +173,8 @@ kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--borde
 .collapsed .nav-section { width: 24px; height: 1px; margin: 10px auto; padding: 0; background: var(--border); font-size: 0; overflow: hidden; }
 .collapsed .sidebar-bottom { align-items: center; }
 .collapsed .file-errors { padding: 0; display: grid; place-items: center; }
+.collapsed .sidebar-tools { flex-direction: column; }
+.collapsed .sidebar-tools .spacer { display: none; }
 .collapsed .conn { padding: 0; justify-content: center; height: 16px; }
 
 /* ---------- pages ---------- */
