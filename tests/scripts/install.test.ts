@@ -201,6 +201,7 @@ case "$1" in read) exit 1 ;; export) exit 0 ;; esac
   mv: `#!/bin/bash
 last="\${@: -1}"
 if [ "$MV_FAIL" = aside ] && [[ "$last" = */previous.app ]]; then echo "mv: refused" >&2; exit 1; fi
+if [ -n "$MV_LOCK_SEEN" ] && [ -d "$(dirname "$MV_APP")/.aitt-install.lock" ]; then touch "$MV_LOCK_SEEN"; fi
 if [ "$last" = "$MV_APP" ] && [[ "$1" != */previous.app ]]; then
   if [ "$MV_FAIL" = new ]; then echo "mv: refused" >&2; exit 1; fi
   if [ -n "$MV_SIGNAL" ]; then
@@ -356,7 +357,7 @@ describe('install.sh release path (end to end, nothing built)', () => {
     await bundle(t.apps, '0.0.9')
     const r = await t.install(['--yes', '--no-launch'], { MV_SIGNAL: 'TERM', MV_READONLY: '1', MV_APP: t.app })
     await chmod(t.apps, 0o755)
-    const stage = (await readdir(t.apps)).find((f) => f.startsWith('.aitt-install.'))
+    const stage = (await readdir(t.apps)).find((f) => f.startsWith('.aitt-install.') && f !== '.aitt-install.lock')
     expect(stage).toBeDefined()
     const kept = join(t.apps, stage!, 'previous.app')
     expect(await exists(join(kept, 'Contents/Info.plist'))).toBe(true)
@@ -381,5 +382,45 @@ describe('install.sh release path (end to end, nothing built)', () => {
     await running(t.app)
     expect((await t.install(['--yes', '--no-launch'], { MV_FAIL: 'new', MV_APP: t.app })).code).toBe(1)
     expect((await t.calls()).some((c) => c.startsWith('open'))).toBe(false)
+  })
+
+  describe('the install lock', () => {
+    const locked = async (pid: string) => {
+      const t = await e2e()
+      await bundle(t.apps, '0.0.9')
+      const lock = join(t.apps, '.aitt-install.lock')
+      await mkdir(lock)
+      await writeFile(join(lock, 'pid'), pid)
+      return { t, lock }
+    }
+    test('a live one refuses, before anything is downloaded or replaced, and is left in place', async () => {
+      const { t, lock } = await locked(`${process.pid}\n`)
+      const r = await t.install(['--yes', '--no-launch'])
+      expect(r.code).toBe(1)
+      expect(r.out).toContain(`another install is running (pid ${process.pid})`)
+      expect(await t.version()).toBe('0.0.9')
+      expect((await t.calls()).some((c) => c.includes('/releases/download/'))).toBe(false)
+      expect(await exists(lock)).toBe(true)
+    })
+    test('one whose process is gone is taken over, and released at the end', async () => {
+      const gone = Bun.spawn(['/usr/bin/true'])
+      await gone.exited
+      const { t, lock } = await locked(`${gone.pid}\n`)
+      expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+      expect(await t.version()).toBe('0.1.0')
+      expect(await exists(lock)).toBe(false)
+    })
+    test('one with no process id is taken over after a moment', async () => {
+      const { t, lock } = await locked('')
+      expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+      expect(await exists(lock)).toBe(false)
+    })
+    test('a run that holds it and is interrupted releases it', async () => {
+      const t = await e2e()
+      await bundle(t.apps, '0.0.9')
+      await t.install(['--yes', '--no-launch'], { MV_SIGNAL: 'TERM', MV_APP: t.app, MV_LOCK_SEEN: join(t.base, 'seen') })
+      expect(await exists(join(t.base, 'seen'))).toBe(true) // it was held while the swap ran
+      expect(await exists(join(t.apps, '.aitt-install.lock'))).toBe(false)
+    })
   })
 })

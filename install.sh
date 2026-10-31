@@ -14,7 +14,7 @@ MIN_MACOS=13
 MIN_BUN=1.4
 
 YES=0 DRY=0 FROM_SOURCE=0 LAUNCH=1 VERSION="" CONNECT=""
-CLONE="" TMP_DIRS=() APP="" SWAP_OLD="" WAS_RUNNING=""
+CLONE="" TMP_DIRS=() APP="" SWAP_OLD="" WAS_RUNNING="" INSTALL_LOCK=""
 
 # The help text lives here (not only in comments) so --help also works when the script is piped into bash.
 usage() {
@@ -61,6 +61,7 @@ cleanup() {
   for d in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do
     if [ "$d" != "$keep" ]; then rm -rf "$d"; fi
   done
+  if [ -n "$INSTALL_LOCK" ]; then rm -rf "$INSTALL_LOCK"; fi
 }
 # new_tmp: a temp folder in $NEW_TMP, removed on exit. (Not through $(…): the list must live in this shell.)
 new_tmp() {
@@ -239,6 +240,26 @@ reopen_kept() {
   if [ -n "$WAS_RUNNING" ] && [ "$LAUNCH" = 1 ] && [ -d "$APP" ]; then open "$APP" || true; fi
 }
 
+# take_lock: one install at a time into a folder. A lock whose process is gone is taken over.
+take_lock() {
+  local lock="$APP_DIR/.aitt-install.lock" pid attempt
+  for attempt in 1 2 3; do
+    if mkdir "$lock" 2>/dev/null; then
+      echo "$$" >"$lock/pid"
+      INSTALL_LOCK="$lock"
+      return 0
+    fi
+    pid="$(cat "$lock/pid" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      aitt_die "another install is running (pid $pid); try again when it is done. Nothing was replaced."
+    fi
+    # No pid yet may be another installer between its mkdir and its write: give it a moment before calling it stale.
+    if [ -z "$pid" ] && [ "$attempt" = 1 ]; then sleep 1; continue; fi
+    rm -rf "$lock"
+  done
+  aitt_die "could not take the install lock $lock. Nothing was replaced."
+}
+
 # swap_in NEW_APP: NEW_APP is a complete bundle in a stage folder inside APP_DIR. Quit only the copies in APP_DIR,
 # then rename: the old app aside, the new one in place (the old one comes back if that fails), the old one removed.
 swap_in() {
@@ -356,6 +377,7 @@ main() {
   mkdir -p "$APP_DIR"
   APP_DIR="$(canon_dir "$APP_DIR")"
   APP="$APP_DIR/$AITT_APP_NAME"
+  take_lock
   if [ "$METHOD" = release ] && ! install_release; then
     aitt_warn "the release couldn't be installed; building from source instead"
     install_source
