@@ -25,8 +25,10 @@ The installer checks this Mac, shows what it will do and asks once. It installs 
 source if any check fails or there is no release), links `~/.local/bin/aitt`, runs [`aitt setup`](/docs/start/first-run/)
 and, on a first install, opens the app and turns on Launch at Login. The new app is prepared next to the old one, run
 once to check it works, and swapped in only then, so a failed download or build, or a build that doesn't run, leaves
-the installed app as it was. If the swap itself fails or is interrupted, the old app goes back in place. Only one
-install runs at a time in a folder; a second one stops with a message, and a lock left by a crashed run is taken over.
+the installed app as it was; a release that doesn't run falls back to a source build. If the swap itself fails or is
+interrupted, the old app goes back in place, and an app that was running is reopened. If the installer is killed
+outright mid-swap, running it again puts the old app back first. Only one install runs at a time in a folder; a
+second one stops and names the lock, and a lock left by a crashed run is taken over.
 
 ## Options
 

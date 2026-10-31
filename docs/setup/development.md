@@ -67,7 +67,8 @@ including your real one, match too.
   --no-claude-md`, connecting no other agent tool unless `--connect` names it. Into `~/Applications` it quits and
   replaces your installed app and registers Claude Code against your real data folder; use a scratch `AITT_APP_DIR` (and `AITT_HOME`) unless
   you mean to upgrade your own install. Unlike `./install.sh`, it replaces the bundle in place rather than
-  staging it and swapping it in.
+  staging it and swapping it in. It also takes no install lock (known gap): don't run it while `./install.sh` is
+  running on the same app folder.
 
 ## Docs site
 The user docs are a Starlight site in `site/` (its own package; `bun run docs:install` installs it). The engine
