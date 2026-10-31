@@ -83,6 +83,17 @@ export interface Ctx {
   now: number
 }
 
+/**
+ * A GitHub pull request or commit URL: https, github.com, `/<owner>/<repo>/(pull|commit)/<ref>`. Links come from agents,
+ * and only these become chips (a `javascript:` URL that merely contains `/pull/` never does).
+ */
+export function isGithubChange(url: string): boolean {
+  let u: URL
+  try { u = new URL(url) } catch { return false }
+  return u.protocol === 'https:' && u.hostname.toLowerCase() === 'github.com' && !u.username && !u.password &&
+    /^\/[^/]+\/[^/]+\/(pull|commit)\/[^/]+/.test(u.pathname)
+}
+
 const TOOLS: Record<string, [key: string, name: string]> = {
   'claude-code': ['cc', 'Claude Code'], codex: ['cx', 'Codex'], cursor: ['cu', 'Cursor'], gemini: ['gm', 'Gemini CLI'],
   vscode: ['vs', 'VS Code'], windsurf: ['ws', 'Windsurf'], 'claude-desktop': ['cd', 'Claude'],
@@ -90,7 +101,8 @@ const TOOLS: Record<string, [key: string, name: string]> = {
 
 /** The tool's badge key and name from the actor's `client`; without one, "Agent in <workspace>". */
 export function toolOf(client: string | undefined, workspace: string | undefined): { key: string; name: string; badge: string } {
-  const t = client ? TOOLS[client] : undefined
+  // `client` is written by agents: an own-key check, so `constructor` or `__proto__` can't reach Object.prototype.
+  const t = client && Object.hasOwn(TOOLS, client) ? TOOLS[client] : undefined
   if (t) return { key: t[0], name: t[1], badge: t[0].toUpperCase() }
   if (client) return { key: 'other', name: client, badge: client.slice(0, 2).toUpperCase() }
   return { key: 'other', name: workspace ? `Agent in ${workspace}` : 'Agent', badge: 'AG' }
@@ -195,9 +207,9 @@ function buildRow(id: string, evs: FeedEvent[], ctx: Ctx): ActivityRow | null {
   if (!path.length && edits.size) detail = `edited ${[...edits].join(', ')}`
   // Nothing the owner would care about: the whole row folds away (its writes still count on the card).
   if (!path.length && !detail && note === undefined) return null
-  const links = extractLinks(notes.join('\n')).filter((l) => !l.title.startsWith('Branch'))
+  const links = extractLinks(notes.join('\n')).filter((l) => !l.title.startsWith('Branch') && isGithubChange(l.url))
   if (addedLinks && sum) {
-    for (const l of sum.links) if (/\/(pull|commit)\//.test(l.url) && !links.some((x) => x.url === l.url)) links.push(l)
+    for (const l of sum.links) if (isGithubChange(l.url) && !links.some((x) => x.url === l.url)) links.push(l)
   }
   return {
     id, title: sum?.title ?? created ?? id, status: sum?.status ?? lastTo ?? '', path, ...(detail ? { detail } : {}),

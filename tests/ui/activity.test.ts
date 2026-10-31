@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, StatusDef } from '../../src/model'
 import {
-  activityCounts, allRows, buildActivity, dayLabel, filterRows, LIVE_MS, localDay, mergeFeeds, rangeStart, rhythm, toolOf,
+  activityCounts, allRows, buildActivity, dayLabel, filterRows, isGithubChange, LIVE_MS, localDay, mergeFeeds, rangeStart, rhythm, toolOf,
   waitingOnYou, type Ctx,
 } from '../../ui/activity'
 
@@ -200,5 +200,27 @@ describe('merging fetched and live events', () => {
   test('a session is live for LIVE_MS after its last write', () => {
     const { cards } = buildActivity([ev(CC, LIVE_MS / 60_000 + 1, 'B-1', 'comment', { text: 'x' })], ctx, TODAY)
     expect(cards[0]!.live).toBe(false)
+  })
+})
+
+describe('agent-written data stays inert (security review)', () => {
+  test('a client named like an Object.prototype key is just an unknown tool', () => {
+    for (const c of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      const t = toolOf(c, 'repo')
+      expect(t.key).toBe('other')
+      expect(t.name).toBe(c)
+    }
+  })
+  test('only https GitHub pull request and commit URLs become chips', () => {
+    expect(isGithubChange('https://github.com/o/r/pull/12')).toBe(true)
+    expect(isGithubChange('https://github.com/o/r/commit/abc123')).toBe(true)
+    expect(isGithubChange('javascript:alert(1)//github.com/o/r/pull/1')).toBe(false)
+    expect(isGithubChange('javascript:/pull/1')).toBe(false)
+    expect(isGithubChange('http://github.com/o/r/pull/1')).toBe(false)
+    expect(isGithubChange('https://evil.example/o/r/pull/1')).toBe(false)
+    expect(isGithubChange('https://github.com.evil.example/o/r/pull/1')).toBe(false)
+    expect(isGithubChange('https://user:pw@github.com/o/r/pull/1')).toBe(false)
+    expect(isGithubChange('https://github.com/o/r/issues/1')).toBe(false)
+    expect(isGithubChange('not a url')).toBe(false)
   })
 })
