@@ -65,6 +65,8 @@ function needsYouOf(s: Store): (i: Issue) => boolean {
 
 /** Home's request summary is at most this long. */
 export const REQUEST_MAX = 200
+/** How much of a comment plainLine reads: its patterns can go quadratic, and Home runs them on every load. */
+const REQUEST_SCAN_MAX = REQUEST_MAX * 8
 
 /**
  * A comment as one line of plain text: links and images become their text; heading, quote and list marks, code ticks
@@ -89,7 +91,7 @@ function plainLine(body: string): string {
 export function needsYouRequest(s: Store, i: Issue): { request?: string; waitingSince?: string } {
   const out: { request?: string; waitingSince?: string } = {}
   if (needsYouOf(s)(i)) {
-    const one = plainLine([...i.activity].reverse().find((a) => a.actor !== 'you' && a.body.trim())?.body ?? '')
+    const one = plainLine([...i.activity].reverse().find((a) => a.actor !== 'you' && a.body.trim())?.body.slice(0, REQUEST_SCAN_MAX) ?? '')
     if (one) out.request = one.length > REQUEST_MAX ? `${one.slice(0, REQUEST_MAX - 1).trimEnd()}…` : one
   }
   if (s.config.needsYou.statuses.includes(i.status)) {
