@@ -15,7 +15,7 @@ changes, without a reload.
 
 - **In the sidebar:** the theme icon at the bottom opens a menu of every theme, in the app and the browser.
 - **In Settings:** the gear in the sidebar (or ⌘, in the app) ▸ **Appearance** shows a card for every theme, in the app and
-  the browser. Choosing a theme needs the engine; while it can't be reached, the page doesn't open.
+  the browser. Choosing a theme needs the engine: if it can't be reached, the page says so and the theme stays as it was.
 - **In any window:** press ⌘K, type `theme`, and pick one. A query that starts with `theme` lists the themes first,
   so `theme paper` ⏎ goes straight to Paper. The current theme is marked *Current*; if the engine refuses a theme, the
   reason shows in the bar.

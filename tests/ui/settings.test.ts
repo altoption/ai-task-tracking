@@ -112,6 +112,13 @@ describe('app-only settings', () => {
     expect(switchOf(off, 'Notify me about agent activity')).not.toContain('disabled')
     expect(switchOf(render('notifications', appApi({ notifications: true })), 'An agent finished an issue')).not.toContain('disabled')
   })
+  test('a problem from the app shows on its row', () => {
+    const api = appApi({ [LOGIN_KEY]: false })
+    api.state!.problems = { [LOGIN_KEY]: 'Operation not permitted' }
+    const h = render('general', api)
+    expect(h).toContain('role="alert">Operation not permitted')
+    expect(render('general', appApi({ [LOGIN_KEY]: false }))).not.toContain('role="alert"')
+  })
   test('the app\'s web view has a bridge; a browser, or a handler that can\'t be called, has none', () => {
     const b = { postMessage: async () => ({}) }
     expect(appBridge({ webkit: { messageHandlers: { aittSettings: b } } })).toBe(b)
@@ -122,7 +129,7 @@ describe('app-only settings', () => {
   test('a reply that isn\'t a state is ignored', () => {
     expect(parseAppSettings(null)).toBeNull()
     expect(parseAppSettings({ values: {} })).toBeNull()
-    expect(parseAppSettings({ values: { a: true }, presets: {} })).toEqual({ values: { a: true }, presets: {} })
+    expect(parseAppSettings({ values: { a: true }, presets: {} })).toEqual({ values: { a: true }, presets: {}, problems: {} })
   })
   test('the page\'s keys are exactly what the app\'s bridge accepts', () => {
     const swift = readFileSync(join(import.meta.dir, '../../app/Sources/TrackerCore/SettingsBridge.swift'), 'utf8')
@@ -200,6 +207,15 @@ describe('the status strip says only what is known', () => {
     expect(engineStatus(null, true).text).toBe('Not reachable')
     expect(engineStatus({ home: '/data' }, false).tone).toBe('danger')
   })
+  test('before the first reply: checking, not a failure; a failed poll is one', () => {
+    expect(engineStatus(undefined, true)).toEqual({ text: 'Checking…', tone: 'off' })
+    expect(backupStatus(undefined, NOW)).toEqual({ text: 'Checking…', tone: 'off' })
+    expect(engineStatus(null, true).tone).toBe('danger')
+    const h = render('general')
+    expect(h).toContain('Checking…')
+    expect(h).not.toContain('Not reachable')
+    expect(h).not.toContain('Status unavailable')
+  })
   test('backup, as the app menu says it', () => {
     const line = (git: NonNullable<Parameters<typeof backupStatus>[0]>['git']) => backupStatus({ git }, NOW).text
     expect(line({ pushError: 'x', remote: true })).toBe('Backup error')
@@ -220,7 +236,7 @@ describe('the status strip says only what is known', () => {
     const you = { at: age(1000), actor: { actor: 'you' } }
     const agent = { at: age(5 * 60_000), actor: { actor: 'agent', client: 'codex' } }
     expect(agentStatus([you, agent], NOW).text).toBe('Last write 5 min ago · codex')
-    expect(agentStatus([you], NOW).text).toBe('No agent activity yet')
+    expect(agentStatus([you], NOW).text).toBe('No recent agent activity')
     expect(agentStatus([], NOW).text).not.toMatch(/connected/i)
   })
   test('General shows the strip; other tabs don\'t', () => {

@@ -16,6 +16,8 @@ export interface AppSettingsState {
   /** Every setting by key: a switch's boolean, or the chosen shortcut's id. */
   values: Record<string, boolean | string>
   presets: Record<string, PresetOption[]>
+  /** Why a setting isn't what was asked for (Launch at login, refused by macOS), by key. */
+  problems?: Record<string, string>
 }
 
 /** The bridge, when this page runs in the app's web view. */
@@ -29,7 +31,12 @@ export function appBridge(win: unknown): AppBridge | null {
 export function parseAppSettings(x: unknown): AppSettingsState | null {
   const o = x as Partial<AppSettingsState> | null
   if (!o || typeof o !== 'object' || !o.values || typeof o.values !== 'object' || !o.presets || typeof o.presets !== 'object') return null
-  return { values: o.values, presets: o.presets }
+  return { values: o.values, presets: o.presets, problems: o.problems && typeof o.problems === 'object' ? o.problems : {} }
+}
+
+/** Tell the app the engine's theme changed, so its window's colors follow now rather than at its next poll. */
+export function notifyAppOfTheme(bridge: AppBridge | null): void {
+  bridge?.postMessage({ op: 'themeChanged' }).catch(() => { /* the next poll catches up */ })
 }
 
 export interface AppSettingsApi {

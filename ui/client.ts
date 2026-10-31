@@ -272,19 +272,20 @@ export async function callTool<T = unknown>(name: string, args: Record<string, u
 
 /** Choose the UI theme (POST /api/theme, the owner's). Every open UI follows through the `meta` event. */
 export async function setTheme(id: string): Promise<void> {
-  const r = await fetch('/api/theme', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify({ theme: id }),
-  })
+  const r = await ownerPost('/api/theme', { theme: id })
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `setting the theme failed (${r.status})`)
 }
 
 /** Hide or unhide a project folder in the UIs (POST /api/hidden-projects, the owner's). Every open UI follows through `meta`. */
 export async function setProjectHidden(slug: string, hidden: boolean): Promise<void> {
-  const r = await fetch('/api/hidden-projects', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify({ project: slug, hidden }),
-  })
+  const r = await ownerPost('/api/hidden-projects', { project: slug, hidden })
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `${hidden ? 'hiding' : 'unhiding'} the project failed (${r.status})`)
 }
+
+/** No reply at all is the engine being away: browsers word that as "Failed to fetch" or "Load failed". */
+const ownerPost = (path: string, body: unknown): Promise<Response> => fetch(path, {
+  method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify(body),
+}).catch(() => { throw new Error('The engine isn\'t answering') })
 
 /** `/api/health`, for the Settings page's status strip. */
 export function getHealth(): Promise<HealthInfo> {

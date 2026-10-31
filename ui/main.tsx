@@ -1,5 +1,6 @@
 import { StrictMode, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { appBridge, notifyAppOfTheme } from './appSettings'
 import { startLive, useTracker } from './client'
 import { isTypingTarget, keyAction, type KeyState } from './keys'
 import { href, navigate, parseRoute, trackHistory, useHash, type Route } from './router'
@@ -50,7 +51,10 @@ function Page({ route }: { route: Route }): ReactNode {
 
 /** Applies the chosen theme; its own component so a snapshot re-renders only this. */
 function ThemeSync() {
-  useThemeEffect(useTracker().themes)
+  const themes = useTracker().themes
+  useThemeEffect(themes)
+  const current = themes?.effective ?? themes?.selected
+  useEffect(() => { if (current) notifyAppOfTheme(appBridge(globalThis)) }, [current])
   return null
 }
 
