@@ -104,7 +104,8 @@ Root cause: the form remounts on error. PR opened.
 | `touched_by` | Who wrote last: `{actor: agent, workspace: web, branch: main}`. The app writes it; leave it out when importing. | — |
 
 Any other key (like `source:` above) is kept as it is, in its place, through every later edit. That is the place for
-the old tool's id or URL.
+the old tool's id or URL. Two such keys have a use: `completed_at` and `canceled_at` (ISO 8601) say when a closed issue
+was closed in the old tool, for views that filter on [closed in the last N days](/docs/use/daily-use/#in-the-window).
 
 Ids in `parent`, `blocked_by` and `related` may point into other projects. The tools refuse an id that doesn't exist;
 in a file it is kept as written, so check that every id you reference is imported too.
