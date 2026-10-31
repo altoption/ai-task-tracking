@@ -67,22 +67,35 @@ function needsYouOf(s: Store): (i: Issue) => boolean {
 export const REQUEST_MAX = 200
 
 /**
- * What a Needs-you item asks of the owner, for Home: `request` is its newest comment on one line (markdown emphasis,
- * code ticks and heading or quote marks dropped), shortened to REQUEST_MAX with "…"; `waitingSince` is when it last
- * moved into the Needs-you status it is in, when the feed log remembers the move (its window is `stalled.windowDays`).
- * A label-only item (Needs review) has no `waitingSince`.
+ * A comment as one line of plain text: links and images become their text; heading, quote and list marks, code ticks
+ * and asterisk emphasis go. Underscores stay: `__init__` and snake_case are far likelier than underscore emphasis, and
+ * an asterisk needs text against it (`2 * 3` and `a*b*c` stay).
+ */
+function plainLine(body: string): string {
+  return body.split('\n').map((l) => l.replace(/^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+)+/, '')).join(' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`/g, '')
+    .replace(/(^|[^\w*])(\*\*?)(?=[^\s*])(.+?)(?<=[^\s*])\2(?![\w*])/g, '$1$3')
+    .replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * What a Needs-you item asks of the owner, for Home. `request`: the newest comment not written by the owner (a reply
+ * isn't the question), on one line, shortened to REQUEST_MAX with "…"; only for an item in Needs you by status or
+ * label, since a stalled-only or CI-only item's comments are status notes. `waitingSince`: for a Needs-you status, when
+ * it moved there (the newest logged move, if it went to this status), or when it was created if it never moved; none
+ * when the log disagrees with the status, and none for a label-only item.
  */
 export function needsYouRequest(s: Store, i: Issue): { request?: string; waitingSince?: string } {
   const out: { request?: string; waitingSince?: string } = {}
-  const last = i.activity.at(-1)
-  if (last?.body.trim()) {
-    const one = last.body.split('\n').map((l) => l.replace(/^\s*(?:#{1,6}\s+|>\s?)+/, '')).join(' ')
-      .replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim()
+  if (needsYouOf(s)(i)) {
+    const one = plainLine([...i.activity].reverse().find((a) => a.actor !== 'you' && a.body.trim())?.body ?? '')
     if (one) out.request = one.length > REQUEST_MAX ? `${one.slice(0, REQUEST_MAX - 1).trimEnd()}…` : one
   }
   if (s.config.needsYou.statuses.includes(i.status)) {
-    const moved = [...s.history(i.id)].reverse().find((h) => h.to === i.status)
-    if (moved) out.waitingSince = new Date(moved.t).toISOString()
+    const last = s.lastMove(i.id)
+    if (last?.to === i.status) out.waitingSince = new Date(last.t).toISOString()
+    else if (!s.statusMoved(i.id)) out.waitingSince = i.created
   }
   return out
 }

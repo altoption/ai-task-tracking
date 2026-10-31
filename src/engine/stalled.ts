@@ -122,6 +122,8 @@ export class IssueHistory {
   static readonly MAX_MOVES = 1000
   private moves: HistoryEntry[] = []
   private anchor: HistoryEntry | null = null
+  /** The newest move that fell out of the window, so `lastMove` outlives pruning. */
+  private pruned: HistoryEntry | null = null
   private sessions = new Map<string, HistoryEntry>()
   /** Agent workspaces that wrote to the issue (within the window when they were seen). */
   readonly workspaces = new Set<string>()
@@ -144,6 +146,7 @@ export class IssueHistory {
     let drop = 0
     while (drop < this.moves.length && (this.moves[drop]!.t < cutoff || this.moves.length - drop > IssueHistory.MAX_MOVES)) drop++
     for (const m of this.moves.slice(0, drop)) {
+      this.pruned = m
       if (working && (m.from === working || m.to === working)) this.anchor = { t: m.t, from: working, to: working }
     }
     if (drop) this.moves.splice(0, drop)
@@ -171,6 +174,9 @@ export class IssueHistory {
     if (e.branch) a.branch = e.branch
     a.leftStatus = this.status
   }
+
+  /** The newest status move logged, however old. */
+  get lastMove(): HistoryEntry | null { return this.moves.at(-1) ?? this.pruned }
 
   /** Whether any status move was logged (without one, the issue is still in the status it was created in). */
   get moved(): boolean { return this.status !== undefined }
