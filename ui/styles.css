@@ -42,8 +42,8 @@
   --in-progress: #e3b341;
   --urgent: #f2994a;
   --star: #f2c94c;
-  --avatar: #5e6ad2;
-  --agent: #2f6f4f;
+  --avatar: #a8b4e6;
+  --agent: #86c7a3;
   /* controls */
   --switch-off: #3b3f42;
   --switch-off-hover: #474c50;
@@ -273,7 +273,9 @@ kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--borde
 .ov-request h3 { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.45; }
 .ov-request h3 a:hover { text-decoration: underline; }
 .ov-request p { margin: 6px 0 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-.ov-request p.stalled-why { white-space: normal; }
+.ov-request p.stalled-why, .ov-request p.ci-why { display: block; white-space: normal; }
+.ov-request p.ci-why { color: var(--danger); }
+.ov-cycle { color: var(--danger); }
 .ov-action-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
 .ov-action {
   display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 500; padding: 5px 9px; border-radius: 5px;
@@ -346,7 +348,7 @@ a.ov-event-main:hover { text-decoration: underline; }
 .blk { color: var(--danger); font-size: 11px; white-space: nowrap; }
 .stalled-why { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; }
 .pill.stalled { color: var(--danger); border-color: var(--danger-border); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
-.ag { color: var(--accent); font-weight: 600; }
+.ag { color: var(--link); font-weight: 600; }
 .ag.hand { color: var(--muted); font-weight: 500; }
 /* Agent activity's Session details (ui/views/Activity.tsx): range, rhythm, filters, session cards. Tool badges take
    theme tokens: Claude Code accent, Codex ok, Cursor in-progress, Gemini and VS Code link, others muted. */
@@ -520,7 +522,7 @@ span.tree-toggle { transform: none; }
 .act-avatar { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--on-accent); background: var(--avatar); flex: none; }
 .act-avatar.agent { background: var(--agent); }
 .ag.you { color: var(--text); }
-.ag.agent { color: var(--accent); }
+.ag.agent { color: var(--link); }
 .tm { color: var(--faint); font-size: 11px; }
 .act-body { font-size: 14px; }
 .comment-box { margin-top: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
@@ -779,5 +781,5 @@ span.tree-toggle { transform: none; }
 .attempts-list { list-style: none; margin: 4px 0 0; padding: 0; }
 .attempts-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); padding: 4px 0 4px 14px; }
 .attempts-list .tool { color: var(--text); }
-.attempts-list .ws { color: var(--accent); }
+.attempts-list .ws { color: var(--link); }
 .attempts-list .when, .attempts-list .writes { color: var(--faint); }

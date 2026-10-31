@@ -17,7 +17,7 @@ import { SETUP_USAGE } from '../src/setup/setup'
 import { UNINSTALL_USAGE } from '../src/setup/uninstall'
 import { agentTools } from '../src/mcp/surface'
 import { defaultConfig } from '../src/store/metaFiles'
-import { builtinThemes } from '../src/engine/themes'
+import { builtinThemes, DEFAULT_THEME } from '../src/engine/themes'
 
 const ROOT = join(import.meta.dir, '..')
 export const OUT_DIR = join(ROOT, 'site', 'src', 'content', 'docs', 'reference')
@@ -360,7 +360,9 @@ export function parseSettings(core: string, win: string, hot: string): SettingRo
       // The Theme popup lists the engine's themes; the choice is `theme` in config.yml, mirrored in this key.
       const name = m[6], key = keys.get(name)
       if (!key) throw new Error(`${WINDOW_SWIFT}: SettingKey.${name} isn't in ${SETTINGS_SWIFT}`)
-      const d = /^"([^"]+)"$/.exec(defaults.get(name) ?? '')?.[1]
+      // ThemeSetting.defaultTheme is the engine's DEFAULT_THEME (tests/engine/themes.test.ts keeps them equal).
+      const raw = defaults.get(name) ?? ''
+      const d = raw === 'ThemeSetting.defaultTheme' ? DEFAULT_THEME : /^"([^"]+)"$/.exec(raw)?.[1]
       const t = builtinThemes().find((x) => x.id === d)
       if (!t) throw new Error(`${SETTINGS_SWIFT}: SettingKey.${name} default "${d}" isn't a built-in theme`)
       const others = builtinThemes().filter((x) => x.id !== t.id).map((x) => x.name)

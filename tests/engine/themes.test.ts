@@ -25,6 +25,14 @@ function contrast(a: string, b: string): number {
   return (x! + 0.05) / (y! + 0.05)
 }
 
+/** `color-mix(in srgb, a p, b)` for hex colors. */
+function mix(a: string, b: string, p: number): string {
+  const rgb = (hex: string) => { const h = hex.replace('#', ''); const f = h.length === 3 ? [...h].map((x) => x + x).join('') : h; return [0, 2, 4].map((i) => parseInt(f.slice(i, i + 2), 16)) }
+  const [x, y] = [rgb(a), rgb(b)]
+  return `#${x!.map((v, i) => Math.round(v * p + y![i]! * (1 - p)).toString(16).padStart(2, '0')).join('')}`
+}
+const FEATURED_WARN = 0.09
+
 const colored = builtinThemes().filter((t): t is Theme => t.base !== 'system')
 
 describe('built-in themes', () => {
@@ -55,17 +63,27 @@ describe('built-in themes', () => {
     expect(builtinThemes().map((t) => t.base)).toEqual(['dark', 'dark', 'light', 'system', 'dark', 'dark', 'light', 'dark'])
   })
 
-  // The Home view (ATT-53) sets links, the attention color (--warn) and accent buttons as text on these themes.
-  for (const id of ['graphite', 'plum', 'paper']) {
-    test(`${id}: --link and --warn on --panel and --card, and --on-accent on --accent, pass WCAG AA`, () => {
-      const t = colored.find((x) => x.id === id)!
-      const pairs: [string, string][] = [['link', 'panel'], ['link', 'card'], ['warn', 'panel'], ['warn', 'card'], ['on-accent', 'accent'], ['text', 'active']]
-      for (const [fg, bg] of pairs) {
-        const ratio = contrast(t.colors[fg]!, t.colors[bg]!)
-        if (ratio < 4.5) throw new Error(`${t.name}: --${fg} on --${bg} is ${ratio.toFixed(2)}:1`)
+  // Text Home and the rest of the UI set on these backgrounds. `featured` is Home's first request card:
+  // `color-mix(in srgb, var(--warn) 9%, var(--panel))` (.ov-request.featured in ui/styles.css).
+  for (const t of colored) {
+    test(`${t.name}: accent buttons, avatars, links and the attention color pass WCAG AA, on the featured card too`, () => {
+      const c = t.colors, featured = mix(c.warn!, c.panel!, FEATURED_WARN)
+      const pairs: [string, string, string][] = [
+        ['on-accent', c['on-accent']!, c.accent!], ['on-accent', c['on-accent']!, c.avatar!], ['on-accent', c['on-accent']!, c.agent!],
+        ['link', c.link!, c.panel!], ['link', c.link!, c.card!], ['warn', c.warn!, c.panel!], ['warn', c.warn!, c.card!],
+        ['warn', c.warn!, featured], ['text', c.text!, featured], ['muted', c.muted!, featured], ['text', c.text!, c.active!],
+      ]
+      for (const [name, fg, bg] of pairs) {
+        const ratio = contrast(fg, bg)
+        if (ratio < 4.5) throw new Error(`${t.name}: --${name} ${fg} on ${bg} is ${ratio.toFixed(2)}:1`)
       }
     })
   }
+
+  test('the featured card\'s mix in the test is the one in the stylesheet', async () => {
+    const css = await readFile(join(import.meta.dir, '../../ui/styles.css'), 'utf8')
+    expect(css).toContain(`.ov-request.featured { background: color-mix(in srgb, var(--warn) ${FEATURED_WARN * 100}%, var(--panel));`)
+  })
 
   // WCAG AA for body text: 4.5:1. --text and --muted on both surfaces they sit on.
   for (const t of colored) {
@@ -76,6 +94,14 @@ describe('built-in themes', () => {
       }
     })
   }
+})
+
+describe('the app\'s default theme', () => {
+  test('Settings uses ThemeSetting.defaultTheme, which is the engine\'s DEFAULT_THEME', async () => {
+    const core = join(import.meta.dir, '../../app/Sources/TrackerCore')
+    expect(await readFile(join(core, 'Settings.swift'), 'utf8')).toContain('SettingKey.theme: ThemeSetting.defaultTheme,')
+    expect(await readFile(join(core, 'Theme.swift'), 'utf8')).toContain(`public static let defaultTheme = "${DEFAULT_THEME}"`)
+  })
 })
 
 describe('theme files', () => {

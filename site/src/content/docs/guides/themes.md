@@ -35,7 +35,8 @@ changes, without a reload.
 Graphite is shown when `config.yml` has no `theme`. A theme you picked stays picked, Dark included: a `config.yml`
 that says `theme: dark` keeps Dark. New data folders start with `theme: graphite`.
 
-Every built-in theme passes WCAG AA contrast (4.5:1) for body text and muted text on its backgrounds.
+Every built-in theme passes WCAG AA contrast (4.5:1) for body text and muted text on its backgrounds, for links and
+the attention color, and for the text on accent buttons and avatars.
 
 The app window's background and title bar follow the theme too, so a dark theme doesn't flash white when the window
 opens. The menu-bar menu keeps the macOS look.
@@ -105,7 +106,7 @@ A token may also be written with its CSS name (`--bg`).
 | `faint` | the least important text and empty-state hints |
 | `id` | issue ids |
 | `pill-text` | text in pills |
-| `link` | links in descriptions and comments |
+| `link` | links in descriptions and comments, agents' names in activity |
 | `on-accent` | text on accent-colored buttons and avatars |
 | `accent` | primary buttons, focus rings, checked items, the progress ring's arc |
 | `accent-wash` | a board column or cell while you drag an issue over it |
