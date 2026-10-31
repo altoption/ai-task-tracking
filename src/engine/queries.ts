@@ -63,6 +63,30 @@ function needsYouOf(s: Store): (i: Issue) => boolean {
   return (i) => nyStatus.has(i.status) || i.labels.some((l) => nyLabels.has(l))
 }
 
+/** Home's request summary is at most this long. */
+export const REQUEST_MAX = 200
+
+/**
+ * What a Needs-you item asks of the owner, for Home: `request` is its newest comment on one line (markdown emphasis,
+ * code ticks and heading or quote marks dropped), shortened to REQUEST_MAX with "…"; `waitingSince` is when it last
+ * moved into the Needs-you status it is in, when the feed log remembers the move (its window is `stalled.windowDays`).
+ * A label-only item (Needs review) has no `waitingSince`.
+ */
+export function needsYouRequest(s: Store, i: Issue): { request?: string; waitingSince?: string } {
+  const out: { request?: string; waitingSince?: string } = {}
+  const last = i.activity.at(-1)
+  if (last?.body.trim()) {
+    const one = last.body.split('\n').map((l) => l.replace(/^\s*(?:#{1,6}\s+|>\s?)+/, '')).join(' ')
+      .replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim()
+    if (one) out.request = one.length > REQUEST_MAX ? `${one.slice(0, REQUEST_MAX - 1).trimEnd()}…` : one
+  }
+  if (s.config.needsYou.statuses.includes(i.status)) {
+    const moved = [...s.history(i.id)].reverse().find((h) => h.to === i.status)
+    if (moved) out.waitingSince = new Date(moved.t).toISOString()
+  }
+  return out
+}
+
 /** Has an open blocker or the Blocked label (the Blocked bucket's test). */
 function blockedTest(isOpen: (id: string) => boolean): (i: Issue) => boolean {
   return (i) => i.labels.includes(BLOCKED_LABEL) || i.blockedBy.some((b) => isOpen(b))
