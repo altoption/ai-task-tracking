@@ -190,6 +190,73 @@ describe('queries', () => {
   })
 })
 
+describe('needsYouRequest: whose comment, and how long it has waited', () => {
+  const NOW = Date.now(), H = 3_600_000
+  const iso = (hAgo: number) => new Date(NOW - hAgo * H).toISOString()
+  const you: Actor = { actor: 'you' }
+  /** Q-5 in the fixture is Waiting. */
+  const withFeed = async (lines: object[]) => {
+    const root = await miniCopy()
+    await mkdir(dirname(feedPath(root)), { recursive: true })
+    await writeFile(feedPath(root), lines.map((l) => JSON.stringify(l)).join('\n') + '\n')
+    return Store.open(root)
+  }
+  const move = (hAgo: number, from: string, to: string) => ({ at: iso(hAgo), actor: agent, id: 'Q-5', kind: 'status', from, to })
+
+  test('an owner reply is not the request; the agent comment before it is', async () => {
+    const s = await Store.open(await miniCopy())
+    await s.addComment('Q-5', 'Which provider?', agent)
+    await s.addComment('Q-5', 'Let me think about it', you)
+    expect(needsYouRequest(s, s.get('Q-5')!).request).toBe('Which provider?')
+  })
+
+  test('only owner comments: no request', async () => {
+    const s = await Store.open(await miniCopy())
+    const i = await s.createIssue({ title: 'Mine', project: 'support', status: 'Waiting' }, you)
+    await s.addComment(i.id, 'A note to myself', you)
+    expect(needsYouRequest(s, s.get(i.id)!).request).toBeUndefined()
+  })
+
+  test('no request for an item not in Needs you by status or label (stalled-only, CI-only)', async () => {
+    const s = await Store.open(await miniCopy())
+    await s.addComment('Q-1', 'A status note', agent) // Q-1: In Progress, no Needs-you label
+    expect(needsYouRequest(s, s.get('Q-1')!).request).toBeUndefined()
+    await s.updateIssue('Q-1', { labels: ['Needs decision'] }, agent)
+    expect(needsYouRequest(s, s.get('Q-1')!).request).toBe('A status note')
+  })
+
+  test('a 10-day wait survives the window: a newer agent write does not reset it', async () => {
+    const s = await withFeed([move(240, 'Todo', 'Waiting'), { at: iso(1), actor: { ...agent, session: 's1' }, id: 'Q-5', kind: 'comment', text: 'still here' }])
+    expect(needsYouRequest(s, s.get('Q-5')!).waitingSince).toBe(iso(240))
+  })
+
+  test('re-entry into Waiting counts from the last entry, not the first', async () => {
+    const s = await withFeed([move(20, 'Todo', 'Waiting'), move(10, 'Waiting', 'In Progress'), move(1, 'In Progress', 'Waiting')])
+    expect(needsYouRequest(s, s.get('Q-5')!).waitingSince).toBe(iso(1))
+  })
+
+  test('the newest logged move went elsewhere (the file was edited since): no waitingSince, not a stale move', async () => {
+    const s = await withFeed([move(20, 'Todo', 'Waiting'), move(10, 'Waiting', 'In Progress')])
+    expect(needsYouRequest(s, s.get('Q-5')!).waitingSince).toBeUndefined()
+  })
+
+  test('never moved: it has waited since it was created', async () => {
+    const s = await Store.open(await miniCopy())
+    const i = await s.createIssue({ title: 'Born waiting', project: 'support', status: 'Waiting' }, agent)
+    expect(needsYouRequest(s, i).waitingSince).toBe(i.created)
+  })
+
+  test('cleanup: links, emphasis and list marks go; identifiers and arithmetic stay', async () => {
+    const s = await Store.open(await miniCopy())
+    const of = async (body: string) => { await s.addComment('Q-5', body, agent); return needsYouRequest(s, s.get('Q-5')!).request }
+    expect(await of('See [the PR](https://example.com/1) and ![shot](a.png)')).toBe('See the PR and shot')
+    expect(await of('Rename `__init__` and __init__ and snake_case_name')).toBe('Rename __init__ and __init__ and snake_case_name')
+    expect(await of('This is *really* **important**')).toBe('This is really important')
+    expect(await of('2 * 3 * 4 and a*b*c')).toBe('2 * 3 * 4 and a*b*c')
+    expect(await of('* first\n- second')).toBe('first second')
+  })
+})
+
 describe('stalled (config.stalled)', () => {
   const H = 3_600_000
   /**

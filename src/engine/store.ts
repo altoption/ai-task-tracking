@@ -162,6 +162,8 @@ export class Store {
   attempts(id: string): Attempt[] { return this.hist.get(id)?.attempts() ?? [] }
   /** Whether a status move of `id` was logged (false: it is still in the status it was created in, as far as the log knows). */
   statusMoved(id: string): boolean { return this.hist.get(id)?.moved ?? false }
+  /** The newest status move of `id` in the feed log, however old. */
+  lastMove(id: string): HistoryEntry | null { return this.hist.get(id)?.lastMove ?? null }
   /** Agent workspaces seen in `id`'s recent history. */
   historyWorkspaces(id: string): ReadonlySet<string> { return this.hist.get(id)?.workspaces ?? NO_WORKSPACES }
   /** Whether anything is remembered about `id` (false after it is removed). */
