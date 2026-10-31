@@ -163,37 +163,52 @@ export function daySummary(c: { finished: number; inProgress: number; needsYou: 
   return `${c.finished} finished today. ${c.inProgress} in progress. ${needs}`
 }
 
+/**
+ * The heading's line. It waits for both sources: `home` from /api/home and the count finished today from the feed
+ * (null until it has arrived), so it never claims "0 finished" before knowing.
+ */
+export function overviewLine(home: Pick<HomeData, 'inProgress' | 'needsYou'> | null, finished: number | null, ready: boolean): string {
+  if (!ready) return 'Connecting…'
+  if (!home || finished === null) return 'Loading…'
+  return daySummary({ finished, inProgress: home.inProgress.length, needsYou: home.needsYou.length })
+}
+
 /** "Friday, October 30" (the eyebrow; CSS capitalizes it). */
 export function dayHeading(nowMs: number): string {
   return new Date(nowMs).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
 /**
- * Blocked work as dependency chains, root blocker first: each blocked issue walks back through its first open
- * blocker (cycle-safe), and a chain that is the start of a longer one is left out. `more` counts the other open
- * blockers along the chain, which the chain doesn't show.
+ * Blocked work as dependency chains, root blocker first: each blocked issue walks back through its first open blocker,
+ * and a chain that a longer one contains is left out. `more` counts the other open blockers along the chain, which it
+ * doesn't show. `cycle`: the walk came back to itself (E blocks F blocks E), so nothing in it can start; a cycle shows
+ * as one chain, not one per member.
  */
 export function blockedChains(
   blocked: { issue: Pick<IssueSummary, 'id'> }[], get: (id: string) => Pick<IssueSummary, 'id' | 'blockedBy'> | undefined,
   isOpen: (id: string) => boolean,
-): { ids: string[]; more: number }[] {
+): { ids: string[]; more: number; cycle?: true }[] {
   const chains = blocked.map(({ issue }) => {
     const ids = [issue.id]
-    let more = 0
+    let more = 0, cycle = false
     let cur = get(issue.id)
     while (cur) {
       const open = cur.blockedBy.filter((b) => isOpen(b))
-      const next = open.find((b) => !ids.includes(b))
-      more += Math.max(0, open.length - (next ? 1 : 0))
-      if (!next) break
-      ids.unshift(next)
-      cur = get(next)
+      const fresh = open.filter((b) => !ids.includes(b))
+      if (fresh.length < open.length) cycle = true
+      more += Math.max(0, fresh.length - 1)
+      if (!fresh.length) break
+      ids.unshift(fresh[0]!)
+      cur = get(fresh[0]!)
     }
-    return { ids, more }
+    return { ids, more, ...(cycle ? { cycle: true as const } : {}) }
   })
   // A chain that a longer one starts with (A → B, and A → B → C) is part of the longer one.
   const startsWith = (d: string[], c: string[]) => d.length > c.length && c.every((id, n) => d[n] === id)
-  return chains.filter((c) => !chains.some((d) => startsWith(d.ids, c.ids)))
+  const out = chains.filter((c) => !chains.some((d) => startsWith(d.ids, c.ids)))
+  // The same cycle read from another member, or from an issue waiting on it: only the longest, first one stays.
+  return out.filter((c, n) => !c.cycle || !out.some((d, m) => d !== c && d.cycle && c.ids.every((id) => d.ids.includes(id))
+    && (d.ids.length > c.ids.length || (d.ids.length === c.ids.length && m < n))))
 }
 
 /** The All issues list with `filter` (the page's default display), as a link. */
