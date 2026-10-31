@@ -7,6 +7,8 @@ export interface FeedEvent {
   at: string; actor: Actor; id: string
   kind: 'created' | 'status' | 'comment' | 'blocked' | 'parent' | 'updated'
   from?: string; to?: string; text?: string
+  /** The issue's project when the event was written (src/engine/hidden.ts); missing on older entries. */
+  project?: string
 }
 
 /** `<root>/.tracker/events.jsonl` — an append-only cache (git-ignored), not a source of truth. */
@@ -26,8 +28,8 @@ export function appendEvent(root: string, e: FeedEvent): Promise<void> {
   return next
 }
 
-/** Newest first, at most `limit` events. Corrupt lines are skipped. */
-export function readFeed(root: string, limit: number): FeedEvent[] {
+/** Newest first, at most `limit` events (only those `keep` accepts; parsing stops at `limit`). Corrupt lines are skipped. */
+export function readFeed(root: string, limit: number, keep?: (e: FeedEvent) => boolean): FeedEvent[] {
   const p = feedPath(root)
   if (!existsSync(p)) return []
   const lines = readFileSync(p, 'utf8').split('\n')
@@ -35,7 +37,9 @@ export function readFeed(root: string, limit: number): FeedEvent[] {
   for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
     const l = lines[i]!.trim()
     if (!l) continue
-    try { out.push(JSON.parse(l) as FeedEvent) } catch { /* partial or corrupt line */ }
+    let e: FeedEvent
+    try { e = JSON.parse(l) as FeedEvent } catch { continue } // partial or corrupt line
+    if (!keep || keep(e)) out.push(e)
   }
   return out
 }

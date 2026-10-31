@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary } from '../../src/model'
-import { callTool, getIssue, getIssueFeed, isHiddenProject, NO_PROJECT, projectName, useTracker, type IssueDetail } from '../client'
+import { callTool, getIssue, getIssueFeed, hiddenRevOf, isHiddenProject, isStub, NO_PROJECT, projectName, useTracker, type HiddenStub, type IssueDetail } from '../client'
 import { ConceptIcon, Icon, ProgressPill, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { HiddenNotice } from './HiddenNotice'
@@ -10,12 +10,13 @@ import { taskAt, type MdContext } from '../markdown'
 import { href, navigate } from '../router'
 import { IssueActivity } from './IssueActivity'
 import { IssueAttempts } from './IssueAttempts'
-import { IssueProperties } from './IssueProperties'
+import { IssueChip, IssueProperties } from './IssueProperties'
 
 /**
  * `/api/issues/:id` + its feed, re-fetched (debounced) when the live store shows a change to the issue,
  * one of its children, or a new feed event for it. `apply` merges a save_issue result immediately. Issues in a hidden
- * project aren't in the live store, so any change in a hidden project (`hiddenRev`) refetches too.
+ * project aren't in the live store: a `hidden` event refetches only when it touched this issue, a child (or a new
+ * child), an ancestor or a relation (hiddenRevOf).
  */
 function useIssueDetail(id: string) {
   const state = useTracker()
@@ -39,13 +40,22 @@ function useIssueDetail(id: string) {
   }, [id])
 
   const summary = state.issues.get(id)
+  const hiddenKeys = useMemo(() => {
+    const keys = [id, `c:${id}`]
+    if (detail) {
+      if (detail.parent) keys.push(detail.parent)
+      keys.push(...detail.blockedBy, ...detail.related, ...detail.blocks, ...detail.children.map((c) => c.id), ...detail.ancestors.map((a) => a.id))
+    }
+    return keys
+  }, [id, detail])
+  const hiddenSig = hiddenRevOf(state, hiddenKeys)
   const sig = useMemo(() => {
     let kids = ''
     for (const i of state.issues.values()) if (i.parent === id) kids += `${i.id}@${i.updated},`
     const f = state.feed.find((e) => e.id === id)
     const ci = summary?.ci ? `${summary.ci.pr}:${summary.ci.state}:${summary.ci.checks}` : ''
-    return `${summary?.updated ?? '-'}|${kids}|${f?.at ?? ''}|${ci}|${state.hiddenRev}`
-  }, [state.issues, state.feed, id, summary, state.hiddenRev])
+    return `${summary?.updated ?? '-'}|${kids}|${f?.at ?? ''}|${ci}|${hiddenSig}`
+  }, [state.issues, state.feed, id, summary, hiddenSig])
 
   const first = useRef(true)
   useEffect(() => {
@@ -84,17 +94,19 @@ function SubIssueRow({ node, depth, open, setOpen, closed }: { node: TreeNode; d
 
 /**
  * Sub-issues to any depth (first level shown, deeper levels collapsible), with done/total and "Add sub-issue".
- * `extra`: the detail's own children, for children the live store doesn't hold (a hidden project's).
+ * `children`: the detail's own. Summaries the live store doesn't hold (a hidden issue's, opened by its link) join the
+ * tree; stubs (a visible issue's hidden children) are listed by id only, "in a hidden project", and don't count.
  */
-function SubIssues({ id, extra }: { id: string; extra: IssueSummary[] }) {
+function SubIssues({ id, children }: { id: string; children: (IssueSummary | HiddenStub)[] }) {
   const { issues: live, config } = useTracker()
+  const stubs = useMemo(() => children.filter(isStub), [children])
   const issues = useMemo(() => {
-    const missing = extra.filter((c) => !live.has(c.id))
+    const missing = children.filter((c): c is IssueSummary => !isStub(c) && !live.has(c.id))
     if (!missing.length) return live
     const m = new Map(live)
     for (const c of missing) m.set(c.id, c)
     return m
-  }, [live, extra])
+  }, [live, children])
   const tree = useMemo(() => buildTree(issues, id), [issues, id])
   const closed = useMemo(() => {
     const types = new Map((config?.statuses ?? []).map((s) => [s.name, s.type]))
@@ -111,6 +123,7 @@ function SubIssues({ id, extra }: { id: string; extra: IssueSummary[] }) {
         <button type="button" className="ghost-btn" onClick={() => navigate({ name: 'new', parent: id })}><span className="plus">+</span> Add sub-issue</button>
       </div>
       {tree.map((n) => <SubIssueRow key={n.issue.id} node={n} depth={0} open={open} setOpen={toggle} closed={closed} />)}
+      {stubs.map((c) => <div key={c.id} className="tree-hidden"><IssueChip id={c.id} /></div>)}
     </section>
   )
 }
@@ -316,7 +329,7 @@ export function IssuePage({ id }: { id: string }) {
         <nav className="crumbs" aria-label="Breadcrumb">
           {(project || hidden) && detail.project !== NO_PROJECT && <><a href={href({ name: 'project', slug: detail.project })}><ConceptIcon concept="project" /> {projectName(state, detail.project)}</a><span className="sep">›</span></>}
           {[...detail.ancestors].reverse().map((a) => (
-            <span key={a.id} className="crumb"><a href={href({ name: 'issue', id: a.id })} title={a.title}><span className="id">{a.id}</span> <span className="t">{a.title}</span></a><span className="sep">›</span></span>
+            <span key={a.id} className="crumb"><a href={href({ name: 'issue', id: a.id })} title={isStub(a) ? 'In a hidden project' : a.title}><span className="id">{a.id}</span> {isStub(a) ? <span className="t muted">in a hidden project</span> : <span className="t">{a.title}</span>}</a><span className="sep">›</span></span>
           ))}
           <span className="crumb current"><span className="id">{detail.id}</span> <span className="t">{detail.title}</span></span>
         </nav>
@@ -328,7 +341,7 @@ export function IssuePage({ id }: { id: string }) {
         <article className="issue-main">
           <Title title={detail.title} save={(title) => save({ title })} />
           <Description key={detail.id} issueId={detail.id} source={detail.description} ctx={ctx} save={save} apply={apply} reload={reload} />
-          <SubIssues id={detail.id} extra={detail.children} />
+          <SubIssues id={detail.id} children={detail.children} />
           <IssueAttempts attempts={detail.attempts} now={Date.now()} />
           <IssueActivity issueId={detail.id} activity={detail.activity} feed={feed} ctx={ctx} onSaved={reload} />
         </article>

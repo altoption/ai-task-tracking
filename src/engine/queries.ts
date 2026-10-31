@@ -33,7 +33,7 @@ export function unblocks(s: Store, id: string): number {
   return countWaiting(s, id, openTest(s))
 }
 
-function countWaiting(s: Store, id: string, isOpen: (id: string) => boolean): number {
+function countWaiting(s: Store, id: string, isOpen: (id: string) => boolean, visible?: (i: Issue) => boolean): number {
   const seen = new Set([id])
   const stack = [id]
   let n = 0
@@ -41,6 +41,7 @@ function countWaiting(s: Store, id: string, isOpen: (id: string) => boolean): nu
     for (const w of s.blocks(stack.pop()!)) {
       if (seen.has(w)) continue
       seen.add(w)
+      if (visible) { const wi = s.get(w); if (wi && !visible(wi)) continue } // hidden: neither counted nor followed
       if (isOpen(w)) n++
       stack.push(w)
     }
@@ -187,10 +188,14 @@ export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boo
     if (reason) stalled.set(i.id, reason)
     if (((reason || ciReason) && flagged) || needsYouTest(i)) { needsYou.push(i); continue }
     const blockers = i.blockedBy.filter((b) => isOpen(b))
-    if (blockers.length || i.labels.includes(BLOCKED_LABEL)) { blocked.push({ issue: i, blockers }); continue }
+    if (blockers.length || i.labels.includes(BLOCKED_LABEL)) {
+      // Still blocked by a hidden issue, but the UI's list names only visible blockers.
+      blocked.push({ issue: i, blockers: visible ? blockers.filter((b) => { const bi = s.get(b); return !bi || visible(bi) }) : blockers })
+      continue
+    }
     const t = type(i.status)
     if (t === 'started') inProgress.push(i)
-    else if (t === 'backlog' || t === 'unstarted') readyNext.push({ issue: i, unblocks: countWaiting(s, i.id, isOpen) })
+    else if (t === 'backlog' || t === 'unstarted') readyNext.push({ issue: i, unblocks: countWaiting(s, i.id, isOpen, visible) })
   }
   needsYou.sort(byPriorityThenId)
   inProgress.sort(byPriorityThenId)
@@ -227,8 +232,11 @@ export function ancestors(s: Store, id: string): Issue[] {
   return out
 }
 
-/** Descendants (any depth, cycle-safe): how many are closed (completed/canceled/duplicate) out of all. */
-export function progress(s: Store, id: string): { done: number; total: number } {
+/**
+ * Descendants (any depth, cycle-safe): how many are closed (completed/canceled/duplicate) out of all. With `visible`,
+ * a hidden child and everything under it are left out (the UI's counts).
+ */
+export function progress(s: Store, id: string, visible?: (i: Issue) => boolean): { done: number; total: number } {
   const isOpen = openTest(s)
   const seen = new Set([id])
   const stack = [id]
@@ -237,6 +245,7 @@ export function progress(s: Store, id: string): { done: number; total: number } 
     for (const c of s.children(stack.pop()!)) {
       if (seen.has(c.id)) continue
       seen.add(c.id)
+      if (visible && !visible(c)) continue
       total++
       if (!isOpen(c)) done++
       stack.push(c.id)

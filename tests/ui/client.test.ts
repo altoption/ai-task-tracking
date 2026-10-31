@@ -3,7 +3,7 @@ import { rm } from 'node:fs/promises'
 import { Store } from '../../src/engine/store'
 import { startServer, type RunningServer } from '../../src/server/http'
 import type { IssueSummary } from '../../src/model'
-import { applyEvent, emptyState, fromSnapshot, inScope, isHiddenProject, listedProjects, projectName, type Snapshot, type WireEvent } from '../../ui/client'
+import { applyEvent, emptyState, fromSnapshot, inScope, hiddenRevOf, isHiddenProject, listedProjects, projectName, type Snapshot, type WireEvent } from '../../ui/client'
 import { miniCopy } from '../engine/helpers'
 
 const YOU = { actor: 'you' as const }
@@ -91,15 +91,19 @@ describe('hidden projects in the client (the engine leaves them out; the client 
     expect(fromSnapshot(snap([])).hidden.issues.size).toBe(0) // an engine without hidden projects
   })
 
-  test('a hidden event drops the issue, remembers its id and bumps hiddenRev', () => {
+  test('a hidden event drops the issue, remembers its id and bumps only its own keys', () => {
     const s0 = fromSnapshot(base())
     const s1 = applyEvent(s0, { kind: 'hidden', id: 'Q-2', project: 'secret' })
     expect(s1.issues.has('Q-2')).toBe(false)
     expect(s1.hidden.issues.has('Q-2')).toBe(true)
-    expect(s1.hiddenRev).toBe(1)
-    const s2 = applyEvent(s1, { kind: 'hidden', id: 'Q-9', project: 'secret' })
+    expect(hiddenRevOf(s1, ['Q-2'])).toBe('Q-2:1,')
+    const s2 = applyEvent(s1, { kind: 'hidden', id: 'Q-9', project: 'secret', parent: 'Q-1' })
     expect(s2.hidden).toBe(s1.hidden) // already known
-    expect(s2.hiddenRev).toBe(2)
+    // An issue page refetches only for its own keys: Q-1 sees its new hidden child, Q-2's page doesn't move.
+    expect(hiddenRevOf(s2, ['Q-2'])).toBe(hiddenRevOf(s1, ['Q-2']))
+    expect(hiddenRevOf(s2, ['Q-1', 'c:Q-1'])).toBe('c:Q-1:1,')
+    expect(hiddenRevOf(s2, ['p:secret'])).toBe('p:secret:2,')
+    expect(hiddenRevOf(s2, ['Q-5', 'c:Q-5', 'p:other'])).toBe('')
   })
 
   test('an issue event (moved out of a hidden project) or a removal clears the hidden id', () => {
