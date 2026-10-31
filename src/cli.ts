@@ -126,6 +126,7 @@ switch (cmd) {
   }
   case 'setup': process.exit(await setup(process.argv.slice(3)))
   case 'uninstall': process.exit(await uninstallCommand(process.argv.slice(3), { ...process.env }, process.env.HOME || homedir(), terminalIO))
+  case '--version': console.log(pkg.version); break
   case 'bench': {
     const n = Number(arg)
     if (!Number.isInteger(n) || n <= 0) { console.error(BENCH_USAGE); process.exit(2) }

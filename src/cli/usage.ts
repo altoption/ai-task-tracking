@@ -9,7 +9,8 @@ export const USAGE = `Usage: aitt <command>   (AI Task Tracking)
   docs             open the user docs the engine serves (http://127.0.0.1:<port>/docs/) in the browser
   guidance         print the agent instructions for other tools (--cursor: as a .cursor/rules/*.mdc file)
   uninstall        remove the app, its login item, link, skill and MCP entries; keeps the data (--yes: don't ask)
-  bench <n>        time open/snapshot/search on n synthetic issues`
+  bench <n>        time open/snapshot/search on n synthetic issues
+  --version        print the version`
 
 export const GUIDANCE_USAGE = 'usage: aitt guidance [--cursor]'
 export const BENCH_USAGE = 'usage: aitt bench <n>'
