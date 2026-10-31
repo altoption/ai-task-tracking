@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { lstat, mkdir, readdir, readFile, readlink, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
+import { redact } from '../engine/git'
 import { Store } from '../engine/store'
 import { atomicWrite } from '../store/atomic'
 import { initFolder, SETUP_LOCK } from '../store/metaFiles'
@@ -275,7 +276,7 @@ async function setupBackup(home: string, opts: SetupOptions, io: SetupIO, ask: A
   const { env } = opts
   if (existsSync(join(home, '.git'))) {
     const origin = await run(['git', 'remote', 'get-url', 'origin'], env, home)
-    if (origin.code === 0) { io.log(`✓ Backup: ${origin.out}`); return 0 }
+    if (origin.code === 0) { io.log(`✓ Backup: ${redact(origin.out)}`); return 0 }
   }
   const want = opts.backup === false ? false : opts.backup ? true : await confirm('Back up to a private GitHub repo?', false, undefined)
   if (!want) { io.log('• No backup (run aitt setup again to add one)'); return 0 }
