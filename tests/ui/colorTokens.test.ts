@@ -36,6 +36,7 @@ describe('UI colors are tokens', () => {
     const sources = [css, ...['components', 'views'].flatMap((d) => readdirSync(join(UI, d)).map((f) => readFileSync(join(UI, d, f), 'utf8')))]
     const used = new Set(sources.flatMap((s) => [...s.matchAll(/var\((--[a-z-]+)/g)].map((m) => m[1]!)))
     // --status-<type> is optional (a theme's status override, set by ui/theme.ts), with the status's color as fallback.
-    expect([...used].filter((v) => !defined.has(v) && !local.has(v) && v !== '--status-')).toEqual([])
+    const statusOverride = /^--status-(?:backlog|unstarted|started|completed|canceled|duplicate)?$/
+    expect([...used].filter((v) => !defined.has(v) && !local.has(v) && !statusOverride.test(v))).toEqual([])
   })
 })

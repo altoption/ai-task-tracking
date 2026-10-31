@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import { callTool, getIssue, getIssueFeed, NO_PROJECT, useTracker, type IssueDetail } from '../client'
-import { Icon, StatusIcon } from '../components/icons'
+import { Icon, ProgressPill, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { buildTree, treeProgress, type TreeNode } from '../issuePage'
 import { taskAt, type MdContext } from '../markdown'
@@ -71,7 +71,7 @@ function SubIssueRow({ node, depth, open, setOpen, closed }: { node: TreeNode; d
           <StatusIcon status={i.status} config={config} />
           <span className="id">{i.id}</span>
           <span className="t">{i.title}</span>
-          {prog.total > 0 && <span className="pill">{prog.done}/{prog.total}</span>}
+          <ProgressPill done={prog.done} total={prog.total} config={config} />
         </a>
       </div>
       {expanded && node.children.map((c) => <SubIssueRow key={c.issue.id} node={c} depth={depth + 1} open={open} setOpen={setOpen} closed={closed} />)}
@@ -94,7 +94,7 @@ function SubIssues({ id }: { id: string }) {
     <section className="sub-issues" aria-label="Sub-issues">
       <div className="sub-head">
         <h2>Sub-issues</h2>
-        {progress.total > 0 && <span className="pill">{progress.done}/{progress.total}</span>}
+        <ProgressPill done={progress.done} total={progress.total} config={config} />
         <button type="button" className="ghost-btn" onClick={() => navigate({ name: 'new', parent: id })}><span className="plus">+</span> Add sub-issue</button>
       </div>
       {tree.map((n) => <SubIssueRow key={n.issue.id} node={n} depth={0} open={open} setOpen={toggle} closed={closed} />)}

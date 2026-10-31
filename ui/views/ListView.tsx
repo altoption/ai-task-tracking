@@ -5,10 +5,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Config, IssueSummary, ViewDisplay } from '../../src/model'
-import { PriorityIcon, StatusIcon, Icon } from '../components/icons'
+import { PriorityIcon, ProgressPill, StatusIcon, Icon } from '../components/icons'
 import { href, navigate } from '../router'
 import { listRows, type ListRow, type ViewGroup } from '../viewModel'
-import { PropertyCells, ProgressPill, type CellCtx } from './IssueCells'
+import { PropertyCells, type CellCtx } from './IssueCells'
 
 type Item = { kind: 'group'; group: ViewGroup; collapsed: boolean } | ({ kind: 'row' } & ListRow)
 const ROW = 40
@@ -71,7 +71,7 @@ export function ListView({ groups, display, byId, config, cells }: {
               {props.has('id') && <span className="id">{i.id}</span>}
               {props.has('status') && <StatusIcon status={i.status} config={config} />}
               <span className="title">{i.title}</span>
-              <ProgressPill issue={i} />
+              <ProgressPill done={i.progress.done} total={i.progress.total} config={config} />
               <span className="cells"><PropertyCells issue={i} props={props} ctx={cells} /></span>
             </a>
           )

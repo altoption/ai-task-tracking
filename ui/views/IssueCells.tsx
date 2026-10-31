@@ -17,21 +17,6 @@ export const shortDate = (iso: string) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function ProgressPill({ issue }: { issue: IssueSummary }) {
-  const { done, total } = issue.progress
-  if (!total) return null
-  const r = 5, c = 2 * Math.PI * r
-  return (
-    <span className="pill progress" title={`${done} of ${total} sub-issues done`}>
-      <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
-        <circle cx="7" cy="7" r={r} fill="none" stroke="var(--faint)" strokeWidth="1.6" />
-        <circle cx="7" cy="7" r={r} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeDasharray={`${(c * done) / total} ${c}`} transform="rotate(-90 7 7)" />
-      </svg>
-      {done}/{total}
-    </span>
-  )
-}
-
 function LabelPills({ issue, ctx }: { issue: IssueSummary; ctx: CellCtx }) {
   if (!issue.labels.length) return null
   // A group's labels fold into one pill ("Docs, API").

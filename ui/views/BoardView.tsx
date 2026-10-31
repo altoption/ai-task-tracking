@@ -7,11 +7,11 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Config, IssueSummary, ViewDisplay } from '../../src/model'
-import { Icon, PriorityIcon, StatusIcon } from '../components/icons'
+import { Icon, PriorityIcon, ProgressPill, StatusIcon } from '../components/icons'
 import { href, navigate } from '../router'
 import { swimlanes, NONE, type ViewGroup, type ViewCtx } from '../viewModel'
 import { GroupIcon } from './ListView'
-import { ProgressPill, PropertyCells, shortDate, type CellCtx } from './IssueCells'
+import { PropertyCells, shortDate, type CellCtx } from './IssueCells'
 
 const PAGE = 50
 
@@ -138,7 +138,7 @@ function Card({ issue: i, props, config, cells, onDrag }: { issue: IssueSummary;
       <span className="card-props">
         {props.has('priority') && <span className="pill icon-pill"><PriorityIcon priority={i.priority} size={12} /></span>}
         <PropertyCells issue={i} props={withoutDates(props)} ctx={cells} />
-        <ProgressPill issue={i} />
+        <ProgressPill done={i.progress.done} total={i.progress.total} config={config} />
       </span>
       {props.has('created') && <span className="card-date">Created {shortDate(i.created)}</span>}
       {props.has('updated') && <span className="card-date">Updated {shortDate(i.updated)}</span>}
