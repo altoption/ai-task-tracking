@@ -28,6 +28,7 @@
   --pill-text: #b5bab7;
   --link: #a9d3bc;
   --on-accent: #17261e;
+  --on-danger: #1c0605;
   /* accents and states */
   --accent: #99c6ad;
   --accent-wash: rgba(153, 198, 173, .07);
@@ -436,7 +437,7 @@ a.ov-event-main:hover { text-decoration: underline; }
 .plus { color: var(--muted); margin-right: 6px; }
 .ghost-btn { background: none; border: 1px solid transparent; border-radius: var(--radius); padding: 3px 8px; color: var(--muted); font-size: 12px; }
 .ghost-btn:hover { background: var(--hover); color: var(--text); }
-.danger-btn { background: var(--danger); color: var(--on-accent); border: 0; border-radius: var(--radius); padding: 5px 14px; font-weight: 500; }
+.danger-btn { background: var(--danger); color: var(--on-danger); border: 0; border-radius: var(--radius); padding: 5px 14px; font-weight: 500; }
 .danger-btn:disabled { opacity: .6; }
 .row-buttons { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 .row-buttons .muted { margin-right: auto; }
@@ -579,7 +580,7 @@ span.tree-toggle { transform: none; }
   .issue-main { padding: 24px 16px; }
 }
 .menu .confirm .row-buttons button { display: inline-block; width: auto; text-align: center; padding: 4px 12px; }
-.menu .confirm .danger-btn, .menu .confirm .danger-btn:hover { background: var(--danger); color: var(--on-accent); }
+.menu .confirm .danger-btn, .menu .confirm .danger-btn:hover { background: var(--danger); color: var(--on-danger); }
 
 .desc.busy .markdown input.task { pointer-events: none; opacity: .6; }
 .ghost-btn.inline { margin-left: 8px; color: var(--text); border-color: var(--border); }

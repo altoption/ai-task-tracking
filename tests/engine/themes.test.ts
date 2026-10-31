@@ -69,7 +69,7 @@ describe('built-in themes', () => {
     test(`${t.name}: accent buttons, avatars, links and the attention color pass WCAG AA, on the featured card too`, () => {
       const c = t.colors, featured = mix(c.warn!, c.panel!, FEATURED_WARN)
       const pairs: [string, string, string][] = [
-        ['on-accent', c['on-accent']!, c.accent!], ['on-accent', c['on-accent']!, c.avatar!], ['on-accent', c['on-accent']!, c.agent!],
+        ['on-danger', c['on-danger']!, c.danger!], ['on-accent', c['on-accent']!, c.accent!], ['on-accent', c['on-accent']!, c.avatar!], ['on-accent', c['on-accent']!, c.agent!],
         ['link', c.link!, c.panel!], ['link', c.link!, c.card!], ['warn', c.warn!, c.panel!], ['warn', c.warn!, c.card!],
         ['warn', c.warn!, featured], ['text', c.text!, featured], ['muted', c.muted!, featured], ['text', c.text!, c.active!],
       ]

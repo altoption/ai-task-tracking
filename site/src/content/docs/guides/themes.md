@@ -108,6 +108,7 @@ A token may also be written with its CSS name (`--bg`).
 | `pill-text` | text in pills |
 | `link` | links in descriptions and comments, agents' names in activity |
 | `on-accent` | text on accent-colored buttons and avatars |
+| `on-danger` | text on danger buttons |
 | `accent` | primary buttons, focus rings, checked items, the progress ring's arc |
 | `accent-wash` | a board column or cell while you drag an issue over it |
 | `warn` | Needs-you reasons, the Needs you heading and the waiting request's status on Home |
