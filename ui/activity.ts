@@ -430,3 +430,24 @@ export function mergeFeeds(fetched: FeedEvent[], live: FeedEvent[], since: numbe
   return out.sort((a, b) => desc(a.at, b.at)).slice(0, max)
 }
 
+
+/** Home's Daily overview of one day's cards (ATT-53): the counts, the session to show, and what finished last. */
+export interface DayOverview {
+  finished: number; started: number; agents: number; live: number
+  /** The live agent session (else the latest one) and the issue it wrote to last. */
+  current: { card: SessionCard; row: ActivityRow } | null
+  /** Issues finished, newest first, each once. */
+  recent: ActivityRow[]
+}
+
+export function dayOverview(cards: SessionCard[], recentMax = 3): DayOverview {
+  const { finished, started, agents, live } = activityCounts(cards, 0)
+  const newest = (a: ActivityRow, b: ActivityRow) => desc(a.at, b.at)
+  const agentCards = cards.filter((c) => c.kind === 'agent' && c.rows.length)
+  const card = agentCards.find((c) => c.live) ?? agentCards[0]
+  const row = card ? allRows(card.rows).filter((r) => !r.gone).sort(newest)[0] : undefined
+  const seen = new Set<string>()
+  const recent = cards.flatMap((c) => allRows(c.rows)).filter((r) => r.kinds.includes('done')).sort(newest)
+    .filter((r) => !seen.has(r.id) && !!seen.add(r.id)).slice(0, recentMax)
+  return { finished, started, agents, live, current: card && row ? { card, row } : null, recent }
+}

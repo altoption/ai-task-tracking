@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, StatusDef } from '../../src/model'
 import {
-  activityCounts, allRows, buildActivity, dayLabel, filterCard, filterRows, isGithubChange, LIVE_MS, localDay, mergeFeeds, rangeStart, rhythm, toolOf,
+  activityCounts, allRows, buildActivity, dayLabel, dayOverview, filterCard, filterRows, isGithubChange, LIVE_MS, localDay, mergeFeeds, rangeStart, rhythm, toolOf,
   waitingOnYou, type Ctx,
 } from '../../ui/activity'
 
@@ -299,5 +299,30 @@ describe('agent-written data stays inert (security review)', () => {
     expect(isGithubChange('https://user:pw@github.com/o/r/pull/1')).toBe(false)
     expect(isGithubChange('https://github.com/o/r/issues/1')).toBe(false)
     expect(isGithubChange('not a url')).toBe(false)
+  })
+})
+
+describe('dayOverview (Home, ATT-53)', () => {
+  test('counts, the live session and what it wrote last, and what finished, newest first', () => {
+    const events: FeedEvent[] = [
+      ev(CX, 300, 'A-3', 'status', { from: 'In Progress', to: 'Done' }),
+      ev(CC, 60, 'A-2', 'status', { from: 'In Progress', to: 'Done' }),
+      ev(CC, 30, 'A-1', 'status', { from: 'In Progress', to: 'Done' }),
+      ev(CC, 3, 'B-1', 'comment', { text: 'Working on it' }),
+      ev({ actor: 'you' }, 2, 'W-1', 'status', { from: 'Todo', to: 'Waiting' }),
+    ].reverse()
+    const o = dayOverview(buildActivity(events, ctx, TODAY).cards, 2)
+    expect(o).toMatchObject({ finished: 3, agents: 2, live: 1 })
+    expect(o.current?.card.label).toBe('Claude Code')
+    expect(o.current?.row.id).toBe('B-1')
+    expect(o.recent.map((r) => r.id)).toEqual(['A-1', 'A-2'])
+  })
+
+  test('no live session: the latest agent session; none at all: null', () => {
+    const old = [ev(CX, 120, 'B-1', 'comment', { text: 'note' })]
+    const o = dayOverview(buildActivity(old, ctx, TODAY).cards)
+    expect(o.current?.card.live).toBe(false)
+    expect(o.current?.row.id).toBe('B-1')
+    expect(dayOverview(buildActivity([ev({ actor: 'you' }, 5, 'B-1', 'comment', { text: 'mine' })], ctx, TODAY).cards).current).toBeNull()
   })
 })

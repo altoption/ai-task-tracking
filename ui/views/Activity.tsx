@@ -1,6 +1,7 @@
 /**
- * Home's Agent activity column: the overview (counts that filter, the hourly rhythm), what waits on you, filter chips,
- * then one card per agent session per day with one row per issue. Grouping is pure (ui/activity.ts).
+ * Home's Agent activity (the Daily overview, ATT-53): today's counts, the live session and what it is working on, what
+ * finished last, and Session details: the range, the rhythm, filter chips, then one card per agent session per day
+ * with one row per issue. Grouping is pure (ui/activity.ts). Needs you, on Home's left, covers what waits on you.
  *
  * Data: `/api/feed?since=` for the range (visibility-filtered by the engine, up to FEED_SINCE_MAX entries). Every live
  * update is folded into what the column has gathered, so new writes slot into their session's card as they happen and
@@ -10,8 +11,8 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEve
 import type { FeedEvent } from '../../src/engine/eventlog'
 import { FEED_SINCE_MAX } from '../../src/shared/feed'
 import {
-  activityCounts, buildActivity, filterCard, mergeFeeds, rangeStart, rhythm, spanLabel, waitingOnYou,
-  type ActivityFilter, type ActivityRow, type Range, type SessionCard,
+  buildActivity, dayOverview, filterCard, mergeFeeds, rangeStart, rhythm, spanLabel, waitingOnYou,
+  type ActivityFilter, type ActivityRow, type DayGroup, type DayOverview, type Range, type RhythmBucket, type SessionCard,
 } from '../activity'
 import { useScope, useTracker, type TrackerState } from '../client'
 import { Icon, ProgressPill, StatusIcon } from '../components/icons'
@@ -168,13 +169,26 @@ const toolName = (k: string) => TOOL_NAMES[k] ?? k
 
 const FILTERS: [ActivityFilter, string][] = [['all', 'Everything'], ['done', 'Finished'], ['started', 'Started'], ['comments', 'With notes'], ['needs', 'Needs you']]
 
-export function Activity({ needsYou, now }: { needsYou: NeedsYouItem[] | null; now: number }) {
+/** Everything Home's Agent activity shows, from one feed: today's overview (also the heading's summary) and the range's cards. */
+export interface ActivityData {
+  range: Range
+  setRange: (r: Range) => void
+  today: DayOverview
+  days: DayGroup[]
+  buckets: RhythmBucket[]
+  waitingIds: ReadonlySet<string>
+  capped: boolean
+}
+
+/**
+ * The activity behind Home (ui/activity.ts): the range's feed in scope, grouped into session cards, and today's
+ * overview. Today is the start of either range, so one feed serves both.
+ */
+export function useActivity(needsYou: NeedsYouItem[] | null, now: number): ActivityData {
   const state = useTracker()
   const scope = useScope()
   const [range, setRangeState] = useState<Range>(readRange)
   const setRange = (r: Range) => { setRangeState(r); try { globalThis.localStorage?.setItem(RANGE_KEY, r) } catch { /* ignore */ } }
-  const [filter, setFilter] = useState<ActivityFilter>('all')
-  const [shut, setShut] = useState<ReadonlySet<string>>(new Set())
   const { events: raw, capped, since } = useRangeFeed(state, range, now)
 
   const events = useMemo(() => raw.filter((e) => feedInScope(e, state.issues.get(e.id), scope, state.config)), [raw, state.issues, scope, state.config])
@@ -182,73 +196,115 @@ export function Activity({ needsYou, now }: { needsYou: NeedsYouItem[] | null; n
   const ctx = useMemo(() => ({
     issue: (id: string) => state.issues.get(id), statuses: state.config?.statuses ?? [], needsYou: state.config?.needsYou, now,
   }), [state.issues, state.config, now])
-  const { days, cards } = useMemo(() => buildActivity(events, ctx, since, skip), [events, ctx, since, skip])
+  const { days } = useMemo(() => buildActivity(events, ctx, since, skip), [events, ctx, since, skip])
+  const todayStart = rangeStart('today', now)
+  const today = useMemo(() => dayOverview(buildActivity(events, ctx, todayStart, skip).cards), [events, ctx, todayStart, skip])
   const waiting = useMemo(() => waitingOnYou(events, needsYou ?? [], state.config, since), [events, needsYou, state.config, since])
   const waitingIds = useMemo(() => new Set(waiting.map((w) => w.id)), [waiting])
-  const counts = useMemo(() => activityCounts(cards, waiting.length), [cards, waiting])
   const buckets = useMemo(() => rhythm(events, range, now, skip), [events, range, now, skip])
+  return { range, setRange, today, days, buckets, waitingIds, capped }
+}
 
+/** "4m ago", "just now". */
+const ago = (iso: string, now: number) => { const r = relTime(iso, now); return r === 'now' ? 'just now' : r ? `${r} ago` : '' }
+
+/**
+ * Home's Agent activity: today's counts (each opens Session details on that filter), the live session and what it is
+ * working on, what finished last, and Session details (the range, the rhythm, filters and a card per session).
+ */
+export function Activity({ data, now }: { data: ActivityData; now: number }) {
+  const state = useTracker()
+  const { range, setRange, today, days, buckets, waitingIds, capped } = data
+  const [filter, setFilter] = useState<ActivityFilter>('all')
+  const [open, setOpen] = useState(false)
+  const [shut, setShut] = useState<ReadonlySet<string>>(new Set())
   const toggle = (key: string) => setShut((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
-  const stat = (f: ActivityFilter, n: number, label: string, attn = false) => (
-    <button type="button" className={`act-stat${attn && n > 0 ? ' attn' : ''}`} aria-pressed={filter === f}
-      onClick={() => setFilter(filter === f ? 'all' : f)}>
-      <span className="n">{n}</span><span className="l">{label}</span>
+  const projectName = (slug: string) => state.projects.find((p) => p.slug === slug)?.name ?? (slug === '_none' ? 'No project' : slug)
+  const issueProject = (id: string) => { const p = state.issues.get(id)?.project; return p ? projectName(p) : '' }
+
+  const stat = (f: ActivityFilter, n: number, label: string) => (
+    <button type="button" className="ov-stat" aria-pressed={open && filter === f} aria-controls="ov-sessions"
+      onClick={() => { const off = open && filter === f; setFilter(off ? 'all' : f); if (!off) { setRange('today'); setOpen(true) } }}>
+      <strong>{n}</strong><span>{label}</span>
     </button>
   )
-  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    // Enter on a focused row's title link already opens it; nothing else to do here.
-    if (e.key === 'Escape' && filter !== 'all') setFilter('all')
-  }
+  const onKey = (e: KeyboardEvent<HTMLElement>) => { if (e.key === 'Escape' && filter !== 'all') setFilter('all') }
+  const cur = today.current
 
   return (
-    <aside className="home-feed act" onKeyDown={onKey}>
-      <div className="act-headline">
-        <h4>{counts.live > 0 && <span className="act-live" aria-hidden="true" />}Agent activity</h4>
-        <div className="act-range" role="group" aria-label="Time range">
-          <button type="button" aria-pressed={range === 'today'} onClick={() => setRange('today')}>Today</button>
-          <button type="button" aria-pressed={range === 'week'} onClick={() => setRange('week')}>7 days</button>
-        </div>
+    <section className="ov-activity" aria-labelledby="ov-activity-h" onKeyDown={onKey}>
+      <div className="ov-title">
+        <h2 id="ov-activity-h">Agent activity</h2>
+        {today.live > 0 && <span className="ov-subtle"><span className="act-live" aria-hidden="true" /> {today.live} live</span>}
       </div>
-      <div className="act-stats" role="group" aria-label={range === 'today' ? 'Today at a glance' : 'The last 7 days at a glance'}>
-        {stat('done', counts.finished, 'Finished')}
-        {stat('started', counts.started, 'Started')}
-        {stat('needs', counts.waiting, 'Waiting on you', true)}
-        {stat('agents', counts.agents, `Agents${counts.live ? ` · ${counts.live} live` : ''}`)}
+      <div className="ov-stats" role="group" aria-label="Today at a glance">
+        {stat('done', today.finished, 'Finished')}
+        {stat('started', today.started, 'Started')}
+        {stat('agents', today.agents, today.agents === 1 ? 'Agent' : 'Agents')}
       </div>
-      <Rhythm buckets={buckets} range={range} now={now} />
-      {waiting.length > 0 && (
-        <div className="act-waiting" aria-label="Waits on you">
-          {waiting.map((w) => (
-            <div key={w.id} className="act-attn">
-              <StatusIcon status={w.status} config={state.config} />
-              <div className="act-attn-text">
-                <a href={href({ name: 'issue', id: w.id })}><span className="act-id">{w.id}</span> {w.title}</a>
-                <span className="why-line">{w.who} · {w.status} · {relTime(w.at, now)}</span>
-                {w.note && <span className="act-question">{w.note}</span>}
-              </div>
-              <button type="button" className="act-open" onClick={() => navigate({ name: 'issue', id: w.id })}>Open</button>
+      {cur ? (
+        <>
+          <div className="ov-session">
+            <span className={`ov-agent tool-${cur.card.tool}`} aria-hidden="true">{cur.card.badge}</span>
+            <div>
+              <h3>{cur.card.label}{cur.card.live && <span className="act-live" role="img" aria-label="Writing now" />}</h3>
+              {cur.card.where && <span className="ov-subtle">{cur.card.where}</span>}
             </div>
-          ))}
-        </div>
-      )}
-      <div className="act-filters" role="group" aria-label="Show">
-        {FILTERS.map(([f, label]) => <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>{label}</button>)}
-      </div>
-      {capped && <div className="home-empty">Showing the latest {FEED_SINCE_MAX} writes.</div>}
-      {days.length === 0 && <div className="home-empty">{range === 'today' ? 'No activity today yet. Switch to 7 days to see earlier work.' : 'No activity in the last 7 days.'}</div>}
-      {days.map((d) => {
-        const shown = d.cards.flatMap((c) => { const rows = filterCard(c, filter, waitingIds); return rows ? [{ c, rows }] : [] })
-        if (!shown.length) return null
-        return (
-          <div key={d.day} className="act-day">
-            <h5>{d.label}</h5>
-            {shown.map(({ c, rows }) => <Card key={c.key} card={c} rows={rows} state={state} now={now} open={!shut.has(c.key)} toggle={() => toggle(c.key)} />)}
           </div>
-        )
-      })}
-      {days.length > 0 && filter !== 'all' && days.every((d) => d.cards.every((c) => !filterCard(c, filter, waitingIds))) && (
-        <div className="home-empty">Nothing matches in this range.</div>
+          <div className="ov-current">
+            <span className="ov-eyebrow">{cur.card.live ? 'Working on' : 'Last worked on'}</span>
+            <a href={href({ name: 'issue', id: cur.row.id })}>{cur.row.title}</a>
+            <span className="ov-subtle">{cur.row.id} · Updated {ago(cur.row.at, now)}</span>
+          </div>
+        </>
+      ) : <p className="home-empty">No agent sessions today yet.</p>}
+      <div className="ov-title ov-recent-title"><h3>Recently finished</h3><span className="ov-subtle">Today</span></div>
+      {today.recent.length === 0 && <p className="home-empty">Nothing finished today yet.</p>}
+      {today.recent.length > 0 && (
+        <ul className="ov-events">
+          {today.recent.map((r) => (
+            <li key={r.id}>
+              <StatusIcon status={r.status} config={state.config} />
+              {r.gone
+                ? <span className="ov-event-main"><s>{r.title}</s><small>{r.id} · deleted</small></span>
+                : <a className="ov-event-main" href={href({ name: 'issue', id: r.id })}>{r.title}<small>{r.id}{issueProject(r.id) && ` · ${issueProject(r.id)}`}</small></a>}
+              <span className="ov-time">{relTime(r.at, now)}</span>
+            </li>
+          ))}
+        </ul>
       )}
-    </aside>
+      <details className="ov-details" id="ov-sessions" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary>Session details</summary>
+        <div className="act">
+          <div className="act-headline">
+            <span className="ov-subtle">{range === 'today' ? 'Sessions today' : 'Sessions in the last 7 days'}</span>
+            <div className="act-range" role="group" aria-label="Time range">
+              <button type="button" aria-pressed={range === 'today'} onClick={() => setRange('today')}>Today</button>
+              <button type="button" aria-pressed={range === 'week'} onClick={() => setRange('week')}>7 days</button>
+            </div>
+          </div>
+          <Rhythm buckets={buckets} range={range} now={now} />
+          <div className="act-filters" role="group" aria-label="Show">
+            {FILTERS.map(([f, label]) => <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>{label}</button>)}
+            {filter === 'agents' && <button type="button" aria-pressed="true" onClick={() => setFilter('all')}>Agents</button>}
+          </div>
+          {capped && <div className="home-empty">Showing the latest {FEED_SINCE_MAX} writes.</div>}
+          {days.length === 0 && <div className="home-empty">{range === 'today' ? 'No activity today yet. Switch to 7 days to see earlier work.' : 'No activity in the last 7 days.'}</div>}
+          {days.map((d) => {
+            const shown = d.cards.flatMap((c) => { const rows = filterCard(c, filter, waitingIds); return rows ? [{ c, rows }] : [] })
+            if (!shown.length) return null
+            return (
+              <div key={d.day} className="act-day">
+                <h4>{d.label}</h4>
+                {shown.map(({ c, rows }) => <Card key={c.key} card={c} rows={rows} state={state} now={now} open={!shut.has(c.key)} toggle={() => toggle(c.key)} />)}
+              </div>
+            )
+          })}
+          {days.length > 0 && filter !== 'all' && days.every((d) => d.cards.every((c) => !filterCard(c, filter, waitingIds))) && (
+            <div className="home-empty">Nothing matches in this range.</div>
+          )}
+        </div>
+      </details>
+    </section>
   )
 }

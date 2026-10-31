@@ -5,8 +5,8 @@ import type { CiStatus, IssueSummary } from '../../src/model'
 import { ciDetail, ciTitle, ciTone } from '../../ui/ci'
 import { applyEvent, emptyState, fromSnapshot } from '../../ui/client'
 import { CiBadgeLine, CiDot } from '../../ui/components/Ci'
-import { needsYouWhy, type NeedsYouItem } from '../../ui/home'
-import { NeedsYouWhy } from '../../ui/views/Home'
+import { needsYouCard, needsYouWhy, type NeedsYouItem } from '../../ui/home'
+import { NeedsYouRequest } from '../../ui/views/Home'
 
 const summary = (id: string, over: Partial<IssueSummary> = {}): IssueSummary => ({
   id, title: `Issue ${id}`, status: 'In Progress', priority: 0, labels: [], parent: null, blockedBy: [], related: [],
@@ -61,8 +61,10 @@ describe('CI status in the UI', () => {
     expect(needsYouWhy(item({ ciReason: 'CI failing on PR #12' }), ny, now)).toEqual({ why: '', ci: 'CI failing on PR #12' })
     expect(needsYouWhy(item({ status: 'Waiting', ciReason: 'CI failing on PR #12' }), ny, now))
       .toEqual({ why: 'Waiting · 1d', ci: 'CI failing on PR #12' })
-    const state = { ...emptyState(), config: { needsYou: ny } } as never
-    expect(renderToStaticMarkup(createElement(NeedsYouWhy, { state, issue: item({ ciReason: 'CI failing on PR #12' }), now })))
-      .toBe('<span class="ci-why" title="CI failing on PR #12">CI failing on PR #12</span>')
+    // Home's request card: CI failing is the status chip and the reason is what it asks.
+    const issue = item({ ciReason: 'CI failing on PR #12' })
+    const html = renderToStaticMarkup(createElement(NeedsYouRequest, { issue, card: needsYouCard(issue, ny, now), featured: false, project: '' }))
+    expect(html).toContain('<span class="ov-status">CI failing</span>')
+    expect(html).toContain('<p>CI failing on PR #12</p>')
   })
 })

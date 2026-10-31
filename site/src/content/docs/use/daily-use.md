@@ -46,38 +46,46 @@ Open with ⌘, or **Settings…** in the menu. Every change applies straight awa
 
 ## In the window
 
-**Home** shows:
+**Home** is a daily overview. At the top: today's date and one line, such as *12 finished today. 5 in progress.
+3 need you.* Below it, in two columns (one on a phone: Needs you, In progress, Agent activity, Ready next):
 
-- *Needs you*: issues waiting for your decision or review, work that has [stalled](#stalled-work), and work whose
-  [PR checks fail](#ci-status-on-pull-requests);
-- *In progress*;
-- *Ready next*;
-- *Blocked*;
-- **Agent activity**, what your agents got done, live (below).
+- **Needs you** comes first: issues waiting for your decision or review, work that has [stalled](#stalled-work), and
+  work whose [PR checks fail](#ci-status-on-pull-requests). Each request shows its issue and project, why it needs you
+  (*Input needed* for Waiting, *Needs review*, *Needs decision*, *Stalled* or *CI failing*), what it asks (its newest
+  comment, else the stalled or CI reason), and how long it has waited: *Waiting 3 days* since it moved to Waiting, or
+  *No activity for 7 days*. **View request**, **Review** or **Open** opens the issue; so does its title. The first
+  request is highlighted. Home shows three; **Show all** lists the rest.
+- **In progress** and **Ready next**: the first three of each, with how long ago an issue in progress last changed,
+  and *Urgent* or *High* and *Unblocks N* (how many open issues wait on it) on ready ones. **All in progress** and
+  **All ready** open the full lists in All issues.
+- **Blocked work**, folded under Ready next: click it to see the dependency chains, the first blocker first
+  (*WEB-12 Plans config → WEB-13 Comparison table → WEB-14 FAQ*), and **All blocked**.
+- **Agent activity**, beside the queue (below).
+- **Plan**: your Now, Next and Later board; drag issues between the columns.
 
 ### Agent activity
 
-The column on the right tells you what your agents got done, not every write they made.
+The column on the right tells you what your agents got done today, not every write they made.
 
-- **The overview**: how many issues were finished, how many were started and not finished yet, how many wait on you,
-  and how many agent sessions worked (and how many are working now). Click a count to show only those; Agents shows
-  only the agent sessions' cards. Under it, a strip shows when agents worked, colored by tool: for Today, one bar per
-  hour from midnight (hours still to come stay blank); for 7 days, one bar per day.
-- **Waits on you**: issues an agent handed back to you in this range that still need you: the agent moved it to a
-  Needs-you status such as Waiting, created it there, or added a Needs-you label. It shows the agent's question and
-  **Open**. Your own moves don't count. Everything that needs you, including older items, stalled work and failing
-  checks, stays in Needs you on the left.
-- **One card per agent session**: the tool (Claude Code, Codex, Cursor…, or "Agent in" and the repo, such as "Agent in
-  web-app", when the tool wasn't recorded), the repo and branch, when it ran, how many writes it made, and a green dot
-  while it's still writing (within the last 10 minutes). Click the header to fold a card; a long card shows its first
-  10 rows and **Show N more**. Your own changes, from the app, the browser or by hand, share one **You** card per day.
-- **One row per issue**: its status icon, id and title, and the path it took in that session (Backlog → In Progress →
-  Done; "created" when the session created it). Internal writes, such as a plan change, fold away. The latest note
-  shows as a one-line quote; click it (or press Enter on it) to read it all. GitHub PR and commit links in the notes
-  become chips. Sub-issues touched in the same session sit under their epic, which shows its progress ring. Click a
-  row to open the issue; a deleted issue's row is struck through.
-- **Today / 7 days** switches the range, and days separate the cards (Today, Yesterday, then dates). The chips above
-  the cards show Everything, Finished, Started, With notes or Needs you.
+- **Today's counts**: issues finished, issues started and not finished yet, and the agent sessions that worked (with
+  how many are writing now). Click a count to open Session details on just those.
+- **The session at work**: the live agent session (or the latest one today), its repo and branch, and the issue it is
+  working on, with when it last wrote.
+- **Recently finished**: the last three issues finished today.
+- **Session details**, folded: click it for the whole story.
+  - **Today / 7 days** switches the range. A strip shows when agents worked, colored by tool: for Today, one bar per
+    hour from midnight (hours still to come stay blank); for 7 days, one bar per day. The chips show Everything,
+    Finished, Started, With notes or Needs you (issues an agent handed back to you in this range).
+  - **One card per agent session**: the tool (Claude Code, Codex, Cursor…, or "Agent in" and the repo, such as "Agent
+    in web-app", when the tool wasn't recorded), the repo and branch, when it ran, how many writes it made, and a green
+    dot while it's still writing (within the last 10 minutes). Click the header to fold a card; a long card shows its
+    first 10 rows and **Show N more**. Your own changes, from the app, the browser or by hand, share one **You** card
+    per day. Days separate the cards (Today, Yesterday, then dates).
+  - **One row per issue**: its status icon, id and title, and the path it took in that session (Backlog → In Progress
+    → Done; "created" when the session created it). Internal writes, such as a plan change, fold away. The latest note
+    shows as a one-line quote; click it (or press Enter on it) to read it all. GitHub PR and commit links in the notes
+    become chips. Sub-issues touched in the same session sit under their epic, which shows its progress ring. Click a
+    row to open the issue; a deleted issue's row is struck through.
 
 Hidden projects stay out of all of it.
 
@@ -95,7 +103,7 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
 menu-bar menu open these docs, which the app serves at `http://127.0.0.1:7477/docs/`; from a terminal, `aitt docs`
 opens them in the browser.
 
-![Home: Needs you (Waiting issues, stalled work and failing PR checks, with the reasons), In progress, Ready next and Blocked; on the right, Agent activity with today's counts, the hourly strip, a question that waits on you, and a card per agent session](../../../assets/screenshots/home.png)
+![Home, the daily overview: the date and today's summary; Needs you with each request, how long it has waited and its action; In progress and Ready next; on the right, Agent activity with today's counts, the live session and what finished](../../../assets/screenshots/home.png)
 
 A project shows its description, milestones and documents above its issues, grouped by status:
 
@@ -153,7 +161,7 @@ on its page. **No project** in that list hides the issues that have no project; 
 hide it. The choice is saved as `hiddenProjects` in `config.yml`, so the app window and the browser always agree.
 
 A hidden project appears nowhere except by direct link. Its issues leave the sidebar, All issues, Home (Needs you, In
-progress, Ready next, Blocked), saved views, the board, the activity feed and every count: a visible epic's sub-issue
+progress, Ready next, Blocked work), saved views, the board, the activity feed and every count: a visible epic's sub-issue
 count and progress ring leave hidden sub-issues out (with only hidden ones, it shows no ring), and Home's "unblocks"
 and "blocked by" name only visible issues. Filters and grouping stop offering the project, and any label, milestone
 or workspace that only it uses. ⌘K search leaves its issues out, and so do the menu-bar number, the menu's Needs-you

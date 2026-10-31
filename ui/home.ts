@@ -1,16 +1,19 @@
 /** Pure helpers behind the Home view (tested without a DOM). */
 import type { FeedEvent } from '../src/engine/eventlog'
-import type { Config, IssueSummary, PlanSlot } from '../src/model'
+import type { Config, Filter, IssueSummary, PlanSlot } from '../src/model'
 import { inScope, type Scope } from './client'
+import { href } from './router'
+import { DEFAULT_DISPLAY, viewToQuery } from './viewModel'
 
 type Scoped = Pick<IssueSummary, 'project' | 'workspaces'>
 type Cfg = Pick<Config, 'workspaces'> | null
 
 /**
  * A Needs-you item; `stalled` is the engine's stalled reason when the issue stalled (config.yml `stalled:`), and
- * `ciReason` its failing-CI reason ("CI failing on PR #12").
+ * `ciReason` its failing-CI reason ("CI failing on PR #12"). `request` is its newest comment on one line and
+ * `waitingSince` when it moved into its Needs-you status, when the engine knows (src/engine/queries.ts needsYouRequest).
  */
-export type NeedsYouItem = IssueSummary & { stalled?: string; ciReason?: string }
+export type NeedsYouItem = IssueSummary & { stalled?: string; ciReason?: string; request?: string; waitingSince?: string }
 
 /** `/api/home` payload: issue summaries in buckets. */
 export interface HomeData {
@@ -104,4 +107,103 @@ export function boardColumns(issues: Iterable<IssueSummary>, overrides: Record<s
   const rank = (p: number) => p || 5
   for (const k of PLAN_SLOTS) cols[k].sort((a, b) => rank(a.priority) - rank(b.priority) || b.updated.localeCompare(a.updated))
   return cols
+}
+
+// ---------- the Daily overview (ATT-53) ----------
+
+const HOUR = 3_600_000
+const DAY = 24 * HOUR
+
+/** "less than an hour", "1 hour", "5 hours", "1 day", "8 days". */
+export function duration(ms: number): string {
+  if (!(ms >= HOUR)) return 'less than an hour'
+  if (ms < DAY) { const h = Math.floor(ms / HOUR); return `${h} ${h === 1 ? 'hour' : 'hours'}` }
+  const d = Math.floor(ms / DAY)
+  return `${d} ${d === 1 ? 'day' : 'days'}`
+}
+
+/** One Needs-you card: the status chip, the request, how long it has waited and the action's label. */
+export interface NeedsYouCard {
+  /** "Input needed" (Waiting), another Needs-you status, a Needs-you label ("Needs review"), "CI failing" or "Stalled". */
+  status: string
+  /** What it asks: the newest comment, else the failing CI or the stalled reason. */
+  summary?: string
+  /** "Waiting 3 days" (since it moved into its Needs-you status), else "No activity for 7 days" / "Updated 2 hours ago". */
+  age: string
+  /** "View request" when there is a request to read, "Review" for a review, else "Open". */
+  action: string
+  stalled?: string
+  ci?: string
+}
+
+export function needsYouCard(i: NeedsYouItem, needsYou: Config['needsYou'] | undefined, nowMs: number): NeedsYouCard {
+  const statuses = Array.isArray(needsYou?.statuses) ? needsYou.statuses : []
+  const labels = Array.isArray(needsYou?.labels) ? needsYou.labels : []
+  const byStatus = statuses.includes(i.status)
+  const label = i.labels.find((l) => labels.includes(l))
+  const status = byStatus ? (i.status === 'Waiting' ? 'Input needed' : i.status) : label ?? (i.ciReason ? 'CI failing' : i.stalled ? 'Stalled' : i.status)
+  const since = i.waitingSince ? Date.parse(i.waitingSince) : NaN
+  let age: string
+  if (byStatus && !Number.isNaN(since)) age = `Waiting ${duration(nowMs - since)}`
+  else {
+    const quiet = nowMs - Date.parse(i.updated)
+    age = Number.isNaN(quiet) ? '' : quiet >= DAY ? `No activity for ${duration(quiet)}` : quiet >= HOUR ? `Updated ${duration(quiet)} ago` : 'Updated just now'
+  }
+  const summary = i.request ?? i.ciReason ?? i.stalled
+  const review = /review/i.test(status)
+  return {
+    status, age, action: review ? 'Review' : i.request ? 'View request' : 'Open',
+    ...(summary ? { summary } : {}), ...(i.stalled ? { stalled: i.stalled } : {}), ...(i.ciReason ? { ci: i.ciReason } : {}),
+  }
+}
+
+/** "12 finished today. 5 in progress. 3 need you." with each count's own wording. */
+export function daySummary(c: { finished: number; inProgress: number; needsYou: number }): string {
+  const needs = c.needsYou === 0 ? 'Nothing needs you.' : `${c.needsYou} ${c.needsYou === 1 ? 'needs' : 'need'} you.`
+  return `${c.finished} finished today. ${c.inProgress} in progress. ${needs}`
+}
+
+/** "Friday, October 30" (the eyebrow; CSS capitalizes it). */
+export function dayHeading(nowMs: number): string {
+  return new Date(nowMs).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
+/**
+ * Blocked work as dependency chains, root blocker first: each blocked issue walks back through its first open
+ * blocker (cycle-safe), and a chain that is the start of a longer one is left out. `more` counts the other open
+ * blockers along the chain, which the chain doesn't show.
+ */
+export function blockedChains(
+  blocked: { issue: Pick<IssueSummary, 'id'> }[], get: (id: string) => Pick<IssueSummary, 'id' | 'blockedBy'> | undefined,
+  isOpen: (id: string) => boolean,
+): { ids: string[]; more: number }[] {
+  const chains = blocked.map(({ issue }) => {
+    const ids = [issue.id]
+    let more = 0
+    let cur = get(issue.id)
+    while (cur) {
+      const open = cur.blockedBy.filter((b) => isOpen(b))
+      const next = open.find((b) => !ids.includes(b))
+      more += Math.max(0, open.length - (next ? 1 : 0))
+      if (!next) break
+      ids.unshift(next)
+      cur = get(next)
+    }
+    return { ids, more }
+  })
+  // A chain that a longer one starts with (A → B, and A → B → C) is part of the longer one.
+  const startsWith = (d: string[], c: string[]) => d.length > c.length && c.every((id, n) => d[n] === id)
+  return chains.filter((c) => !chains.some((d) => startsWith(d.ids, c.ids)))
+}
+
+/** The All issues list with `filter` (the page's default display), as a link. */
+export function listHref(filter: Filter): string {
+  const base = { filter: {}, display: DEFAULT_DISPLAY }
+  return href({ name: 'issues', query: viewToQuery({ filter, display: DEFAULT_DISPLAY }, base) })
+}
+
+/** Status names of the given types, without the Needs-you statuses (Waiting is in Needs you, not In progress). */
+export function statusesOf(config: Pick<Config, 'statuses' | 'needsYou'> | null, types: string[]): string[] {
+  const needs = new Set(Array.isArray(config?.needsYou?.statuses) ? config.needsYou.statuses : [])
+  return (config?.statuses ?? []).filter((s) => types.includes(s.type) && !needs.has(s.name)).map((s) => s.name)
 }
