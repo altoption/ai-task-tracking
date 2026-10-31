@@ -9,6 +9,7 @@ import { filterIssues } from '../../src/engine/queries'
 import { Store } from '../../src/engine/store'
 import type { Actor, Config, Issue, View } from '../../src/model'
 import { defaultConfig, defaultViews, initFolder, OFFERED_VIEWS, readConfig, SETUP_LOCK, writeConfig } from '../../src/store/metaFiles'
+import { parseIssue, serializeIssue } from '../../src/store/issueFile'
 import { miniCopy } from './helpers'
 
 const you: Actor = { actor: 'you' }
@@ -40,7 +41,7 @@ describe('defaultViews', () => {
     expect(by(v, 'high-priority').filter).toEqual({ priority: [1, 2] })
     expect(by(v, 'high-priority').display).toMatchObject({ layout: 'board', groupBy: 'project' })
     expect(by(v, 'shipped-this-week').filter).toEqual({ status: ['Done'], closedWithinDays: 7 })
-    expect(by(v, 'shipped-this-week').display).toMatchObject({ groupBy: 'project' })
+    expect(by(v, 'shipped-this-week').display).toMatchObject({ groupBy: 'project', orderBy: 'closed' })
   })
 
   test('renamed statuses are followed by type; Needs-you statuses stay out of Active', () => {
@@ -202,6 +203,23 @@ describe('Store.seedDefaultViews', () => {
     expect(c.views).toHaveLength(4)
   })
 
+  test('the marker is committed even when no view is added', async () => {
+    const root = await blank()
+    for (const v of defaultViews(defaultConfig())) await writeFile(join(root, 'views', `${v.slug}.yml`), `name: Mine ${v.slug}\nfilter: {}\ndisplay: {layout: list, groupBy: none, orderBy: updated, showSubIssues: true, properties: [id]}\n`)
+    const run = (...args: string[]) => Bun.spawnSync(['git', ...args], { cwd: root }).stdout.toString().trim()
+    run('init', '-q', '-b', 'main')
+    run('add', '-A')
+    run('-c', 'user.name=t', '-c', 'user.email=t@e', 'commit', '-qm', 'start')
+    const s = await Store.open(root)
+    const handle = startGit(s, { commitDelayMs: 60_000, pushDelayMs: 60_000 })
+    await handle.ready
+    await s.seedDefaultViews()
+    await handle.flush()
+    handle.stop()
+    expect(run('status', '--porcelain')).toBe('')
+    expect(run('ls-files', 'views')).toContain(OFFERED_VIEWS)
+  })
+
   test('Store.open alone adds nothing (aitt setup and the CLI open the store too)', async () => {
     const root = await blank()
     await Store.open(root)
@@ -259,11 +277,21 @@ describe('Store.closedAt', () => {
     expect(s.closedAt(s.get(id)!)).toBe(at)
   })
 
-  test('moving between closed statuses keeps the close time; reopening clears it; closing again is now', async () => {
+  test('Canceled, then Done: closed when it was finished, so it is in this week', async () => {
+    const { root, id } = await closedFixture()
+    await log(root, id, 'Todo', 'Canceled', ago(30 * DAY))
+    const today = ago(DAY)
+    await log(root, id, 'Canceled', 'Done', today)
+    const s = await Store.open(root)
+    expect(s.closedAt(s.get(id)!)).toBe(today)
+    expect(filterIssues(s, { status: ['Done'], closedWithinDays: 7 }).map((i) => i.id)).toContain(id)
+  })
+
+  test('Done, then Canceled keeps the close time; reopening clears it; closing again is now', async () => {
     const { root, id } = await closedFixture()
     const first = ago(3 * DAY)
-    await log(root, id, 'Todo', 'Canceled', first)
-    await log(root, id, 'Canceled', 'Done', ago(DAY))
+    await log(root, id, 'Todo', 'Done', first)
+    await log(root, id, 'Done', 'Canceled', ago(DAY))
     const s = await Store.open(root)
     expect(s.closedAt(s.get(id)!)).toBe(first)
     await s.updateIssue(id, { status: 'Todo' }, you)
@@ -288,6 +316,54 @@ describe('Store.closedAt', () => {
     expect(s.closedAt({ ...i, extra: { completed_at: '2026-01-02T03:04:05Z' } })).toBe('2026-01-02T03:04:05Z')
     expect(s.closedAt({ ...i, status: 'Canceled', extra: { canceled_at: '2026-01-03T03:04:05Z' } })).toBe('2026-01-03T03:04:05Z')
     expect(s.closedAt({ ...i, extra: { completed_at: 'not a date' } })).toBe(i.updated)
+  })
+
+  const renameDone = async (root: string) => {
+    const c = await readConfig(root)
+    c.statuses = c.statuses.map((x) => (x.name === 'Done' ? { ...x, name: 'Shipped' } : x))
+    await writeConfig(root, c)
+  }
+  const setStatus = async (root: string, i: Issue, status: string, extra: Record<string, unknown> = {}) => {
+    const full = parseIssue(await readFile(i.path, 'utf8'), i.path, i.project)
+    await writeFile(i.path, serializeIssue({ ...full, status, extra: { ...full.extra, ...extra } }))
+  }
+
+  test('renaming Done with the engine running is not a new close', async () => {
+    const { root, id } = await closedFixture()
+    const at = ago(30 * DAY)
+    await log(root, id, 'Todo', 'Done', at)
+    const s = await Store.open(root)
+    await renameDone(root)
+    await s.reloadFile(join(root, 'config.yml'))
+    await setStatus(root, s.get(id)!, 'Shipped')
+    await s.reloadFile(s.get(id)!.path)
+    expect(s.get(id)!.status).toBe('Shipped')
+    expect(s.closedAt(s.get(id)!)).toBe(at)
+    expect(filterIssues(s, { closedWithinDays: 7 }).map((i) => i.id)).not.toContain(id)
+  })
+
+  test('renaming Done with the engine stopped is not a reopen: the imported date still counts', async () => {
+    const { root, id } = await closedFixture()
+    const s0 = await Store.open(root)
+    await setStatus(root, s0.get(id)!, 'Shipped', { completed_at: '2026-01-02T03:04:05Z' })
+    await log(root, id, 'Todo', 'Done', ago(30 * DAY))
+    await renameDone(root)
+    const s = await Store.open(root)
+    expect(s.closedAt(s.get(id)!)).toBe('2026-01-02T03:04:05Z')
+  })
+
+  test('a hand edit that closes an issue reaches listeners with its new close time', async () => {
+    const root = await miniCopy()
+    const s = await Store.open(root)
+    const i = openOne(s)
+    const old = i.updated
+    const seen: (string | undefined)[] = []
+    s.on((e) => { if (e.kind === 'issue' && e.issue.id === i.id) seen.push(s.closedAt(e.issue)) })
+    await setStatus(root, i, 'Done')
+    await s.reloadFile(i.path)
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).not.toBe(old)
+    expect(Date.now() - Date.parse(seen[0]!)).toBeLessThan(60_000)
   })
 
   test('filterIssues applies the window with the logged close time', async () => {

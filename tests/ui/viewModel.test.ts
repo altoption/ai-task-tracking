@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { IssueSummary, StatusDef, View } from '../../src/model'
-import { applyView, dropPatch, listRows, swimlanes, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../../ui/viewModel'
+import { applyView, ORDERINGS, dropPatch, listRows, swimlanes, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../../ui/viewModel'
 
 const statuses: StatusDef[] = [
   { name: 'Backlog', type: 'backlog', color: '#bec2c8' }, { name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
@@ -242,6 +242,37 @@ describe('rolling closed window (filter.closedWithinDays)', () => {
     expect(r.total).toBe(2)
     expect(r.groups.map((g) => g.key).sort()).toEqual(['acme-app', 'support'])
     expect(shownIds(r)).toEqual(['A', 'D'])
+  })
+
+  test('a hand-edited value that is no window: open issues show as usual, and display.completed still applies', () => {
+    const set = [mk('A', 'Done', 0, null, { updated: iso(NOW - DAY) }), mk('C', 'Todo', 0, null, { updated: iso(NOW) })]
+    const bad = { closedWithinDays: '7' as unknown as number }
+    expect(shownIds(applyView(set, { filter: bad, display: display() }, ctx))).toEqual(['C'])
+    expect(shownIds(applyView(set, { filter: bad, display: display({ completed: 'week' }) }, ctx))).toEqual(['A', 'C'])
+    const q = viewToQuery({ filter: bad, display: display() }, { filter: {}, display: display({ orderBy: 'priority' }) })
+    expect(q).not.toContain('closed=')
+  })
+
+  test('status columns follow the window: closed ones are offered, open ones are not', () => {
+    const set = [mk('A', 'Done', 0, null, { closedAt: iso(NOW) })]
+    const board = (filter: ViewState['filter']) => applyView(set, { filter, display: display({ layout: 'board', groupBy: 'status', showEmptyColumns: true }) }, ctx)
+    expect(board({ closedWithinDays: 7 }).groups.map((g) => g.key)).toEqual(['Done', 'Canceled', 'Duplicate'])
+    expect(board({ closedWithinDays: 7, status: ['Todo', 'Done'] }).groups.map((g) => g.key)).toEqual(['Done'])
+    const hidden = applyView(set, { filter: { closedWithinDays: 7 }, display: display({ layout: 'board', groupBy: 'status' }) }, ctx)
+    expect(hidden.groups.map((g) => g.key)).toEqual(['Done'])
+    expect(hidden.hidden.map((h) => h.key)).toEqual(['Canceled', 'Duplicate'])
+  })
+
+  test('the closed order: newest close first, issues without one last, by date rather than text', () => {
+    const set = [
+      mk('A', 'Done', 0, null, { closedAt: '2026-10-30T10:00:00Z', updated: iso(NOW) }),
+      mk('B', 'Done', 0, null, { closedAt: '2026-10-30T12:00:00+03:00', updated: iso(NOW - DAY) }), // 09:00Z
+      mk('C', 'Done', 0, null, { closedAt: '2026-10-31T10:00:00Z', updated: iso(NOW - 2 * DAY) }),
+      mk('D', 'Todo', 0, null),
+    ]
+    const r = applyView(set, { filter: { includeDone: true }, display: display({ groupBy: 'none', orderBy: 'closed' }) }, ctx)
+    expect(r.groups[0]!.issues.map((i) => i.id)).toEqual(['C', 'A', 'B', 'D'])
+    expect(ORDERINGS.map((o) => o.value)).toContain('closed')
   })
 
   test('the window rolls with the clock', () => {

@@ -343,7 +343,7 @@ export function defaultViews(c: Pick<Config, 'statuses' | 'needsYou'>): View[] {
     ...(active.length ? [{ slug: 'active-by-project', name: 'Active by Project', filter: { status: active }, display: display('board', 'project', 'priority') }] : []),
     { slug: 'unblock-first', name: 'Unblock First', filter: { blocking: true }, display: display('list', 'none', 'priority') },
     { slug: 'high-priority', name: 'High Priority', filter: { priority: [1, 2] }, display: display('board', 'project', 'priority') },
-    ...(completed.length ? [{ slug: 'shipped-this-week', name: 'Shipped This Week', filter: { status: completed, closedWithinDays: 7 }, display: display('list', 'project', 'updated') }] : []),
+    ...(completed.length ? [{ slug: 'shipped-this-week', name: 'Shipped This Week', filter: { status: completed, closedWithinDays: 7 }, display: display('list', 'project', 'closed') }] : []),
   ]
 }
 

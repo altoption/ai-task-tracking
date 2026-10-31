@@ -5,6 +5,7 @@
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Filter, IssueSummary } from '../../src/model'
+import { closedWindowDays } from '../../src/shared/filter'
 import { ConceptIcon, Icon, PriorityIcon, PRIORITIES, StatusIcon, type Concept } from '../components/icons'
 import { Popover } from '../components/Popover'
 import { listedProjects, type TrackerState } from '../client'
@@ -117,8 +118,8 @@ function CategoryPanel({ cat, q, filter, state, onChange }: { cat: string; q: st
           </label>
         ))}
         <label className="dm-row"><span className="dm-label">Closed in the last (days)</span>
-          <input type="number" min={1} step={1} className="date-input" value={filter.closedWithinDays ?? ''}
-            onChange={(e) => { const n = Number(e.target.value); set({ closedWithinDays: Number.isInteger(n) && n > 0 ? n : undefined }) }} />
+          <input type="number" min={1} step={1} className="date-input" value={closedWindowDays(filter) ?? ''}
+            onChange={(e) => set({ closedWithinDays: closedWindowDays({ closedWithinDays: Number(e.target.value) }) })} />
         </label>
       </div>
     )
@@ -181,7 +182,8 @@ export function activeChips(f: Filter, locked: Key[], state: Pick<TrackerState, 
   if (f.hasRelated !== undefined) add('hasRelated', f.hasRelated ? 'Has related' : 'No related')
   if (f.createdAfter) add('createdAfter', `Created after ${f.createdAfter.slice(0, 10)}`)
   if (f.updatedAfter) add('updatedAfter', `Updated after ${f.updatedAfter.slice(0, 10)}`)
-  if (f.closedWithinDays) add('closedWithinDays', `Closed in the last ${f.closedWithinDays === 1 ? 'day' : `${f.closedWithinDays} days`}`)
+  const closedDays = closedWindowDays(f)
+  if (closedDays) add('closedWithinDays', `Closed in the last ${closedDays === 1 ? 'day' : `${closedDays} days`}`)
   if (f.query) add('query', `Content contains “${f.query}”`)
   if (f.hasLinks !== undefined) add('hasLinks', f.hasLinks ? 'Has links' : 'No links')
   if (f.workspace?.length) add('workspace', anyOf('Workspace', f.workspace))
