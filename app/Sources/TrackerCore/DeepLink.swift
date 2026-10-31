@@ -1,7 +1,7 @@
 import Foundation
 
 public enum DeepLink {
-    /// `aitt://settings` opens the Settings window, not a page.
+    /// `aitt://settings` opens Settings: the page, or the fallback window without an engine (SettingsDestination).
     public static func isSettings(_ url: URL) -> Bool {
         url.scheme?.lowercased() == "aitt" && url.host?.lowercased() == "settings"
     }

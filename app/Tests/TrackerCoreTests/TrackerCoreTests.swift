@@ -281,6 +281,14 @@ final class WindowRouteTests: XCTestCase {
         XCTAssertTrue(WindowRoute.needsLoad(route: WindowRoute.docs, loaded: true, current: ui, base: base))
     }
 
+    func testSettingsIsAHashRoute() {
+        let ui = URL(string: "http://127.0.0.1:7477/#/issue/ATT-1")!
+        XCTAssertEqual(WindowRoute.settings, "#/settings")
+        XCTAssertFalse(WindowRoute.needsLoad(route: WindowRoute.settings, loaded: true, current: ui, base: base))
+        let docs = URL(string: "http://127.0.0.1:7477/docs/")!
+        XCTAssertTrue(WindowRoute.needsLoad(route: WindowRoute.settings, loaded: true, current: docs, base: base))
+    }
+
     func testHashRouteFromTheDocsLoadsTheUI() {
         let docs = URL(string: "http://127.0.0.1:7477/docs/use/daily-use/")!
         XCTAssertTrue(WindowRoute.needsLoad(route: "#/issue/ATT-1", loaded: true, current: docs, base: base))
@@ -303,121 +311,31 @@ final class ThemeSettingTests: XCTestCase {
                         ThemeEntry(id: "system", name: "Match macOS", base: "system"),
                         ThemeEntry(id: "ocean", name: "Ocean", base: "light", bg: "rgb(1, 2, 3)")]
 
-    /// The app's wiring, against a real UserDefaults suite: an engine fake that records each send and answers when
-    /// told, a ThemeSync, and an observer that calls pushIfPending on every UserDefaults change (applySettings).
-    private final class Harness {
-        let d: UserDefaults
-        var sent: [String] = []
-        var answers: [(ThemeSync.Outcome) -> Void] = []
-        var sync: ThemeSync!
-        private var observer: NSObjectProtocol?
-
-        init(_ d: UserDefaults) {
-            self.d = d
-            sync = ThemeSync(defaults: d) { [unowned self] id, done in
-                self.sent.append(id); self.answers.append(done)
-            }
-            // didChangeNotification is posted synchronously after each write, as in the app.
-            observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: d, queue: nil) { [unowned self] _ in
-                self.sync.pushIfPending()
-            }
-        }
-        deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
-
-        /// The engine answers the oldest request still open.
-        func answer(_ outcome: ThemeSync.Outcome = .confirmed) { answers.removeFirst()(outcome) }
-        var theme: String? { d.string(forKey: SettingKey.theme) }
-        var pending: Bool { d.bool(forKey: SettingKey.themePending) }
-        func tick() -> Int { sync.beginProbe() }
-    }
-
-    func testAPickInSettingsIsSentWithTheNewIdAndSticks() {
-        let h = Harness(scratchDefaults())
-        h.sync.sync(ThemeState(selected: "dark", themes: list), probe: h.tick())
-        ThemeSetting.pick("light", defaults: h.d)
-        XCTAssertEqual(h.sent, ["light"]) // never the old id (the bug: pending was written before the theme)
-        XCTAssertTrue(h.pending)
-        // A poll answered before the engine has it doesn't adopt the old theme while pending.
-        h.sync.sync(ThemeState(selected: "dark", themes: list), probe: h.tick())
-        XCTAssertEqual(h.theme, "light")
-        XCTAssertEqual(h.sent, ["light"]) // one request at a time
-        let beforeConfirm = h.tick()
-        h.answer()
-        XCTAssertFalse(h.pending)
-        // A probe that started before the confirmation may still report the old theme: ignored.
-        h.sync.sync(ThemeState(selected: "dark", themes: list), probe: beforeConfirm)
-        XCTAssertEqual(h.theme, "light")
-        h.sync.sync(ThemeState(selected: "light", themes: list), probe: h.tick())
-        XCTAssertEqual(h.theme, "light")
-        XCTAssertEqual(h.sent, ["light"])
-        // Later changes in the engine (⌘K) are adopted again.
-        h.sync.sync(ThemeState(selected: "paper", themes: list), probe: h.tick())
-        XCTAssertEqual(h.theme, "paper")
-    }
-
-    func testPicksWhileARequestIsOutEndOnTheLastOne() {
-        let h = Harness(scratchDefaults())
-        ThemeSetting.pick("light", defaults: h.d)
-        ThemeSetting.pick("paper", defaults: h.d)
-        ThemeSetting.pick("ocean", defaults: h.d)
-        XCTAssertEqual(h.sent, ["light"])
-        h.answer() // light answered, but the theme is now ocean: send that, still pending
-        XCTAssertEqual(h.sent, ["light", "ocean"])
-        XCTAssertTrue(h.pending)
-        h.answer()
-        XCTAssertFalse(h.pending)
-        XCTAssertEqual(h.theme, "ocean")
-    }
-
-    func testAnUnreachableEngineLeavesThePickPendingForTheNextPoll() {
-        let h = Harness(scratchDefaults())
-        ThemeSetting.pick("paper", defaults: h.d)
-        h.answer(.retry)
-        XCTAssertTrue(h.pending)
-        h.sync.sync(nil, probe: h.tick()) // still no engine
-        XCTAssertEqual(h.sent, ["paper"])
-        h.sync.sync(ThemeState(selected: "dark", themes: list), probe: h.tick()) // back: sent again
-        XCTAssertEqual(h.sent, ["paper", "paper"])
-        h.answer()
-        XCTAssertFalse(h.pending)
-        XCTAssertEqual(h.theme, "paper")
-    }
-
-    func testReplies2xxConfirm400RefusesOtherwiseRetry() {
-        XCTAssertEqual(ThemeSync.Outcome(status: 200), .confirmed)
-        XCTAssertEqual(ThemeSync.Outcome(status: 204), .confirmed)
-        XCTAssertEqual(ThemeSync.Outcome(status: 400), .refused)
-        for status in [403, 404, 500, 503] { XCTAssertEqual(ThemeSync.Outcome(status: status), .retry) }
-        XCTAssertEqual(ThemeSync.Outcome(status: nil), .retry)
-
-        let h = Harness(scratchDefaults())
-        ThemeSetting.pick("paper", defaults: h.d)
-        h.answer(ThemeSync.Outcome(status: 500)) // the engine failed: still pending, sent again on the next poll
-        XCTAssertTrue(h.pending)
-        h.sync.sync(ThemeState(selected: "dark", themes: list), probe: h.tick())
-        XCTAssertEqual(h.sent, ["paper", "paper"])
-        h.answer(ThemeSync.Outcome(status: 400)) // refused (unknown id): sending it again can't help
-        XCTAssertFalse(h.pending)
-        h.sync.sync(ThemeState(selected: "dark", themes: list), probe: h.tick())
-        XCTAssertEqual(h.theme, "dark") // the engine's theme wins
-        XCTAssertEqual(h.sent, ["paper", "paper"])
-    }
-
-    func testPollsAdoptTheEnginesThemeAndStoreItsList() {
-        let h = Harness(scratchDefaults())
-        XCTAssertEqual(h.theme, "graphite") // the default until the engine says otherwise
+    func testPollsMirrorTheEnginesThemeAndList() {
+        let d = scratchDefaults()
+        XCTAssertEqual(d.string(forKey: SettingKey.theme), "graphite") // the default until the engine says otherwise
         XCTAssertEqual(ThemeSetting.fallbackList.first?.id, ThemeSetting.defaultTheme)
-        XCTAssertEqual(ThemeSetting.storedList(h.d), ThemeSetting.fallbackList)
-        h.sync.sync(ThemeState(selected: "ocean", themes: list), probe: h.tick()) // ⌘K in the browser
-        XCTAssertEqual(h.theme, "ocean")
-        XCTAssertEqual(ThemeSetting.storedList(h.d), list)
-        // config.yml holds a deleted theme's id: the app shows what the engine shows (Dark)...
-        h.sync.sync(ThemeState(selected: "gone", effective: "dark", themes: list), probe: h.tick())
-        XCTAssertEqual(h.theme, "dark")
-        // ...and picking Dark still sends it, so config.yml is fixed.
-        ThemeSetting.pick("dark", defaults: h.d)
-        XCTAssertEqual(h.sent, ["dark"])
-        XCTAssertTrue(h.sent.allSatisfy { $0 != "gone" })
+        XCTAssertEqual(ThemeSetting.storedList(d), ThemeSetting.fallbackList)
+        ThemeSetting.adopt(ThemeState(selected: "ocean", themes: list), defaults: d) // picked on the Settings page or ⌘K
+        XCTAssertEqual(d.string(forKey: SettingKey.theme), "ocean")
+        XCTAssertEqual(ThemeSetting.storedList(d), list)
+        // config.yml holds a deleted theme's id: the app shows what the engine shows (Dark).
+        ThemeSetting.adopt(ThemeState(selected: "gone", effective: "dark", themes: list), defaults: d)
+        XCTAssertEqual(d.string(forKey: SettingKey.theme), "dark")
+        // No engine: the last known theme and list stay.
+        ThemeSetting.adopt(nil, defaults: d)
+        XCTAssertEqual(d.string(forKey: SettingKey.theme), "dark")
+        XCTAssertEqual(ThemeSetting.storedList(d), list)
+    }
+
+    func testAPollThatChangesNothingWritesNothing() {
+        let d = scratchDefaults()
+        ThemeSetting.adopt(ThemeState(selected: "dark", themes: list), defaults: d)
+        var writes = 0
+        let o = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: d, queue: nil) { _ in writes += 1 }
+        defer { NotificationCenter.default.removeObserver(o) }
+        ThemeSetting.adopt(ThemeState(selected: "dark", themes: list), defaults: d)
+        XCTAssertEqual(writes, 0) // each write would wake applySettings
     }
 
     func testHealthJSON() {

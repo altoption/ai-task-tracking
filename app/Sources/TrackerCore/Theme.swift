@@ -17,7 +17,7 @@ public struct ThemeEntry: Equatable {
         self.init(id: id, name: name, base: base, bg: json["bg"] as? String)
     }
 
-    /// As stored in UserDefaults (`themeList`), so Settings and the window have the list before the engine answers.
+    /// As stored in UserDefaults (`themeList`), so the window has the list before the engine answers.
     public var dictionary: [String: String] {
         var d = ["id": id, "name": name, "base": base]
         if let bg { d["bg"] = bg }
@@ -79,14 +79,14 @@ public struct WindowLook: Equatable {
     }
 }
 
-/// The Theme setting. Unlike "Show CI status", the choice lives in the engine (`theme` in config.yml), because the
-/// browser's ⌘K can change it too: the app mirrors the engine's choice and list into UserDefaults (so the window opens
-/// in the right colors before the engine answers) and sends its own only when the user picks one in Settings.
+/// The Theme setting. Unlike "Show CI status", the choice lives in the engine (`theme` in config.yml): the Settings page,
+/// the sidebar and ⌘K set it there. The app only mirrors the engine's choice and list into UserDefaults, so the window
+/// opens in the right colors before the engine answers.
 public enum ThemeSetting {
     /// The engine's DEFAULT_THEME (src/engine/themes.ts): shown when config.yml has no `theme`.
     public static let defaultTheme = "graphite"
 
-    /// The built-ins the Settings popup lists before the engine has sent its list.
+    /// The built-ins, until the engine has sent its list.
     public static let fallbackList: [ThemeEntry] = [
         ThemeEntry(id: "graphite", name: "Graphite", base: "dark", bg: "#141619"),
         ThemeEntry(id: "dark", name: "Dark", base: "dark", bg: "#101012"),
@@ -100,12 +100,13 @@ public enum ThemeSetting {
         return list.isEmpty ? fallbackList : list
     }
 
-    /// A pick in Settings. `theme` is written before `themePending`: each write notifies UserDefaults observers
-    /// synchronously, and the one that sends (ThemeSync.pushIfPending, on `themePending`) must read the new id.
-    /// Picking what the engine already shows still sends it (config.yml may hold a deleted theme's id).
-    public static func pick(_ id: String, defaults: UserDefaults) {
-        defaults.set(id, forKey: SettingKey.theme)
-        defaults.set(true, forKey: SettingKey.themePending)
+    /// Mirror a poll's theme state (nil: no engine, or one without themes). Writes only what changed: each write wakes
+    /// the app's UserDefaults observer.
+    public static func adopt(_ state: ThemeState?, defaults: UserDefaults) {
+        guard let state else { return }
+        let list = state.themes.map(\.dictionary)
+        if (defaults.array(forKey: SettingKey.themeList) as? [[String: String]]) != list { defaults.set(list, forKey: SettingKey.themeList) }
+        if defaults.string(forKey: SettingKey.theme) != state.effective { defaults.set(state.effective, forKey: SettingKey.theme) }
     }
 
     /// The window look for `selected`. Match macOS follows the system with Dark's and Light's backgrounds; an
@@ -119,74 +120,5 @@ public enum ThemeSetting {
         let isLight = t.base == "light"
         let color = t.bg.flatMap(RGBA.init(hex:)) ?? (isLight ? WindowLook.lightBg : WindowLook.darkBg)
         return WindowLook(appearance: isLight ? "light" : "dark", darkBackground: color, lightBackground: color)
-    }
-}
-
-/// Keeps the app's theme and the engine's in step (one per app; main thread).
-/// - A pick in Settings is pending until the engine has it: `pushIfPending` sends one request at a time. A confirmed
-///   (2xx) or refused (400: an id the engine doesn't know; sending it again can't help) reply clears pending only if
-///   the theme is still the one it sent; a newer pick is sent next. Any other reply, or none, leaves it pending for
-///   the next poll, also across app restarts (pending is in UserDefaults).
-/// - A poll stores the engine's list and, with nothing pending, adopts the theme it shows, except from a probe that
-///   started before the last pick was confirmed (it may still report the old theme). Probes are numbered
-///   (`beginProbe`), so clock changes don't matter.
-public final class ThemeSync {
-    /// How the engine answered POST /api/theme.
-    public enum Outcome: Equatable {
-        case confirmed, refused, retry
-
-        /// 2xx confirmed, 400 refused, anything else (5xx, 403, no reply: nil) retried later.
-        public init(status: Int?) {
-            switch status {
-            case .some(200..<300): self = .confirmed
-            case .some(400): self = .refused
-            default: self = .retry
-            }
-        }
-    }
-    public typealias Send = (_ id: String, _ done: @escaping (Outcome) -> Void) -> Void
-
-    private let defaults: UserDefaults
-    private let send: Send
-    /// The id being sent, while a request is out.
-    public private(set) var inFlight: String?
-    private var probes = 0
-    private var confirmedAfterProbe = 0
-
-    public init(defaults: UserDefaults, send: @escaping Send) {
-        self.defaults = defaults; self.send = send
-    }
-
-    /// Call when a health probe starts; pass the number to `sync` with its reply.
-    public func beginProbe() -> Int {
-        probes += 1
-        return probes
-    }
-
-    public func pushIfPending() {
-        guard inFlight == nil, defaults.bool(forKey: SettingKey.themePending), let id = defaults.string(forKey: SettingKey.theme) else { return }
-        inFlight = id
-        send(id) { [weak self] outcome in
-            guard let self else { return }
-            self.inFlight = nil
-            guard outcome != .retry else { return }
-            if self.defaults.string(forKey: SettingKey.theme) == id {
-                self.confirmedAfterProbe = self.probes
-                self.defaults.set(false, forKey: SettingKey.themePending)
-            } else {
-                self.pushIfPending()
-            }
-        }
-    }
-
-    /// Apply a poll's theme state (nil: no engine, or one without themes) from probe number `probe`. Writes only
-    /// what changed: each write wakes the app's UserDefaults observer.
-    public func sync(_ state: ThemeState?, probe: Int) {
-        guard let state else { return }
-        let list = state.themes.map(\.dictionary)
-        if (defaults.array(forKey: SettingKey.themeList) as? [[String: String]]) != list { defaults.set(list, forKey: SettingKey.themeList) }
-        if defaults.bool(forKey: SettingKey.themePending) { return pushIfPending() }
-        guard probe > confirmedAfterProbe, defaults.string(forKey: SettingKey.theme) != state.effective else { return }
-        defaults.set(state.effective, forKey: SettingKey.theme)
     }
 }
