@@ -146,6 +146,17 @@ describe('UI endpoints leave hidden projects out', () => {
     expect((await get('/api/feed?id=Q-5')).length).toBeGreaterThan(0)
   })
 
+  test('feed ?since= (Home\'s Agent activity) reads back to that time and leaves hidden projects out', async () => {
+    const t0 = new Date(Date.now() - 1000).toISOString()
+    await store.updateIssue('Q-5', { status: 'Todo' }, { actor: 'agent', workspace: 'w', session: '1' })
+    await store.updateIssue('Q-2', { status: 'In Progress' }, { actor: 'agent', workspace: 'w', session: '1' })
+    await Bun.sleep(50)
+    const since = await get(`/api/feed?since=${encodeURIComponent(t0)}&limit=5000`)
+    expect(since.map((e: any) => e.id)).toEqual(['Q-2'])
+    expect(since.every((e: any) => e.at >= t0)).toBe(true)
+    expect(await get(`/api/feed?since=${encodeURIComponent(new Date(Date.now() + 60_000).toISOString())}`)).toEqual([])
+  })
+
   test('direct reads: an issue and a project by id', async () => {
     const i = await get('/api/issues/Q-5')
     expect(i.id).toBe('Q-5')

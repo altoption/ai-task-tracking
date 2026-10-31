@@ -28,8 +28,11 @@ export function appendEvent(root: string, e: FeedEvent): Promise<void> {
   return next
 }
 
-/** Newest first, at most `limit` events (only those `keep` accepts; parsing stops at `limit`). Corrupt lines are skipped. */
-export function readFeed(root: string, limit: number, keep?: (e: FeedEvent) => boolean): FeedEvent[] {
+/**
+ * Newest first, at most `limit` events (only those `keep` accepts; parsing stops at `limit`, or at the first event
+ * `stop` accepts: the log is in time order, so `stop` can end a "since" read). Corrupt lines are skipped.
+ */
+export function readFeed(root: string, limit: number, keep?: (e: FeedEvent) => boolean, stop?: (e: FeedEvent) => boolean): FeedEvent[] {
   const p = feedPath(root)
   if (!existsSync(p)) return []
   const lines = readFileSync(p, 'utf8').split('\n')
@@ -39,6 +42,7 @@ export function readFeed(root: string, limit: number, keep?: (e: FeedEvent) => b
     if (!l) continue
     let e: FeedEvent
     try { e = JSON.parse(l) as FeedEvent } catch { continue } // partial or corrupt line
+    if (stop?.(e)) break
     if (!keep || keep(e)) out.push(e)
   }
   return out
