@@ -142,6 +142,10 @@ struct EngineAPI {
         post("api/ci", body: ["enabled": on], timeout: 2) { _ in }
     }
 
+    /// A pick an older app never delivered (LegacySettings), once.
+    func setTheme(_ id: String) { post("api/theme", body: ["theme": id], timeout: 2) { _ in } }
+    func setProjectHidden(_ slug: String, hidden: Bool) { post("api/hidden-projects", body: ["project": slug, "hidden": hidden], timeout: 2) { _ in } }
+
     /// The hidden project slugs, from /api/health; nil without an answer that says.
     func hiddenProjects(_ completion: @escaping (Set<String>?) -> Void) {
         get("api/health", timeout: 2) { o, _ in completion(o.flatMap(HiddenProjects.slugs(health:))) }

@@ -7,4 +7,8 @@ public enum HiddenProjects {
     public static func slugs(health: [String: Any]) -> Set<String>? {
         ((health["hiddenProjects"] as? [String: Any])?["selected"] as? [String]).map(Set.init)
     }
+
+    /// Quick capture can't tell which projects are hidden and has nothing to show yet: that's an engine not answering,
+    /// not an empty list. (With projects already showing, they stay.)
+    public static func captureHasNoAnswer(hidden: Set<String>?, shown: Int) -> Bool { hidden == nil && shown == 0 }
 }

@@ -38,6 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var git = GitState()
     private var notifier: Notifier?
     private var settings: SettingsWindow?
+    /// Picks an older app never got to the engine (LegacySettings), sent once when it first answers.
+    private var legacyPicks = LegacySettings.Pending()
     private var capture: QuickCapturePanel?
     /// Set while the data folder waits for `aitt setup` (the engine isn't started until it finishes).
     private var firstRun: FirstRunWindow?
@@ -62,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SettingDefaults.register()
+        legacyPicks = LegacySettings.take(.standard)
         NSApp.mainMenu = Self.mainMenu()
         engine = EngineSupervisor(config: EngineConfig.load())
         engine.onChange = { [weak self] in self?.render() }
@@ -267,8 +270,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.settings?.orderOut(nil)
                 self.showWindow(route: WindowRoute.settings)
             case .fallback:
-                let w = self.settings ?? SettingsWindow { [weak self] in self?.engine.ensureRunning() }
+                let w = self.settings ?? SettingsWindow(retry: { [weak self] in
+                    guard let self, SettingsDestination.fallbackMayStartEngine(inFirstRun: self.firstRun != nil) else { return }
+                    self.engine.ensureRunning()
+                }, loginChanged: { [weak self] in self?.window?.settingsChanged() })
                 self.settings = w
+                w.setEngineHelpShown(SettingsDestination.fallbackMayStartEngine(inFirstRun: self.firstRun != nil))
                 self.render()
                 w.present()
             }
@@ -296,16 +303,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let rules = h?.rules { self.notifier?.rules = rules }
             let showCI = UserDefaults.standard.bool(forKey: SettingKey.showCIStatus)
             if CIStatusSetting.needsSync(engine: h?.ciSetting, wanted: showCI) { self.engine.api.setCIStatus(showCI) }
+            if h != nil { self.sendLegacyPicks() }
             ThemeSetting.adopt(h?.theme, defaults: .standard)
             self.applyThemeLook()
             if h == nil { self.engine.engineUnreachable() }
             self.render()
             // The engine came back while the fallback window was up: the real Settings can open now.
-            if h != nil, self.firstRun == nil, let w = self.settings, w.isVisible {
+            if let w = self.settings, SettingsDestination.fallbackSwitchesToPage(fallbackVisible: w.isVisible, engineReachable: h != nil, inFirstRun: self.firstRun != nil) {
                 w.orderOut(nil)
                 self.showWindow(route: WindowRoute.settings)
             }
         }
+    }
+
+    private func sendLegacyPicks() {
+        if let theme = legacyPicks.theme { engine.api.setTheme(theme) }
+        for (slug, hidden) in legacyPicks.hidden { engine.api.setProjectHidden(slug, hidden: hidden) }
+        legacyPicks = LegacySettings.Pending()
     }
 
     /// Notify about issues that stalled since the last poll, once per stalled episode (titles from /api/needs-you).
@@ -509,12 +523,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         firstRunTimer = nil
         firstRun?.orderOut(nil)
         firstRun = nil
+        settings?.setEngineHelpShown(true)
         engine.ensureRunning()
     }
 
     private func showWindow(route: String?) {
         if let firstRun { return firstRun.show() }
-        let w = window ?? TrackerWindow(base: engine.api.base) { [weak self] done in self?.runBackup(done) }
+        let w = window ?? TrackerWindow(base: engine.api.base, backup: { [weak self] done in self?.runBackup(done) },
+                                        themeChanged: { [weak self] in self?.refresh() })
         window = w
         w.apply(currentThemeLook)
         w.show(route: route)
@@ -569,11 +585,11 @@ final class TrackerWindow: NSWindow, NSWindowDelegate, WKNavigationDelegate, WKU
     private var look: WindowLook?
     private let settingsBridge: SettingsBridgeHandler
 
-    init(base: URL, backup: @escaping (@escaping (String) -> Void) -> Void) {
+    init(base: URL, backup: @escaping (@escaping (String) -> Void) -> Void, themeChanged: @escaping () -> Void) {
         self.base = base
         let config = WKWebViewConfiguration()
         config.applicationNameForUserAgent = "TrackerApp/1" // the web UI hides its "Open in AI Task Tracking" link
-        settingsBridge = SettingsBridgeHandler(engine: base, backup: backup)
+        settingsBridge = SettingsBridgeHandler(engine: base, backup: backup, themeChanged: themeChanged)
         config.userContentController.addScriptMessageHandler(settingsBridge, contentWorld: .page, name: SettingsBridge.handlerName)
         web = WKWebView(frame: .zero, configuration: config)
         settingsBridge.web = web
