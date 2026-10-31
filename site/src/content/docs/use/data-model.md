@@ -204,7 +204,7 @@ nextNumber:
 - `workspaces`: repo (or folder) name → project slug. An agent's new issue goes to the project mapped to its repo
   when it doesn't name one.
 - `nextNumber`: the next issue number per project key (see [Issue ids](#issue-ids-and-project-keys)).
-- `needsYou`, `stalled`, `ci`, `theme` and `port`: see the [config.yml reference](/docs/reference/config/). Leave keys you
+- `needsYou`, `stalled`, `ci`, `theme`, `hiddenProjects` and `port`: see the [config.yml reference](/docs/reference/config/). Leave keys you
   don't need out; missing keys take their defaults. Comments and unknown keys are kept when the app rewrites the
   file.
 
