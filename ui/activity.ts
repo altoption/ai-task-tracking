@@ -314,19 +314,26 @@ export function filterCard(c: SessionCard, f: ActivityFilter, waiting: ReadonlyS
   return f === 'all' || rows.length ? rows : null
 }
 
-/** The overview: distinct issues finished and started, waiting on you, and agent sessions (how many live). */
-export function activityCounts(cards: SessionCard[], waiting: number): { finished: number; started: number; waiting: number; agents: number; live: number } {
-  const done = new Set<string>(), started = new Set<string>(), agents = new Set<string>(), live = new Set<string>()
+/** Where each issue's last status move left it today, across sessions: finished in one session and reopened in the next isn't finished. */
+function lastStates(cards: SessionCard[]): Map<string, 'done' | 'started' | 'other'> {
+  const last = new Map<string, { at: number; state: 'done' | 'started' | 'other' }>()
   for (const c of cards) {
     for (const r of allRows(c.rows)) {
-      if (r.kinds.includes('done')) done.add(r.id)
-      if (r.kinds.includes('started')) started.add(r.id)
+      const state = r.kinds.includes('done') ? 'done' : r.kinds.includes('started') ? 'started' : r.kinds.includes('needs') || r.path.length ? 'other' : null
+      if (!state) continue
+      const at = Date.parse(r.at), prev = last.get(r.id)
+      if (!prev || at > prev.at) last.set(r.id, { at, state })
     }
-    if (c.agentKey) { agents.add(c.agentKey); if (c.live) live.add(c.agentKey) }
   }
-  // Started in one session and finished in another: finished.
-  for (const id of done) started.delete(id)
-  return { finished: done.size, started: started.size, waiting, agents: agents.size, live: live.size }
+  return new Map([...last].map(([id, v]) => [id, v.state]))
+}
+
+/** The overview: distinct issues finished and started, waiting on you, and agent sessions (how many live). */
+export function activityCounts(cards: SessionCard[], waiting: number): { finished: number; started: number; waiting: number; agents: number; live: number } {
+  const agents = new Set<string>(), live = new Set<string>()
+  for (const c of cards) if (c.agentKey) { agents.add(c.agentKey); if (c.live) live.add(c.agentKey) }
+  const states = [...lastStates(cards).values()]
+  return { finished: states.filter((s) => s === 'done').length, started: states.filter((s) => s === 'started').length, waiting, agents: agents.size, live: live.size }
 }
 
 export interface RhythmBucket { start: number; end: number; total: number; byTool: Record<string, number>; top: string | null }
@@ -444,8 +451,8 @@ export function dayOverview(cards: SessionCard[], recentMax = 3): DayOverview {
   const agentCards = cards.filter((c) => c.kind === 'agent' && c.rows.length)
   const card = agentCards.find((c) => c.live) ?? agentCards[0]
   const row = card ? allRows(card.rows).filter((r) => !r.gone).sort(newest)[0] : undefined
-  const seen = new Set<string>()
-  const recent = cards.flatMap((c) => allRows(c.rows)).filter((r) => r.kinds.includes('done')).sort(newest)
+  const seen = new Set<string>(), states = lastStates(cards)
+  const recent = cards.flatMap((c) => allRows(c.rows)).filter((r) => r.kinds.includes('done') && states.get(r.id) === 'done').sort(newest)
     .filter((r) => !seen.has(r.id) && !!seen.add(r.id)).slice(0, recentMax)
   return { finished, started, agents, live, current: card && row ? { card, row } : null, recent }
 }

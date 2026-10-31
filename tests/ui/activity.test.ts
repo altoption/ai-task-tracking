@@ -180,6 +180,19 @@ describe('counts and filters', () => {
     expect(activityCounts(cards, waiting.length)).toEqual({ finished: 2, started: 1, waiting: 1, agents: 2, live: 1 })
   })
 
+  test('finished in one session and reopened in a later one is not finished', () => {
+    const done = ev(CC, 30, 'A-2', 'status', { from: 'In Progress', to: 'Done' })
+    const reopen = (to: string) => buildActivity([ev(CX, 10, 'A-2', 'status', { from: 'Done', to }), done], ctx, TODAY).cards
+    const started = reopen('In Progress')
+    expect(activityCounts(started, 0)).toMatchObject({ finished: 0, started: 1 })
+    expect(dayOverview(started).recent).toEqual([])
+    expect(activityCounts(reopen('Todo'), 0)).toMatchObject({ finished: 0, started: 0 })
+    // A comment afterwards isn't a move: still finished.
+    const commented = buildActivity([ev(CX, 10, 'A-2', 'comment', { text: 'Shipped.' }), done], ctx, TODAY).cards
+    expect(activityCounts(commented, 0)).toMatchObject({ finished: 1, started: 0 })
+    expect(dayOverview(commented).recent.map((r) => r.id)).toEqual(['A-2'])
+  })
+
   test('started and finished in one session counts (and filters) as finished only', () => {
     const { cards: c } = buildActivity([
       ev(CC, 3, 'A-2', 'status', { from: 'In Progress', to: 'Done' }),
