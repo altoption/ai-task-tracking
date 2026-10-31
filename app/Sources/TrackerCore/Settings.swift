@@ -48,7 +48,7 @@ public enum SettingDefaults {
         SettingKey.openWindowHotKeyPreset: "optCmdI",
         SettingKey.quickCaptureHotKey: true,
         SettingKey.quickCaptureHotKeyPreset: "optCmdN",
-        SettingKey.theme: "dark",
+        SettingKey.theme: "graphite",
         SettingKey.backupBeforeQuit: true,
     ]
 

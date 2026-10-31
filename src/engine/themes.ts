@@ -1,8 +1,9 @@
 /**
  * Themes: the values of the UI's color tokens (the `:root` block of ui/styles.css), chosen with `theme` in config.yml.
  *
- * - Built-ins: Dark (the default and the look of ui/styles.css), Light, Match macOS (`system`: Dark or Light, following
- *   the system appearance; the UI and the app resolve it), and the presets Midnight, Paper and High contrast.
+ * - Built-ins: Graphite (the default when config.yml has no `theme`, and the look of ui/styles.css), Dark, Light, Match
+ *   macOS (`system`: Dark or Light, following the system appearance; the UI and the app resolve it), and the presets
+ *   Midnight, Plum, Paper and High contrast. Dark and Light are also the two bases every other theme builds on.
  * - Custom themes: `themes/<id>.yml` in the data folder: `name`, `base: dark|light`, `colors: {token: color}` and an
  *   optional `statuses: {statusType: color}`. A token left out takes its base's value. Only known token names and
  *   status types are accepted, and every value must be a color (hex, rgb() or hsl()), so a file can't inject CSS.
@@ -24,11 +25,12 @@ export interface Theme {
 /** `system` (Match macOS) has no colors of its own: clients show `dark` or `light` by the system appearance. */
 export type ThemeOut = Theme | { id: typeof SYSTEM_THEME; name: string; base: 'system'; builtin: true }
 
-export const DEFAULT_THEME = 'dark'
+/** The theme shown when config.yml has no `theme` (or names a theme that no longer exists). */
+export const DEFAULT_THEME = 'graphite'
 export const SYSTEM_THEME = 'system'
 export const STATUS_TYPES: readonly StatusType[] = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'duplicate']
 
-/** The Dark theme: exactly the token values in ui/styles.css (tests/engine/themes.test.ts checks they match). */
+/** The Dark theme, and the base of every dark theme: a token a dark theme leaves out takes this value. */
 const DARK: Record<string, string> = {
   bg: '#101012', panel: '#17171b', hover: '#1c1c21', active: '#22222a', card: '#1c1c21', 'card-hover': '#202026',
   'group-bg': '#1b1b20', lane: 'rgba(255, 255, 255, .012)', 'code-bg': '#1f1f25', 'pre-bg': '#1a1a1f',
@@ -43,7 +45,7 @@ const DARK: Record<string, string> = {
   shadow: 'rgba(0, 0, 0, .5)', 'shadow-strong': 'rgba(0, 0, 0, .6)', overlay: 'rgba(0, 0, 0, .45)', 'tile-shadow': 'rgba(0, 0, 0, .4)',
 }
 
-/** Every token a theme may set, in the order of ui/styles.css. */
+/** Every token a theme may set, in the order of ui/styles.css (whose `:root` is the default theme, Graphite). */
 export const THEME_TOKENS: readonly string[] = Object.keys(DARK)
 
 const LIGHT: Record<string, string> = {
@@ -65,6 +67,17 @@ const LIGHT_STATUSES: Theme['statuses'] = { backlog: '#a1a6ae', unstarted: '#8a9
 interface Preset { id: string; name: string; base: ThemeBase; colors: Record<string, string>; statuses?: Theme['statuses'] }
 const PRESETS: Preset[] = [
   {
+    // The default (DEFAULT_THEME): calm graphite surfaces with a sage accent; ui/styles.css `:root` is exactly this.
+    id: 'graphite', name: 'Graphite', base: 'dark',
+    colors: {
+      bg: '#141619', panel: '#181a1d', hover: '#1f2124', active: '#293830', card: '#202226', 'card-hover': '#25272b',
+      'group-bg': '#1d1f22', 'code-bg': '#222428', 'pre-bg': '#1c1e21', border: '#34383b', divider: 'rgba(52, 56, 59, .55)',
+      'pill-border': '#3b3f42', 'border-focus': '#4b5053', text: '#ebece8', muted: '#a1a7a4', faint: '#737976', id: '#8c928f',
+      'pill-text': '#b5bab7', link: '#a9d3bc', 'on-accent': '#17261e', accent: '#99c6ad', 'accent-wash': 'rgba(153, 198, 173, .07)',
+      warn: '#d5b477', 'switch-off': '#3b3f42', 'switch-off-hover': '#474c50', 'switch-knob': '#ebece8',
+    },
+  },
+  {
     id: 'midnight', name: 'Midnight', base: 'dark',
     colors: {
       bg: '#0d1117', panel: '#131a24', hover: '#1a2330', active: '#212c3b', card: '#18212d', 'card-hover': '#1d2836',
@@ -75,13 +88,23 @@ const PRESETS: Preset[] = [
     },
   },
   {
+    id: 'plum', name: 'Plum', base: 'dark',
+    colors: {
+      bg: '#1e1623', panel: '#251b2a', hover: '#2c2131', active: '#413047', card: '#2e2233', 'card-hover': '#34273a',
+      'group-bg': '#2a1f2f', 'code-bg': '#312537', 'pre-bg': '#2a1f2f', border: '#45354b', divider: 'rgba(69, 53, 75, .55)',
+      'pill-border': '#4d3c54', 'border-focus': '#604c68', text: '#eee6f0', muted: '#baadbf', faint: '#85778b', id: '#9d90a2',
+      'pill-text': '#cbbfd0', link: '#d6b9e2', 'on-accent': '#291b31', accent: '#caa7d8', 'accent-wash': 'rgba(202, 167, 216, .07)',
+      warn: '#d8b87e', 'switch-off': '#4d3c54', 'switch-off-hover': '#5a4762', 'switch-knob': '#eee6f0',
+    },
+  },
+  {
     id: 'paper', name: 'Paper', base: 'light',
     colors: {
-      bg: '#f5f1e8', panel: '#fbf8f1', hover: '#efe9dc', active: '#e8e1d1', card: '#fdfbf6', 'card-hover': '#f3eee2',
-      'group-bg': '#f0eadd', 'code-bg': '#efe9dc', 'pre-bg': '#f3eee3', border: '#e2d9c6', divider: 'rgba(226, 217, 198, .7)',
-      'pill-border': '#d8cdb6', 'border-focus': '#b9ad93', text: '#2b2620', muted: '#675d4e', faint: '#a39882', id: '#7d7363',
-      'pill-text': '#574e41', accent: '#a65c1a', 'accent-wash': 'rgba(166, 92, 26, .08)', link: '#8f4f14',
-      'switch-off': '#d3c9b4', 'switch-off-hover': '#c5baa3',
+      bg: '#efeee8', panel: '#f8f7f3', hover: '#e9e8e1', active: '#e5eade', card: '#ffffff', 'card-hover': '#f4f3ee',
+      'group-bg': '#f2f1ec', 'code-bg': '#ecebe4', 'pre-bg': '#f3f2ec', border: '#dddcd4', divider: 'rgba(221, 220, 212, .7)',
+      'pill-border': '#d2d1c8', 'border-focus': '#b0afa5', text: '#2c302c', 'text-strong': '#161916', muted: '#5f665e',
+      faint: '#9a9e98', id: '#737872', 'pill-text': '#4f554e', link: '#3d5c43', accent: '#46664c',
+      'accent-wash': 'rgba(70, 102, 76, .08)', warn: '#83621f', 'switch-off': '#d2d1c8', 'switch-off-hover': '#c3c2b8',
     },
   },
   {
@@ -106,13 +129,15 @@ function resolve(id: string, name: string, base: ThemeBase, builtin: boolean, co
   return { id, name, base, builtin, colors: { ...BASES[base].colors, ...colors }, statuses: { ...BASES[base].statuses, ...statuses } }
 }
 
-/** The built-in themes, in picker order: Dark, Light, Match macOS, then the presets. */
+/** The built-in themes, in picker order: Graphite (the default), Dark, Light, Match macOS, then the other presets. */
 export function builtinThemes(): ThemeOut[] {
+  const preset = (p: Preset) => resolve(p.id, p.name, p.base, true, p.colors, p.statuses)
   return [
+    ...PRESETS.filter((p) => p.id === DEFAULT_THEME).map(preset),
     resolve('dark', 'Dark', 'dark', true, {}),
     resolve('light', 'Light', 'light', true, {}),
     { id: SYSTEM_THEME, name: 'Match macOS', base: 'system', builtin: true },
-    ...PRESETS.map((p) => resolve(p.id, p.name, p.base, true, p.colors, p.statuses)),
+    ...PRESETS.filter((p) => p.id !== DEFAULT_THEME).map(preset),
   ]
 }
 
@@ -180,7 +205,7 @@ export function allThemes(custom: Theme[]): ThemeOut[] {
   return [...builtinThemes(), ...[...custom].sort((a, b) => a.name.localeCompare(b.name))]
 }
 
-/** The theme to show for `selected` (`system` stays `system`); an unknown id (a deleted file) falls back to Dark. */
+/** The theme to show for `selected` (`system` stays `system`); an unknown id (a deleted file) falls back to the default. */
 export function selectedTheme(list: ThemeOut[], selected: string): ThemeOut {
   return list.find((t) => t.id === selected) ?? list.find((t) => t.id === DEFAULT_THEME)!
 }

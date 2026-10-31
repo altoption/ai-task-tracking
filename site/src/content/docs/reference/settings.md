@@ -28,7 +28,7 @@ stored in the app's UserDefaults domain under its key: `defaults read io.github.
 
 | Setting | Default | Key |
 |---|---|---|
-| Theme | Dark (also Light, Match macOS, Midnight, Paper, High contrast and your theme files; saved as `theme` in config.yml) | `theme` |
+| Theme | Graphite (also Dark, Light, Match macOS, Midnight, Plum, Paper, High contrast and your theme files; saved as `theme` in config.yml) | `theme` |
 
 ## Hidden projects
 

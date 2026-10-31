@@ -4,7 +4,8 @@
  *
  * - `effectiveTheme` and `themeVars` are pure (tested without a DOM).
  * - The last applied theme is kept in localStorage so the next load paints it before the snapshot arrives (no flash);
- *   without storage the page starts in the stylesheet's Dark and switches when the snapshot comes.
+ *   without storage the page starts in the stylesheet's colors (the default theme, Graphite) and switches when the
+ *   snapshot comes.
  * - `useThemeEffect` re-applies on every snapshot (the engine emits `meta` when the theme or a theme file changes) and
  *   when macOS switches between light and dark, for Match macOS.
  */
@@ -13,13 +14,15 @@ import type { Theme } from '../src/engine/themes'
 import type { ThemesInfo } from './client'
 
 const STORAGE_KEY = 'tracker.theme'
+/** The engine's DEFAULT_THEME (src/engine/themes.ts; a test keeps them equal), without bundling the engine module. */
+export const DEFAULT_THEME = 'graphite'
 const STATUS_TYPES = ['backlog', 'unstarted', 'started', 'completed', 'canceled', 'duplicate'] as const
 
-/** The theme to show: the chosen one, `system` resolved by the system appearance; unknown ids fall back to Dark. */
+/** The theme to show: the chosen one, `system` resolved by the system appearance; unknown ids fall back to the default. */
 export function effectiveTheme(info: ThemesInfo | null, prefersDark: boolean): Theme | null {
   if (!info) return null
   const find = (id: string) => info.list.find((t) => t.id === id)
-  let t = find(info.effective ?? info.selected) ?? find('dark')
+  let t = find(info.effective ?? info.selected) ?? find(DEFAULT_THEME)
   if (t?.base === 'system') t = find(prefersDark ? 'dark' : 'light')
   return t && t.base !== 'system' ? t : null
 }
@@ -49,7 +52,7 @@ export function applyCachedTheme(): void {
     const raw = localStorage.getItem(STORAGE_KEY)
     const a = raw ? (JSON.parse(raw) as Applied) : null
     if (a && (a.base === 'dark' || a.base === 'light') && a.vars && typeof a.vars === 'object') apply(a)
-  } catch { /* storage blocked or bad JSON: the stylesheet's Dark until the snapshot */ }
+  } catch { /* storage blocked or bad JSON: the stylesheet's colors until the snapshot */ }
 }
 
 const darkQuery = () => globalThis.matchMedia?.('(prefers-color-scheme: dark)')

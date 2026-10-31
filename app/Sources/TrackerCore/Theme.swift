@@ -26,7 +26,7 @@ public struct ThemeEntry: Equatable {
 }
 
 /// `theme` in /api/health: the id in config.yml (`selected`), the theme actually shown (`effective`: an unknown id,
-/// such as a deleted theme file, shows Dark) and the list.
+/// such as a deleted theme file, shows the default, Graphite) and the list.
 public struct ThemeState: Equatable {
     public let selected: String
     public let effective: String
@@ -67,10 +67,12 @@ public struct WindowLook: Equatable {
     public let darkBackground: RGBA
     public let lightBackground: RGBA
 
-    /// Dark's background: the window before the app has heard of any theme.
+    /// Dark's and Light's backgrounds (Match macOS without a list), and Graphite's: the default theme's window before
+    /// the app has heard of any theme (the `bg` token in src/engine/themes.ts).
     public static let darkBg = RGBA(hex: "#101012")!
     public static let lightBg = RGBA(hex: "#f4f4f6")!
-    public static let dark = WindowLook(appearance: "dark", darkBackground: darkBg, lightBackground: darkBg)
+    public static let graphiteBg = RGBA(hex: "#141619")!
+    public static let graphite = WindowLook(appearance: "dark", darkBackground: graphiteBg, lightBackground: graphiteBg)
 
     public init(appearance: String?, darkBackground: RGBA, lightBackground: RGBA) {
         self.appearance = appearance; self.darkBackground = darkBackground; self.lightBackground = lightBackground
@@ -81,8 +83,12 @@ public struct WindowLook: Equatable {
 /// browser's ⌘K can change it too: the app mirrors the engine's choice and list into UserDefaults (so the window opens
 /// in the right colors before the engine answers) and sends its own only when the user picks one in Settings.
 public enum ThemeSetting {
+    /// The engine's DEFAULT_THEME (src/engine/themes.ts): shown when config.yml has no `theme`.
+    public static let defaultTheme = "graphite"
+
     /// The built-ins the Settings popup lists before the engine has sent its list.
     public static let fallbackList: [ThemeEntry] = [
+        ThemeEntry(id: "graphite", name: "Graphite", base: "dark", bg: "#141619"),
         ThemeEntry(id: "dark", name: "Dark", base: "dark", bg: "#101012"),
         ThemeEntry(id: "light", name: "Light", base: "light", bg: "#f4f4f6"),
         ThemeEntry(id: "system", name: "Match macOS", base: "system"),
@@ -103,10 +109,10 @@ public enum ThemeSetting {
     }
 
     /// The window look for `selected`. Match macOS follows the system with Dark's and Light's backgrounds; an
-    /// unknown id looks like Dark.
+    /// unknown id looks like the default, Graphite.
     public static func look(selected: String, themes: [ThemeEntry]) -> WindowLook {
         let bg = { (id: String, fallback: RGBA) in themes.first { $0.id == id }?.bg.flatMap(RGBA.init(hex:)) ?? fallback }
-        guard let t = themes.first(where: { $0.id == selected }) else { return .dark }
+        guard let t = themes.first(where: { $0.id == selected }) else { return .graphite }
         if t.base == "system" {
             return WindowLook(appearance: nil, darkBackground: bg("dark", WindowLook.darkBg), lightBackground: bg("light", WindowLook.lightBg))
         }

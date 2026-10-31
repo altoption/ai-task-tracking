@@ -1,36 +1,37 @@
 /*
- * AI Task Tracking. Every color the UI uses is a token below (the dark look); nothing else in the UI names a color.
+ * AI Task Tracking. Every color the UI uses is a token below (the default theme, Graphite); nothing else in the UI names a
+ * color.
  */
 :root {
   /* surfaces */
-  --bg: #101012;
-  --panel: #17171b;
-  --hover: #1c1c21;
-  --active: #22222a;
-  --card: #1c1c21;
-  --card-hover: #202026;
-  --group-bg: #1b1b20;
+  --bg: #141619;
+  --panel: #181a1d;
+  --hover: #1f2124;
+  --active: #293830;
+  --card: #202226;
+  --card-hover: #25272b;
+  --group-bg: #1d1f22;
   --lane: rgba(255, 255, 255, .012);
-  --code-bg: #1f1f25;
-  --pre-bg: #1a1a1f;
+  --code-bg: #222428;
+  --pre-bg: #1c1e21;
   /* lines */
-  --border: #26262c;
-  --divider: rgba(38, 38, 44, .5);
-  --pill-border: #2c2c33;
-  --border-focus: #3a3a44;
+  --border: #34383b;
+  --divider: rgba(52, 56, 59, .55);
+  --pill-border: #3b3f42;
+  --border-focus: #4b5053;
   /* text */
-  --text: #d8d8dc;
+  --text: #ebece8;
   --text-strong: #fff;
-  --muted: #8a8a93;
-  --faint: #5f5f68;
-  --id: #6e6e78;
-  --pill-text: #a0a0aa;
-  --link: #9c9cf4;
-  --on-accent: #fff;
+  --muted: #a1a7a4;
+  --faint: #737976;
+  --id: #8c928f;
+  --pill-text: #b5bab7;
+  --link: #a9d3bc;
+  --on-accent: #17261e;
   /* accents and states */
-  --accent: #8b7cf6;
-  --accent-wash: rgba(139, 124, 246, .06);
-  --warn: #c9a227;
+  --accent: #99c6ad;
+  --accent-wash: rgba(153, 198, 173, .07);
+  --warn: #d5b477;
   --danger: #e5534b;
   --danger-border: rgba(229, 83, 75, .45);
   --danger-border-soft: rgba(229, 83, 75, .4);
@@ -44,9 +45,9 @@
   --avatar: #5e6ad2;
   --agent: #2f6f4f;
   /* controls */
-  --switch-off: #3a3a44;
-  --switch-off-hover: #45454f;
-  --switch-knob: #e8e8ec;
+  --switch-off: #3b3f42;
+  --switch-off-hover: #474c50;
+  --switch-knob: #ebece8;
   /* depth */
   --shadow: rgba(0, 0, 0, .5);
   --shadow-strong: rgba(0, 0, 0, .6);
