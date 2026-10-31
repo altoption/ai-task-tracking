@@ -1,5 +1,6 @@
-/** Hash router: `#/`, `#/new` (`?parent=Q-269` prefills the parent), `#/issue/:id`, `#/issues`, `#/view/:slug`, `#/project/:slug` (those three keep view state in `?…`), `#/search?q=`. */
+/** Hash router: `#/`, `#/new` (`?parent=Q-269` prefills the parent), `#/issue/:id`, `#/issues`, `#/view/:slug`, `#/project/:slug` (those three keep view state in `?…`), `#/search?q=`, `#/settings`, `#/settings/:tab`. */
 import { useSyncExternalStore } from 'react'
+import { isSettingsTab, type SettingsTab } from './settingsModel'
 
 export type Route =
   | { name: 'home' }
@@ -9,6 +10,8 @@ export type Route =
   | { name: 'view'; slug: string; query?: string }
   | { name: 'project'; slug: string; query?: string }
   | { name: 'search'; q: string }
+  /** No tab: General. */
+  | { name: 'settings'; tab?: SettingsTab }
   | { name: 'notFound'; path: string }
 
 const dec = (s: string) => { try { return decodeURIComponent(s) } catch { return s } }
@@ -30,7 +33,9 @@ export function parseRoute(hash: string): Route {
     }
     if (head === 'issues' && arg === undefined) return withQuery({ name: 'issues' }, query)
     if (head === 'search' && arg === undefined) return { name: 'search', q: new URLSearchParams(query).get('q') ?? '' }
+    if (head === 'settings' && arg === undefined) return { name: 'settings' }
     if (arg !== undefined) {
+      if (head === 'settings' && isSettingsTab(arg)) return { name: 'settings', tab: arg }
       if (head === 'issue') return { name: 'issue', id: dec(arg).toUpperCase() }
       if (head === 'view') return withQuery({ name: 'view', slug: dec(arg) }, query)
       if (head === 'project') return withQuery({ name: 'project', slug: dec(arg) }, query)
@@ -49,6 +54,7 @@ export function href(r: Route): string {
     case 'view': return `#/view/${encodeURIComponent(r.slug)}${q(r.query)}`
     case 'project': return `#/project/${encodeURIComponent(r.slug)}${q(r.query)}`
     case 'search': return `#/search?q=${encodeURIComponent(r.q)}`
+    case 'settings': return r.tab ? `#/settings/${r.tab}` : '#/settings'
     case 'notFound': return `#${r.path}`
   }
 }
@@ -74,12 +80,13 @@ export function useHash(): string {
   return useSyncExternalStore(subscribe, () => location.hash)
 }
 
-/** Pure: the `aitt://` link that opens this route in the app (issue, project, new; anything else opens Home). */
+/** Pure: the `aitt://` link that opens this route in the app (issue, project, new, settings; anything else opens Home). */
 export function appHref(r: Route): string {
   switch (r.name) {
     case 'issue': return `aitt://issue/${encodeURIComponent(r.id)}`
     case 'project': return `aitt://project/${encodeURIComponent(r.slug)}`
     case 'new': return 'aitt://new'
+    case 'settings': return 'aitt://settings'
     default: return 'aitt://home'
   }
 }
