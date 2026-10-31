@@ -286,9 +286,35 @@ describe('stalled (config.stalled)', () => {
     expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
     await s.updateIssue('Q-2', { labels: ['Needs decision'] }, agent) // a Needs-you label counts as asking too
     expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
-    // Closed children don't count: with Q-2 Done the epic has no open children and idles again.
+    // A closed child isn't waited on: with Q-2 Done the epic has no open children, so it idles again, counting from
+    // Q-2's last change (moving it to Done).
     await s.updateIssue('Q-2', { status: 'Done', labels: [] }, agent)
     expect(stalledOf(s, later(30))(s.get('Q-1')!)).toBe('idle 30 h in In Progress')
+  })
+
+  test('waiting goes through nested epics; every open child must wait; an open blocker counts as blocked (ATT-37)', async () => {
+    const s = await open()
+    const later = (h: number) => Date.now() + h * H
+    // Q-1 > Q-2 > Q-3. Q-2 in progress, its only open child Q-3 waiting on the owner: both epics are waiting.
+    await s.updateIssue('Q-2', { status: 'In Progress' }, agent)
+    await s.updateIssue('Q-3', { status: 'Waiting' }, agent)
+    expect(stalledOf(s, later(99))(s.get('Q-2')!)).toBeNull()
+    expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
+    // A second open child of Q-1 that isn't waiting: Q-1 is no longer waiting, so it idles (Q-2 still waits).
+    await s.updateIssue('Q-4', { parent: 'Q-1', blockedBy: [] }, agent) // the fixture has it blocked by Q-3
+    expect(stalledOf(s, later(30))(s.get('Q-1')!)).toBe('idle 30 h in In Progress')
+    expect(stalledOf(s, later(99))(s.get('Q-2')!)).toBeNull()
+    // Blocked by an open issue (no label) counts as blocked: Q-1 waits again.
+    await s.updateIssue('Q-4', { blockedBy: ['Q-5'] }, agent)
+    expect(stalledOf(s, later(99))(s.get('Q-1')!)).toBeNull()
+  })
+
+  test('a parent cycle in hand-edited files ends the walk (ATT-37)', async () => {
+    const root = await miniCopy()
+    await edit(root, 'acme-app', 'Q-1', 'parent: null', 'parent: Q-3') // Q-1 > Q-2 > Q-3 > Q-1
+    const s = await open(root)
+    const now = at('2026-10-04T17:00:00Z')
+    expect(stalledOf(s, now)(s.get('Q-1')!)).toBe('idle 31 h in In Progress')
   })
 
   test('needsYouList can leave out stalled-only issues before the cut (the menu with the stalled setting off)', async () => {
