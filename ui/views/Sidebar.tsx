@@ -231,15 +231,6 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
         <NavItem to={href({ name: 'issues' })} active={route.name === 'issues'} icon="issues" label="All issues" count={openByProject.all} collapsed={collapsed} />
       </div>
 
-      <div className="nav-section">Projects</div>
-      <div className="nav-group">
-        {projects.map((p) => (
-          <NavItem key={p.slug} to={href({ name: 'project', slug: p.slug })} active={route.name === 'project' && route.slug === p.slug}
-            label={p.name} color={p.color ?? 'var(--muted)'} count={openByProject.m.get(p.slug)} collapsed={collapsed} />
-        ))}
-        {state.ready && projects.length === 0 && !collapsed && <div className="nav-empty">No projects</div>}
-      </div>
-
       <div className="nav-section">Views</div>
       <div className="nav-group">
         {views.map((v) => (
@@ -247,6 +238,15 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
             icon={v.favorite ? 'favorite' : 'views'} label={v.name} collapsed={collapsed} />
         ))}
         {state.ready && views.length === 0 && !collapsed && <div className="nav-empty">No saved views</div>}
+      </div>
+
+      <div className="nav-section">Projects</div>
+      <div className="nav-group">
+        {projects.map((p) => (
+          <NavItem key={p.slug} to={href({ name: 'project', slug: p.slug })} active={route.name === 'project' && route.slug === p.slug}
+            label={p.name} color={p.color ?? 'var(--muted)'} count={openByProject.m.get(p.slug)} collapsed={collapsed} />
+        ))}
+        {state.ready && projects.length === 0 && !collapsed && <div className="nav-empty">No projects</div>}
       </div>
 
       <div className="sidebar-bottom">
