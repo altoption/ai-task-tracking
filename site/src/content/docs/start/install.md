@@ -23,8 +23,10 @@ curl -fsSL https://raw.githubusercontent.com/altoption/ai-task-tracking/HEAD/ins
 The installer checks this Mac, shows what it will do and asks once. It installs the latest notarized release into
 `~/Applications` (it checks the download's `.sha256`, the signature and the notarization first, and builds from
 source if any check fails or there is no release), links `~/.local/bin/aitt`, runs [`aitt setup`](/docs/start/first-run/)
-and opens the app. The new app is prepared next to the old one and swapped in only when it is complete, so a failed
-download or build leaves the installed app as it was.
+and, on a first install, opens the app and turns on Launch at Login. The new app is prepared next to the old one, run
+once to check it works, and swapped in only then, so a failed download or build, or a build that doesn't run, leaves
+the installed app as it was. If the swap itself fails or is interrupted, the old app goes back in place. Only one
+install runs at a time in a folder; a second one stops with a message, and a lock left by a crashed run is taken over.
 
 ## Options
 
@@ -36,7 +38,7 @@ Options go after `bash -s --` when the script is piped, e.g. `… | bash -s -- -
 | `--dry-run` | only show what was found and what would happen |
 | `--from-source` | build from source even when a release is available |
 | `--version <tag>` | that release (or source tag) instead of the latest, e.g. `v0.2.0` |
-| `--no-launch` | don't open the app at the end |
+| `--no-launch` | don't open the app, at the end or after a failure |
 | `--connect <tools>` | connect these other agent tools, comma-separated (as in `aitt setup --connect`) |
 | `--help` | the options and environment (also works piped: `… \| bash -s -- --help`) |
 
