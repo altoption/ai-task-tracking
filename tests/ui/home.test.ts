@@ -4,7 +4,7 @@ import type { Config, IssueSummary } from '../../src/model'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
-  blockedChains, boardColumns, daySummary, duration, feedActor, feedInScope, feedLine, listHref, needsYouCard, needsYouWhy, overviewLine, relTime,
+  blockedChains, boardColumns, daySummary, duration, feedActor, feedInScope, feedLine, listCount, listHref, needsYouCard, needsYouWhy, overviewLine, relTime,
   scopeHome, statusesOf, type HomeData, type NeedsYouItem,
 } from '../../ui/home'
 import { NeedsYouRequest, PlanColumn, SectionTitle } from '../../ui/views/Home'
@@ -276,5 +276,15 @@ describe('Daily overview', () => {
     expect(statusesOf(config, ['started'])).toEqual(['In Progress'])
     expect(statusesOf(config, ['backlog', 'unstarted'])).toEqual(['Todo', 'Backlog'])
     expect(statusesOf(null, ['started'])).toEqual([])
+  })
+})
+
+describe('listCount', () => {
+  test('counts what the full list shows, including issues Home moved to Needs you', () => {
+    const statuses = [{ name: 'Todo', type: 'unstarted', color: '' }, { name: 'In Progress', type: 'started', color: '' }] as Config['statuses']
+    const row = (id: string, status: string, over: Partial<IssueSummary> = {}) => ({ id, title: id, status, project: 'p', labels: [], priority: 0, parent: null, blockedBy: [], related: [], milestone: null, links: [], created: '', updated: '', ...over }) as unknown as IssueSummary
+    const issues = [row('A-1', 'In Progress'), row('A-2', 'In Progress', { stalled: 'idle' } as Partial<IssueSummary>), row('A-3', 'Todo'), row('A-4', 'Todo', { labels: ['Blocked'] })]
+    expect(listCount(issues, { status: ['In Progress'] }, statuses)).toBe(2)
+    expect(listCount(issues, { status: ['Todo'], blocked: false }, statuses)).toBe(1)
   })
 })

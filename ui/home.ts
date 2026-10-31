@@ -1,9 +1,9 @@
 /** Pure helpers behind the Home view (tested without a DOM). */
 import type { FeedEvent } from '../src/engine/eventlog'
-import type { Config, Filter, IssueSummary, PlanSlot } from '../src/model'
+import type { Config, Filter, IssueSummary, PlanSlot, StatusDef } from '../src/model'
 import { inScope, type Scope } from './client'
 import { href } from './router'
-import { DEFAULT_DISPLAY, viewToQuery } from './viewModel'
+import { applyView, DEFAULT_DISPLAY, viewToQuery } from './viewModel'
 
 type Scoped = Pick<IssueSummary, 'project' | 'workspaces'>
 type Cfg = Pick<Config, 'workspaces'> | null
@@ -212,6 +212,11 @@ export function blockedChains(
 }
 
 /** The All issues list with `filter` (the page's default display), as a link. */
+/** How many issues a Home link's full list shows, in scope: it can be more than Home's section, since Needs you takes stalled and failing issues first. */
+export function listCount(issues: IssueSummary[], filter: Filter, statuses: StatusDef[]): number {
+  return applyView(issues, { filter, display: DEFAULT_DISPLAY }, { statuses }).total
+}
+
 export function listHref(filter: Filter): string {
   const base = { filter: {}, display: DEFAULT_DISPLAY }
   return href({ name: 'issues', query: viewToQuery({ filter, display: DEFAULT_DISPLAY }, base) })

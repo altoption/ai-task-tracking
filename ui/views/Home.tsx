@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { IssueSummary, PlanSlot } from '../../src/model'
 import { callTool, inScope, useScope, useTracker, type TrackerState } from '../client'
 import {
-  PLAN_SLOTS, blockedChains, boardColumns, dayHeading, listHref, needsYouCard, needsYouWhy, overviewLine, relTime, scopeHome,
+  PLAN_SLOTS, blockedChains, boardColumns, dayHeading, listCount, listHref, needsYouCard, needsYouWhy, overviewLine, relTime, scopeHome,
   statusesOf, type HomeData, type NeedsYouCard, type NeedsYouItem,
 } from '../home'
 import { href } from '../router'
@@ -173,6 +173,8 @@ export function Home() {
   const needs = home ? (allNeeds ? home.needsYou : home.needsYou.slice(0, NEEDS_SHOWN)) : []
   const working = statusesOf(state.config, ['started'])
   const ready = statusesOf(state.config, ['backlog', 'unstarted'])
+  const statuses = state.config?.statuses ?? []
+  const scoped = [...state.issues.values()].filter((i) => inScope(i, scope, state.config))
 
   return (
     <section className="page home" aria-labelledby="home-title">
@@ -204,7 +206,7 @@ export function Home() {
               <WorkRow key={i.id} issue={i} state={state} right={<span className="ov-row-time" title={`Updated ${new Date(i.updated).toLocaleString()}`}>{relTime(i.updated, now)}</span>} />
             ))}
           </ul>
-          {working.length > 0 && <a className="ov-more" href={listHref({ status: working })}>All in progress</a>}
+          {working.length > 0 && <a className="ov-more" href={listHref({ status: working })}>All in progress · {listCount(scoped, { status: working }, statuses)}</a>}
         </section>
 
         <Activity data={activity} now={now} />
@@ -222,7 +224,7 @@ export function Home() {
               } />
             ))}
           </ul>
-          {ready.length > 0 && <a className="ov-more" href={listHref({ status: ready, blocked: false })}>All ready</a>}
+          {ready.length > 0 && <a className="ov-more" href={listHref({ status: ready, blocked: false })}>All ready · {listCount(scoped, { status: ready, blocked: false }, statuses)}</a>}
           {home && home.blocked.length > 0 && (
             <details className="ov-blocked">
               <summary>Blocked work <span className="ov-count">{home.blocked.length}</span></summary>
