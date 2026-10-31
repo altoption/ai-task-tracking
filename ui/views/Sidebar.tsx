@@ -6,8 +6,6 @@ import { ConceptIcon, Icon, type Concept } from '../components/icons'
 import { makeThemePick } from './Palette'
 
 const CLOSED = new Set(['completed', 'canceled', 'duplicate'])
-/** The app's Settings window (app/Sources/TrackerCore/DeepLink.swift). */
-export const SETTINGS_HREF = 'aitt://settings'
 /** The user docs, served by the engine (src/server/http.ts serveDocs). */
 export const DOCS_HREF = '/docs/'
 
@@ -192,6 +190,15 @@ function NavControls({ collapsed, onToggle }: { collapsed: boolean; onToggle: ()
   )
 }
 
+/** The gear: the Settings page, in the app and in a browser. */
+export function SettingsGear({ active }: { active: boolean }) {
+  return (
+    <a className={`icon-button${active ? ' active' : ''}`} href={href({ name: 'settings' })} title="Settings" aria-label="Settings" aria-current={active ? 'page' : undefined}>
+      <ConceptIcon concept="settings" />
+    </a>
+  )
+}
+
 export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route; onSearch: () => void; collapsed: boolean; onToggle: () => void }) {
   const state = useTracker()
   const projects = useMemo(() => listedProjects(state.projects), [state.projects])
@@ -261,8 +268,7 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
           </div>
           <span className="spacer" />
           <ThemeMenu />
-          {/* Settings is the app's window: the app's web view opens it directly, a browser hands the link to the app. */}
-          <a className="icon-button" href={SETTINGS_HREF} title="Settings" aria-label="Settings"><ConceptIcon concept="settings" /></a>
+          <SettingsGear active={route.name === 'settings'} />
         </div>
       </div>
     </nav>

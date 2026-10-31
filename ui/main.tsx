@@ -12,6 +12,7 @@ import { DEFAULT_DISPLAY, type ViewState } from './viewModel'
 import { NewIssueDialog } from './views/NewIssue'
 import { Palette, type PaletteMode } from './views/Palette'
 import { ProjectPage } from './views/ProjectPage'
+import { SettingsPage } from './views/Settings'
 import { Sidebar } from './views/Sidebar'
 import { applyCachedTheme, useThemeEffect } from './theme'
 
@@ -41,6 +42,7 @@ function Page({ route }: { route: Route }): ReactNode {
     }
     case 'project': return <ProjectPage slug={route.slug} query={route.query} routeQuery={(query) => ({ name: 'project', slug: route.slug, query })} />
     case 'search': return <SearchResults q={route.q} />
+    case 'settings': return <SettingsPage tab={route.tab} />
     case 'new': return null
     case 'notFound': return <Placeholder title="Not found" note={`Nothing at ${route.path}.`} />
   }

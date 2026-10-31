@@ -11,6 +11,7 @@ import type { Actor, CiBadge, CiStatus, Config, IssueSummary, LabelDef, Project,
 import type { FeedEvent } from '../src/engine/eventlog'
 import type { AttemptOut } from '../src/engine/attempts'
 import type { ThemeOut } from '../src/engine/themes'
+import type { HealthInfo } from './settingsModel'
 
 export type { FeedEvent }
 /** `favorite: true` in a view's yml (unknown keys pass through the engine's view loader). */
@@ -283,6 +284,11 @@ export async function setProjectHidden(slug: string, hidden: boolean): Promise<v
     method: 'POST', headers: { 'content-type': 'application/json', 'X-Tracker': '1' }, body: JSON.stringify({ project: slug, hidden }),
   })
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `${hidden ? 'hiding' : 'unhiding'} the project failed (${r.status})`)
+}
+
+/** `/api/health`, for the Settings page's status strip. */
+export function getHealth(): Promise<HealthInfo> {
+  return getJSON<HealthInfo>('/api/health')
 }
 
 /** `/api/projects/:slug`: one project by its link, hidden or not, with its issues. */
