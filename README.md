@@ -7,7 +7,7 @@ issues, plan epics with steps, comment as they work and hand decisions back to y
 and what your agents got done, one card per agent session with its tool, repo and branch. Everything is plain Markdown and
 YAML files in a folder on your Mac (a git repo), optionally backed up to a private GitHub repo.
 
-![Home in AI Task Tracking: the issues that need you, what's in progress, ready next and blocked, and Agent activity: today's counts, when agents worked, a question that waits on you, and a card per agent session](site/src/assets/screenshots/home.png)
+![Home in AI Task Tracking, a daily overview: the requests that need you and how long they have waited, what's in progress and ready next, and Agent activity: today's counts, the live session and what finished](site/src/assets/screenshots/home.png)
 
 ## Requirements
 
@@ -73,10 +73,12 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   Clicking the Dock icon with no window open opens the window.
 - **Shortcuts (system-wide).** ⌥⌘I opens the window (or ⌃⌥⌘I, ⌥⌘T); ⌥⌘N opens Quick Capture (or ⌃⌥⌘N, ⌥⇧⌘N).
   Pick one or turn them off in Settings.
-- **In the window.** **Home** shows *Needs you* (issues waiting for your decision or review, and work that has
-  stalled: idle in In Progress for a day, or reopened again and again; tune it under `stalled:` in `config.yml`; and
-  work whose linked PR's checks fail), *In progress*, *Ready next*, *Blocked* and Agent activity (one card per agent session, one row per issue with its title, status path and latest
-  note; counts for today or 7 days; see [Agent activity](site/src/content/docs/use/daily-use.md#agent-activity)). All issues, projects and saved views are
+- **In the window.** **Home** is a daily overview: today's summary, then *Needs you* first (issues waiting for your
+  decision or review, each with what it asks and how long it has waited; work that has stalled: idle in In Progress
+  for a day, or reopened again and again, tuned under `stalled:` in `config.yml`; and work whose linked PR's checks
+  fail), *In progress*, *Ready next* with *Blocked work* as dependency chains, and Agent activity beside them (today's
+  counts, the live session and what it is working on, what finished, and Session details with a card per agent
+  session; see [Home](site/src/content/docs/use/daily-use.md#in-the-window)). All issues, projects and saved views are
   in the sidebar, as lists or boards. Keys: `c` new issue, `/` or ⌘K search, `g h` Home, `g i` all issues, ⌘[ / ⌘] back and
   forward (also the ← → buttons at the top of the sidebar, beside ⌂ Home), ⌘\ collapses the sidebar to icons and
   back.

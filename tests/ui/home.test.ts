@@ -3,9 +3,13 @@ import type { FeedEvent } from '../../src/engine/eventlog'
 import type { Config, IssueSummary } from '../../src/model'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { boardColumns, feedActor, feedInScope, feedLine, needsYouWhy, relTime, scopeHome, type HomeData, type NeedsYouItem } from '../../ui/home'
-import { NeedsYouWhy } from '../../ui/views/Home'
-import { emptyState } from '../../ui/client'
+import {
+  blockedChains, boardColumns, daySummary, duration, feedActor, feedInScope, feedLine, listHref, needsYouCard, needsYouWhy, relTime,
+  scopeHome, statusesOf, type HomeData, type NeedsYouItem,
+} from '../../ui/home'
+import { NeedsYouRequest } from '../../ui/views/Home'
+import { parseRoute } from '../../ui/router'
+import { viewFromQuery, DEFAULT_DISPLAY } from '../../ui/viewModel'
 
 const AG = { actor: 'agent' as const, workspace: 'web-app' }
 const ev = (over: Partial<FeedEvent>): FeedEvent => ({ at: '2026-10-28T12:00:00Z', actor: AG, id: 'Q-27', kind: 'updated', ...over })
@@ -129,12 +133,96 @@ describe('Needs you: why and stalled', () => {
     expect(needsYouWhy(item({ status: 'Waiting', stalled: 'reopened 2× in 7 days' }), ny, now))
       .toEqual({ why: 'Waiting · 3d', stalled: 'reopened 2× in 7 days' })
   })
-  test('the row shows a "stalled" mark with the reason, apart from the Waiting/label why', () => {
-    const state = { ...emptyState(), config: { needsYou: ny } } as never
-    const html = (i: NeedsYouItem) => renderToStaticMarkup(createElement(NeedsYouWhy, { state, issue: i, now }))
-    expect(html(item({ stalled: 'idle 31 h in In Progress' })))
-      .toBe('<span class="stalled-why" title="Stalled: idle 31 h in In Progress"><span class="pill stalled">stalled</span>idle 31 h in In Progress</span>')
-    expect(html(item({ status: 'Waiting' }))).toBe('<span class="why">Waiting · 3d</span>')
-    expect(html(item({ status: 'Waiting', stalled: 'reopened 2× in 7 days' }))).toContain('<span class="why">Waiting · 3d</span><span class="stalled-why"')
+  test('the request card shows a "stalled" mark with the reason when the request is something else', () => {
+    const html = (i: NeedsYouItem, featured = false) =>
+      renderToStaticMarkup(createElement(NeedsYouRequest, { issue: i, card: needsYouCard(i, ny, now), featured, project: 'Support' }))
+    const stalledOnly = html(item({ stalled: 'idle 31 h in In Progress' }))
+    expect(stalledOnly).toContain('<span class="ov-status">Stalled</span>')
+    expect(stalledOnly).toContain('<p>idle 31 h in In Progress</p>')
+    expect(stalledOnly).not.toContain('pill stalled') // the reason is already the summary
+    const both = html(item({ status: 'Waiting', request: 'Which plan?', stalled: 'reopened 2× in 7 days' }), true)
+    expect(both).toContain('<p>Which plan?</p>')
+    expect(both).toContain('<span class="pill stalled">stalled</span>reopened 2× in 7 days')
+    expect(both).toContain('class="ov-request featured"')
+    expect(both).toContain('class="ov-action primary"')
+    expect(both).toContain('href="#/issue/Q-1"')
+    expect(both).toContain('Q-1<span class="ov-sep" aria-hidden="true">·</span>Support')
+  })
+})
+
+describe('Daily overview', () => {
+  const now = Date.parse('2026-10-30T12:00:00Z')
+  const ny = { statuses: ['Waiting', 'In Review'], labels: ['Needs decision', 'Needs review'] }
+  const item = (over: Partial<NeedsYouItem>): NeedsYouItem =>
+    ({ id: 'Q-1', title: 'T', status: 'In Progress', labels: [], updated: '2026-10-23T12:00:00Z', ...over }) as NeedsYouItem
+
+  test('durations', () => {
+    expect(duration(10 * 60_000)).toBe('less than an hour')
+    expect(duration(3_600_000)).toBe('1 hour')
+    expect(duration(5 * 3_600_000)).toBe('5 hours')
+    expect(duration(86_400_000)).toBe('1 day')
+    expect(duration(8.5 * 86_400_000)).toBe('8 days')
+    expect(duration(NaN)).toBe('less than an hour')
+  })
+
+  test('a Waiting request: Input needed, its request, waiting since the move, View request', () => {
+    expect(needsYouCard(item({ status: 'Waiting', request: 'Needs: the password', waitingSince: '2026-10-29T11:00:00Z' }), ny, now))
+      .toEqual({ status: 'Input needed', summary: 'Needs: the password', age: 'Waiting 1 day', action: 'View request' })
+  })
+
+  test('a review label: Review, and quiet time when there is no waitingSince', () => {
+    expect(needsYouCard(item({ labels: ['Needs review'] }), ny, now)).toEqual({ status: 'Needs review', age: 'No activity for 7 days', action: 'Review' })
+    expect(needsYouCard(item({ status: 'In Review' }), ny, now).action).toBe('Review')
+    expect(needsYouCard(item({ labels: ['Needs decision'], updated: '2026-10-30T09:00:00Z' }), ny, now))
+      .toMatchObject({ status: 'Needs decision', age: 'Updated 3 hours ago', action: 'Open' })
+    expect(needsYouCard(item({ labels: ['Needs decision'], updated: '2026-10-30T11:50:00Z' }), ny, now).age).toBe('Updated just now')
+    // Waiting without a logged move falls back to quiet time.
+    expect(needsYouCard(item({ status: 'Waiting' }), ny, now).age).toBe('No activity for 7 days')
+  })
+
+  test('CI and stalled items; a broken needsYou config does not throw', () => {
+    expect(needsYouCard(item({ ciReason: 'CI failing on PR #3' }), ny, now)).toMatchObject({ status: 'CI failing', summary: 'CI failing on PR #3', ci: 'CI failing on PR #3' })
+    expect(needsYouCard(item({ stalled: 'idle 40 h' }), { statuses: null, labels: null } as never, now)).toMatchObject({ status: 'Stalled', summary: 'idle 40 h' })
+  })
+
+  test('the day summary', () => {
+    expect(daySummary({ finished: 12, inProgress: 5, needsYou: 21 })).toBe('12 finished today. 5 in progress. 21 need you.')
+    expect(daySummary({ finished: 0, inProgress: 1, needsYou: 1 })).toBe('0 finished today. 1 in progress. 1 needs you.')
+    expect(daySummary({ finished: 3, inProgress: 0, needsYou: 0 })).toBe('3 finished today. 0 in progress. Nothing needs you.')
+  })
+
+  test('blocked chains: root blocker first, the inner chain folded into the longer one, cycle-safe', () => {
+    const issues: Record<string, { id: string; blockedBy: string[] }> = {
+      A: { id: 'A', blockedBy: [] }, B: { id: 'B', blockedBy: ['A'] }, C: { id: 'C', blockedBy: ['B', 'X'] },
+      D: { id: 'D', blockedBy: ['Done1'] }, E: { id: 'E', blockedBy: ['F'] }, F: { id: 'F', blockedBy: ['E'] },
+      X: { id: 'X', blockedBy: [] }, Done1: { id: 'Done1', blockedBy: [] },
+    }
+    const open = (id: string) => id !== 'Done1' && id in issues
+    const blocked = ['B', 'C', 'D', 'E', 'F'].map((id) => ({ issue: { id } }))
+    expect(blockedChains(blocked, (id) => issues[id], open)).toEqual([
+      { ids: ['A', 'B', 'C'], more: 1 }, // C is also blocked by X
+      { ids: ['D'], more: 0 }, // blocked by the label only, or by closed issues
+      { ids: ['F', 'E'], more: 1 }, // E ⇄ F: the walk stops where it closes (the cycle's way back counts as another blocker)
+      { ids: ['E', 'F'], more: 1 },
+    ])
+  })
+
+  test('full-list links open All issues with the filter', () => {
+    const r = parseRoute(listHref({ status: ['In Progress'] }))
+    expect(r.name).toBe('issues')
+    const v = viewFromQuery((r as { query?: string }).query ?? '', { filter: {}, display: DEFAULT_DISPLAY })
+    expect(v.filter).toEqual({ status: ['In Progress'] })
+    expect(viewFromQuery((parseRoute(listHref({ blocked: true })) as { query?: string }).query ?? '', { filter: {}, display: DEFAULT_DISPLAY }).filter)
+      .toEqual({ blocked: true })
+  })
+
+  test('statusesOf leaves the Needs-you statuses out', () => {
+    const config = {
+      statuses: [{ name: 'Todo', type: 'unstarted' }, { name: 'In Progress', type: 'started' }, { name: 'Waiting', type: 'started' }, { name: 'Backlog', type: 'backlog' }],
+      needsYou: { statuses: ['Waiting'], labels: [] },
+    } as never
+    expect(statusesOf(config, ['started'])).toEqual(['In Progress'])
+    expect(statusesOf(config, ['backlog', 'unstarted'])).toEqual(['Todo', 'Backlog'])
+    expect(statusesOf(null, ['started'])).toEqual([])
   })
 })
