@@ -34,6 +34,8 @@ async function serve(): Promise<void> {
   const ci = await CiRefresher.start(store)
   const server = startServer(store, { port: store.port, version: pkg.version, git, ci })
   console.log(`aitt ${pkg.version} serving ${root} on http://127.0.0.1:${server.port}`)
+  // After git's startup, so the views get their own commit; never holds up or fails the start.
+  void git.ready.catch(() => {}).then(() => store.seedDefaultViews())
   let stopping = false
   const onSignal = async () => {
     if (stopping) return

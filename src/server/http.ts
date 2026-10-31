@@ -34,6 +34,7 @@ export function summarize(s: Store, i: Issue, visible?: (i: Issue) => boolean): 
   const { description: _d, activity: _a, extra: _e, path: _p, ...rest } = i
   const ci = ciBadge(s.ci, i)
   const shown = (id: string) => { const x = s.get(id); return !x || visible!(x) }
+  const closedAt = s.closedAt(i)
   return {
     ...rest,
     childCount: visible ? s.children(i.id).filter(visible).length : s.children(i.id).length,
@@ -41,6 +42,7 @@ export function summarize(s: Store, i: Issue, visible?: (i: Issue) => boolean): 
     blocks: visible ? s.blocks(i.id).filter(shown) : s.blocks(i.id),
     workspaces: writerWorkspaces(i),
     ...(ci ? { ci } : {}),
+    ...(closedAt ? { closedAt } : {}),
   }
 }
 

@@ -57,3 +57,44 @@ describe('filterPredicate (shared by engine filterIssues and the UI applyView)',
     expect(matchesText(mk('Q-12', { title: 'Docs-to-quote engine' }), 'quote fan')).toBe(false)
   })
 })
+
+describe('closedWithinDays', () => {
+  const NOW = Date.parse('2026-10-31T12:00:00Z')
+  const DAY = 86_400_000
+  const closing = [
+    { name: 'Todo', type: 'unstarted', color: '#000000' }, { name: 'Done', type: 'completed', color: '#000000' },
+    { name: 'Canceled', type: 'canceled', color: '#000000' },
+  ] as StatusDef[]
+  const mk = (id: string, status: string, updated: string): FilterIssue => ({
+    id, title: id, status, project: 'p', labels: [], priority: 0, parent: null, blockedBy: [], related: [], milestone: null, links: [], created: updated, updated,
+  })
+  const iso = (ms: number) => new Date(ms).toISOString()
+  const keep = (f: Filter, closedAt?: (i: FilterIssue) => string | undefined) => filterPredicate<FilterIssue>(f, {
+    statuses: closing, get: () => undefined, workspaces: () => [], blocks: () => [], now: NOW, ...(closedAt ? { closedAt } : {}),
+  })
+
+  test('the boundary is inclusive: exactly 7 days ago is in, a second more is out', () => {
+    const k = keep({ closedWithinDays: 7 })
+    expect(k(mk('A', 'Done', iso(NOW - 7 * DAY)))).toBe(true)
+    expect(k(mk('B', 'Done', iso(NOW - 7 * DAY - 1000)))).toBe(false)
+  })
+  test('open issues are out, however recently they changed (a reopened issue drops out)', () => {
+    expect(keep({ closedWithinDays: 7 })(mk('A', 'Todo', iso(NOW)))).toBe(false)
+    expect(keep({ closedWithinDays: 7, includeDone: true })(mk('A', 'Todo', iso(NOW)))).toBe(false)
+    expect(keep({ closedWithinDays: 7, status: ['Todo', 'Done'] })(mk('A', 'Todo', iso(NOW)))).toBe(false)
+  })
+  test('uses the close time when given: a comment on an old issue does not bring it back', () => {
+    expect(keep({ closedWithinDays: 7 }, () => iso(NOW - 30 * DAY))(mk('A', 'Done', iso(NOW)))).toBe(false)
+    expect(keep({ closedWithinDays: 7 }, () => iso(NOW - DAY))(mk('A', 'Done', iso(NOW - 60 * DAY)))).toBe(true)
+  })
+  test('without a status list any closed type counts; a status list narrows it', () => {
+    expect(keep({ closedWithinDays: 7 })(mk('A', 'Canceled', iso(NOW)))).toBe(true)
+    expect(keep({ closedWithinDays: 7, status: ['Done'] })(mk('A', 'Canceled', iso(NOW)))).toBe(false)
+  })
+  test('nonsense values are no window (a hand-edited file): the filter behaves as without it', () => {
+    for (const bad of [0, -1, Number.NaN, '7' as unknown as number]) {
+      expect(keep({ closedWithinDays: bad })(mk('A', 'Todo', iso(NOW)))).toBe(true)
+      expect(keep({ closedWithinDays: bad })(mk('B', 'Done', iso(NOW)))).toBe(false)
+    }
+  })
+})

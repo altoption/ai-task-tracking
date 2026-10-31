@@ -79,7 +79,8 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   fail), *In progress*, *Ready next* with *Blocked work* as dependency chains, and Agent activity beside them (today's
   counts, the live session and what it is working on, what finished, and Session details with a card per agent
   session; see [Home](site/src/content/docs/use/daily-use.md#in-the-window)). All issues, projects and saved views are
-  in the sidebar, as lists or boards. Keys: `c` new issue, `/` or ⌘K search, `g h` Home, `g i` all issues, ⌘[ / ⌘] back and
+  in the sidebar, as lists or boards; four useful views come with the app (Active by Project, Unblock First, High
+  Priority, Shipped This Week), yours to change or delete. Keys: `c` new issue, `/` or ⌘K search, `g h` Home, `g i` all issues, ⌘[ / ⌘] back and
   forward (also the ← → buttons at the top of the sidebar, beside ⌂ Home), ⌘\ collapses the sidebar to icons and
   back.
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
