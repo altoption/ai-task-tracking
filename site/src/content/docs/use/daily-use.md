@@ -59,7 +59,8 @@ Open with ⌘, **Settings…** in the menu, or the gear at the bottom of the sid
   The first request is highlighted. Home shows three; **Show all** lists the rest.
 - **In progress** and **Ready next**: the first three of each, with how long ago an issue in progress last changed,
   and *Urgent* or *High* and *Unblocks N* (how many open issues wait on it) on ready ones. **All in progress** and
-  **All ready** open the full lists in All issues.
+  **All ready** open the full lists in All issues, with their counts. Those can be higher than the section's, since
+  stalled and CI-failing issues show in Needs you instead.
 - **Blocked work**, folded under Ready next: click it to see the dependency chains, the first blocker first
   (*WEB-12 Plans config → WEB-13 Comparison table → WEB-14 FAQ*), and **All blocked**. Issues that block each other show as one chain marked as a cycle.
 - **Agent activity**, beside the queue (below).
