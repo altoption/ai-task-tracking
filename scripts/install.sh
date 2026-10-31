@@ -21,7 +21,7 @@ Environment:
                        app settings, no Claude Code MCP entry, no aitt link and no other agent tools (unless
                        --connect names them).
   SKIP_MCP=1           don't register the user-scope `ai-task-tracking` MCP entry or link `aitt`
-  SKIP_LOGIN_ITEM=1    don't turn on Launch at Login (otherwise every run turns it on; harmless when already on)
+  SKIP_LOGIN_ITEM=1    don't turn on Launch at Login (otherwise a first install turns it on; later runs leave it)
   NO_LAUNCH=1          don't open the app at the end
 USAGE
 }
@@ -46,6 +46,9 @@ APP_DIR="${AITT_APP_DIR:-$HOME/Applications}"
 mkdir -p "$APP_DIR"
 APP_DIR="$(canon_dir "$APP_DIR")"
 APP="$APP_DIR/$AITT_APP_NAME"
+# Before the build, which puts the app there.
+FIRST_INSTALL=0
+[ -d "$APP" ] || FIRST_INSTALL=1
 
 echo "building engine…"
 build_engine "$ROOT"
@@ -59,7 +62,8 @@ AITT="$APP/Contents/Resources/aitt"
 HOME_DIR="$(abs_path "${AITT_HOME:-$(defaults read "$AITT_BUNDLE_ID" trackerHome 2>/dev/null || echo "$HOME/AITaskTracking")}")"
 if should_register "$APP_DIR"; then
   defaults write "$AITT_BUNDLE_ID" trackerHome -string "$HOME_DIR"
-  if [ "${SKIP_LOGIN_ITEM:-}" != 1 ]; then
+  # A first install only: the user may have turned Launch at Login off since.
+  if [ "${SKIP_LOGIN_ITEM:-}" != 1 ] && [ "$FIRST_INSTALL" = 1 ]; then
     defaults write "$AITT_BUNDLE_ID" enableLoginItemOnLaunch -bool true
   fi
 fi

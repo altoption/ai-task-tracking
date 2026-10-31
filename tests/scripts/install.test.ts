@@ -467,4 +467,54 @@ describe('install.sh release path (end to end, nothing built)', () => {
       expect(await opens(t)).toEqual([])
     })
   })
+
+  test('an upgrade in ~/Applications leaves Launch at Login alone', async () => {
+    const t = await e2e({ appsInHome: true })
+    await bundle(t.apps, '0.0.9')
+    expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+    expect(await t.version()).toBe('0.1.0')
+    expect((await t.calls()).some((c) => c.includes('enableLoginItemOnLaunch'))).toBe(false)
+  })
+})
+
+/** scripts/install.sh from a scratch copy of the scripts, with a stub app/build.sh: nothing is built or installed. */
+describe('scripts/install.sh', () => {
+  const dev = async () => {
+    const t = await e2e({ appsInHome: true })
+    const root = join(t.base, 'root'), stubs = join(t.base, 'stubs')
+    await mkdir(join(root, 'scripts'), { recursive: true })
+    await mkdir(join(root, 'app'))
+    for (const f of ['scripts/install.sh', 'scripts/lib.sh']) await copyFile(join(ROOT, f), join(root, f))
+    await writeFile(join(root, 'app/build.sh'), `#!/bin/bash
+for a in "$@"; do dest="$a"; done
+mkdir -p "$dest/AI Task Tracking.app/Contents/Resources"
+`)
+    await chmod(join(root, 'app/build.sh'), 0o755)
+    await writeFile(join(stubs, 'bun'), '#!/bin/bash\nexit 0\n')
+    const run = async (extra: Record<string, string> = {}) => {
+      const p = Bun.spawn(['/usr/bin/perl', '-MPOSIX', '-e', 'POSIX::setsid(); exec @ARGV', 'bash', join(root, 'scripts/install.sh')], {
+        env: {
+          HOME: t.home, AITT_APP_DIR: t.apps, AITT_HOME: join(t.base, 'data'), PATH: `${stubs}:/usr/bin:/bin:/usr/sbin:/sbin`,
+          STUB_LOG: join(t.base, 'stub.log'), AITT_LSREGISTER: join(stubs, 'lsregister'), SKIP_MCP: '1', NO_LAUNCH: '1', ...extra,
+        },
+        cwd: t.base, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+      })
+      expect(await p.exited).toBe(0)
+      const calls = (await t.calls()).filter((c) => c.includes('enableLoginItemOnLaunch'))
+      await writeFile(join(t.base, 'stub.log'), '')
+      return calls
+    }
+    return run
+  }
+
+  test('asks for Launch at Login on a first install only', async () => {
+    const run = await dev()
+    expect(await run()).toEqual(['defaults write io.github.altoption.ai-task-tracking enableLoginItemOnLaunch -bool true'])
+    expect(await run()).toEqual([])
+  })
+
+  test('SKIP_LOGIN_ITEM=1 skips it on a first install too', async () => {
+    const run = await dev()
+    expect(await run({ SKIP_LOGIN_ITEM: '1' })).toEqual([])
+  })
 })
