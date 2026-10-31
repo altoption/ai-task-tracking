@@ -130,6 +130,19 @@ describe('aitt setup --yes (non-interactive)', () => {
     expect((await sb.calls()).filter((l) => l.startsWith('gh repo create'))).toHaveLength(1)
   })
 
+  test('a token in the backup remote\'s URL never reaches the output', async () => {
+    const sb = await sandbox()
+    const flags = ['--yes', '--no-mcp', '--no-link', '--no-skill']
+    expect((await sb.setup(flags)).code).toBe(0)
+    const git = (...args: string[]) => Bun.spawnSync(['git', '-C', sb.data, ...args], { env: { PATH: '/usr/bin:/bin', HOME: sb.home } }).exitCode
+    expect(git('init', '-q')).toBe(0)
+    expect(git('remote', 'add', 'origin', 'https://someone:fake-token-123@example.invalid/octo/data.git')).toBe(0)
+    const r = await sb.setup(flags)
+    expect(r.code).toBe(0)
+    expect(r.out).not.toContain('fake-token-123')
+    expect(r.out).toContain('Backup: https://***@example.invalid/octo/data.git')
+  })
+
   test('--backup when gh is not signed in fails with the fix, and creates no repo', async () => {
     const sb = await sandbox()
     const r = await sb.setup(['--yes', '--backup', 'octo/data', '--no-mcp', '--no-link', '--no-skill'], { GH_AUTH_EXIT: '1' })
