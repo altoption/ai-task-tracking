@@ -62,7 +62,8 @@ statuses:              # optional: recolor a status type's icon
 - Colors are `#rgb`, `#rrggbb` (with optional alpha, `#rrggbbaa`), `rgb(…)`/`rgba(…)` or `hsl(…)`/`hsla(…)`. Quote hex
   colors: YAML reads an unquoted `#` as a comment.
 - `statuses` keys are status types, not status names: `backlog`, `unstarted` (Todo), `started` (In Progress and
-  Waiting), `completed` (Done), `canceled`, `duplicate`. An override replaces the color from `config.yml` for every
+  Waiting, which keep their different [icons](/docs/use/daily-use/#status-icons)), `completed` (Done, and a full
+  progress ring), `canceled`, `duplicate`. An override replaces the color from `config.yml` for every
   status of that type while the theme is on. Light uses this for Backlog and Todo, whose default colors are too pale
   on white.
 - Only the keys and token names below are accepted, and only colors as values. A file that breaks a rule isn't
@@ -76,7 +77,7 @@ A token may also be written with its CSS name (`--bg`).
 
 | Token | What it colors |
 |---|---|
-| `bg` | the page behind the panels, and the sidebar |
+| `bg` | the page behind the panels, and the sidebar; also the check and dash inside the Done and Canceled icons |
 | `panel` | the main panel, menus and dialogs |
 | `hover` | a row or button under the pointer |
 | `active` | the selected row, a pressed menu item |
@@ -90,7 +91,7 @@ A token may also be written with its CSS name (`--bg`).
 | `divider` | the thin lines between rows |
 | `pill-border` | the outline of pills (labels, branches) |
 | `border-focus` | the comment box while you type |
-| `text` | body text |
+| `text` | body text; at 18% it is the track of the progress ring |
 | `text-strong` | a document title under the pointer |
 | `muted` | secondary text |
 | `faint` | the least important text and empty-state hints |
@@ -98,7 +99,7 @@ A token may also be written with its CSS name (`--bg`).
 | `pill-text` | text in pills |
 | `link` | links in descriptions and comments |
 | `on-accent` | text on accent-colored buttons and avatars |
-| `accent` | primary buttons, focus rings, checked items |
+| `accent` | primary buttons, focus rings, checked items, the progress ring's arc |
 | `accent-wash` | a board column or cell while you drag an issue over it |
 | `warn` | Needs-you reasons and the Needs you heading |
 | `danger` | errors, Blocked, delete buttons, failing checks |

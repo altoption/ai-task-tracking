@@ -96,6 +96,28 @@ Mac's activity log does (see [Picking up where a session stopped](/docs/guides/a
 
 ⌘K also switches the theme: type "theme" and pick one (see [Themes](/docs/guides/themes/)).
 
+### Status icons
+
+Every issue is a circle. An outline means the issue is open, a solid disc means it's closed, and the shape tells
+you the status, so you can tell them apart even when a theme gives two statuses the same color.
+
+| Icon | Status | Meaning |
+|---|---|---|
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0 2.88" transform="rotate(-90 7 7)"/></svg> | Backlog | a ring of dots: not committed to yet |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg> | Todo | an empty ring: committed, nobody on it yet |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2.25" fill="currentColor"/></svg> | In Progress | a ring with a dot: someone is on it. Any started status you add gets this icon too |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.75 5.1v3.8M8.25 5.1v3.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> | Waiting | a ring with pause bars: stopped, it needs you. Every status listed under `needsYou.statuses` in `config.yml` (for example In Review) gets this icon |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><mask id="si-done"><rect width="14" height="14" fill="white"/><path d="M4.4 7.2 6.2 9 9.7 5.3" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></mask><circle cx="7" cy="7" r="6.25" fill="currentColor" mask="url(#si-done)"/></svg> | Done | a disc with a check: finished |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><mask id="si-canceled"><rect width="14" height="14" fill="white"/><path d="M4.6 7h4.8" stroke="black" stroke-width="1.5" stroke-linecap="round"/></mask><circle cx="7" cy="7" r="6.25" fill="currentColor" mask="url(#si-canceled)"/></svg> | Canceled | a disc with a dash: decided against |
+| <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="8.6" cy="5.4" r="4.4" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".75"/><circle cx="5.9" cy="8.1" r="4.9" fill="currentColor"/></svg> | Duplicate | a disc in front of a second circle: the same as another issue |
+
+An issue with sub-issues also shows a **progress ring** and the count, such as
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" stroke-opacity=".18" stroke-width="2"/><circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="14.493 32.987" stroke-dashoffset="-1" transform="rotate(-90 7 7)"/></svg> 3/6,
+in lists, on board cards, on the issue page and in a project's header. Point at it to read "3 of 6 sub-issues done".
+The ring fills clockwise from 12 o'clock. Any progress shows at least a short arc, the ring stays open until every
+sub-issue is closed, and it closes in the Done color when they all are. It's the only icon that fills up; the
+issue's own status icon still tells you whether the issue itself is closed.
+
 ## Stalled work
 
 Work can stall without anyone saying so: an agent session ends mid-task, or an issue keeps bouncing between agents.
