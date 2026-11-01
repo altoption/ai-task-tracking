@@ -168,6 +168,9 @@ detect() {
     RELEASE_TAG="$(json_str "$json" tag_name '[^"]*')"
     if [ -n "$RELEASE_TAG" ]; then RELEASE_ZIP="$(json_str "$json" name 'AI-Task-Tracking-[^"/]*-macos[.]zip')"; fi
   fi
+  read_installed_ver
+}
+read_installed_ver() {
   INSTALLED_VER=""
   if [ -f "$APP/Contents/Info.plist" ]; then
     INSTALLED_VER="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null || echo '?')"
@@ -294,9 +297,10 @@ take_lock() {
 }
 
 # recover_stranded: a run killed outright (no cleanup) between the swap's renames leaves no app and the old one in its
-# stage folder. Put it back before looking at what is installed, unless a live install owns that folder.
+# stage folder. It goes back before anything looks at what's installed. Runs again once this install holds the lock:
+# another run may have been killed in between, and what detect saw is then out of date.
 recover_stranded() {
-  local d found=""
+  local d found="" held="$INSTALL_LOCK"
   [ ! -e "$APP" ] || return 0
   for d in "$APP_DIR"/.aitt-install.*/previous.app; do
     [ -e "$d" ] || continue
@@ -304,19 +308,22 @@ recover_stranded() {
   done
   [ -n "$found" ] || return 0
   if [ "$DRY" = 1 ]; then echo "An earlier install was interrupted: its old app at $found would be put back."; return 0; fi
-  take_lock
+  [ -n "$held" ] || take_lock
   if [ ! -e "$APP" ]; then
     /bin/mv "$found" "$APP" || aitt_die "an earlier install left the old app at $found and it could not be put back; move it to $APP."
     echo "An earlier install was interrupted: the old app was put back."
   fi
+  if [ -n "$held" ]; then read_installed_ver; return 0; fi
   rm -rf "$INSTALL_LOCK"
   INSTALL_LOCK=""
 }
 
-# remove_dead_stages: with the lock held, any stage folder here is left over from a run that was killed.
+# remove_dead_stages: with the lock held, any stage folder here is left over from a run that was killed. One holding the
+# old app stays while nothing is in place: it would be the only copy.
 remove_dead_stages() {
   local d
   for d in "$APP_DIR"/.aitt-install.*; do
+    if [ ! -e "$APP" ] && [ -d "$d/previous.app" ]; then continue; fi
     if [ "$d" != "$INSTALL_LOCK" ] && [ -e "$d" ]; then rm -rf "$d" || aitt_warn "couldn't remove the leftover $d"; fi
   done
 }
@@ -466,6 +473,7 @@ main() {
   APP_DIR="$(canon_dir "$APP_DIR")"
   APP="$APP_DIR/$AITT_APP_NAME"
   take_lock
+  recover_stranded
   remove_dead_stages
   if [ "$METHOD" = release ] && ! install_release; then
     aitt_warn "the release couldn't be installed; building from source instead"
