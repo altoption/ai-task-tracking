@@ -196,7 +196,20 @@ case "$1" in read) exit 1 ;; export) exit 0 ;; esac
   claude: '#!/bin/bash\necho "claude $*" >> "$STUB_LOG"\n[ "$1 $2" = "mcp get" ] && exit 1\nexit 0\n',
   lsregister: '#!/bin/bash\necho "lsregister $*" >> "$STUB_LOG"\n',
   gemini: '#!/bin/bash\necho "gemini $*" >> "$STUB_LOG"\n', // a detected agent tool
-  bun: '#!/bin/bash\n[ "$1" = "--version" ] && { echo 1.4.4; exit 0; }\necho "bun $*" >> "$STUB_LOG"\nexit 1\n',
+  // STRAND_TO=<path>: the first --version (after this install's first look, before its lock) moves the app there, like
+  // another install killed between its renames. STRAND_READONLY=1 also makes the app impossible to move back.
+  bun: `#!/bin/bash
+if [ "$1" = "--version" ]; then
+  if [ -n "$STRAND_TO" ] && [ ! -e "$STUB_LOG.stranded" ]; then
+    touch "$STUB_LOG.stranded"
+    /bin/mv "$AITT_APP_DIR/AI Task Tracking.app" "$STRAND_TO"
+    [ -z "$STRAND_READONLY" ] || chmod a-w "$(dirname "$STRAND_TO")"
+  fi
+  echo 1.4.4; exit 0
+fi
+echo "bun $*" >> "$STUB_LOG"
+exit 1
+`,
   open: '#!/bin/bash\necho "open $*" >> "$STUB_LOG"\n', // never the real one
   // Removing a stage folder, on request: RM_FAIL=1 refuses, RM_SIGNAL=<name> signals the installer first. The lock always goes.
   rm: `#!/bin/bash
@@ -679,6 +692,46 @@ describe('install.sh after a kill between the renames', () => {
     expect(r.out).toContain('another install is running')
     expect(await exists(old)).toBe(true)
     expect(await exists(t.app)).toBe(false)
+  })
+  describe('another install killed after this one first looked', () => {
+    const startingUp = async (t: Awaited<ReturnType<typeof e2e>>) => {
+      await bundle(t.apps, '0.0.9')
+      const stage = join(t.apps, '.aitt-install.abc123')
+      await mkdir(stage)
+      await mkdir(join(t.apps, LOCK))
+      await writeFile(join(t.apps, LOCK, 'pid'), `${await gonePid()}\n`)
+      return { stage, old: join(stage, 'previous.app') }
+    }
+    test('the old app goes back once the lock is held, then the upgrade goes on', async () => {
+      const t = await e2e({ appsInHome: true })
+      const { stage, old } = await startingUp(t)
+      const r = await t.install(['--yes', '--no-launch'], { STRAND_TO: old })
+      expect(r.out).toContain('the old app was put back')
+      expect(r.code).toBe(0)
+      expect(await t.version()).toBe('0.1.0')
+      expect((await t.calls()).some((c) => c.includes('enableLoginItemOnLaunch'))).toBe(false)
+      expect(await exists(stage)).toBe(false)
+    })
+    test('an upgrade that then fails still leaves the old app in place', async () => {
+      const t = await e2e({ aitt: '#!/bin/bash\nexec /bin/sleep 40\n' })
+      const { old } = await startingUp(t)
+      const r = await t.install(['--yes', '--no-launch'], { STRAND_TO: old, AITT_SMOKE_TIMEOUT: '1' }, { timeout: 20_000 })
+      expect(r.code).not.toBe(0)
+      expect(await t.version()).toBe('0.0.9')
+    }, 30_000)
+    test('if it cannot go back, the only copy stays whole and says where, and the next run recovers it', async () => {
+      const t = await e2e()
+      const { stage, old } = await startingUp(t)
+      const r = await t.install(['--yes', '--no-launch'], { STRAND_TO: old, STRAND_READONLY: '1' })
+      await chmod(stage, 0o755)
+      expect(await exists(join(old, 'Contents/Info.plist'))).toBe(true)
+      expect(r.code).not.toBe(0)
+      expect(r.out).toContain(old)
+      expect(await exists(t.app)).toBe(false)
+      expect((await t.install(['--yes', '--no-launch'])).code).toBe(0)
+      expect(await t.version()).toBe('0.1.0')
+      expect(await exists(stage)).toBe(false)
+    }, 60_000)
   })
   test('--dry-run says so and moves nothing', async () => {
     const t = await e2e()
