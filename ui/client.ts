@@ -314,6 +314,12 @@ export type IssueDetail = Omit<IssueSummary, 'childCount' | 'progress'> & {
   /** One per agent session that worked on it, oldest first (src/engine/attempts.ts). */
   attempts?: AttemptOut[]
 }
+/** The Changes panel's answer for an issue (src/engine/changes.ts): its agent branch's diff, or a linked PR's. */
+export type { Changes } from '../src/engine/changes'
+export function getChanges(id: string, branch?: string): Promise<import('../src/engine/changes').Changes> {
+  return getJSON(`/api/issues/${encodeURIComponent(id)}/changes${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`)
+}
+
 export function getIssue(id: string): Promise<IssueDetail> {
   return getJSON<IssueDetail>(`/api/issues/${encodeURIComponent(id)}`)
 }
