@@ -6,9 +6,10 @@ import { CallToolRequestSchema, ListToolsRequestSchema, RootsListChangedNotifica
 import pkg from '../../package.json'
 import { DEFAULT_AGENTS_MD } from '../store/metaFiles'
 import { agentTools, buildInstructions, toolResult, type ToolResult } from './surface'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import type { Actor } from '../model'
-import { findClient, repoDirOf, resolveSessionWorkspace, resolveWorkspace } from './workspace'
+import { readUploads, type Upload } from '../tools/attachments'
+import { findClient, isProjectDir, repoDirOf, resolveSessionWorkspace, resolveWorkspace } from './workspace'
 export const NOT_RUNNING = "AI Task Tracking isn't running — open it from the menu bar (or run: aitt serve)."
 const READ_TIMEOUT_MS = 5000
 const WRITE_TIMEOUT_MS = 30_000
@@ -23,17 +24,29 @@ export async function runProxy(opts: { port: number; home: string; timeouts?: { 
   // The workspace is resolved on the first call (roots can only be asked once the client has initialized) and again
   // after roots change; the branch is re-read on every call, since a session can switch branches.
   let sessionP: ReturnType<typeof resolveSessionWorkspace> | undefined
+  const where = () => (sessionP ??= resolveSessionWorkspace({
+    cwd: process.cwd(), userHome: process.env.HOME || homedir(), env: process.env, listRoots,
+  }))
   const actor = async (): Promise<Actor> => {
-    const s = await (sessionP ??= resolveSessionWorkspace({
-      cwd: process.cwd(), userHome: process.env.HOME || homedir(), env: process.env, listRoots,
-    }))
+    const s = await where()
     const branch = s.dir ? resolveWorkspace(s.dir).branch : undefined
     return { actor: 'agent', workspace: s.workspace, ...(branch ? { branch } : {}), ...who }
   }
   const repoDir = async (): Promise<{ repoDir?: string }> => {
-    const s = await sessionP
-    const dir = s?.dir ? repoDirOf(s.dir) : undefined
+    const s = await where()
+    const dir = s.dir ? repoDirOf(s.dir) : undefined
     return dir ? { repoDir: dir } : {}
+  }
+  // save_comment attachments: read here, where the agent's files are; the engine stores them (src/tools/attachments.ts).
+  const uploads = async (name: string, args: unknown): Promise<{ uploads?: Upload[] }> => {
+    const list = name === 'save_comment' && args && typeof args === 'object' ? (args as { attachments?: unknown }).attachments : undefined
+    if (!Array.isArray(list) || !list.length) return {}
+    // Allowed: the session's project (its whole repo) and the temp folders. No project folder (a desktop app started
+    // in / or $HOME): only the temp folders, never the folder it started in.
+    const found = (await where()).dir
+    const dir = found && isProjectDir(found, process.env.HOME || homedir()) ? found : undefined
+    const roots = [...(dir ? [repoDirOf(dir) ?? dir] : []), tmpdir(), '/tmp']
+    return { uploads: await readUploads(list, dir ?? tmpdir(), roots) }
   }
   const base = `http://127.0.0.1:${opts.port}`
 
@@ -46,7 +59,7 @@ export async function runProxy(opts: { port: number; home: string; timeouts?: { 
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Tracker': '1', 'X-Tracker-Agent': '1' },
         // repoDir rides next to the actor, never in it: actors are saved in issue files, paths stay on this Mac.
-        body: JSON.stringify({ args: args ?? {}, ctx: { actor: await actor(), ...(await repoDir()) } }),
+        body: JSON.stringify({ args: args ?? {}, ctx: { actor: await actor(), ...(await repoDir()), ...(await uploads(name, args)) } }),
         signal: AbortSignal.timeout(ms),
       })
       body = await res.text()

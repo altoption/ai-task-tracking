@@ -38,6 +38,9 @@ instructions at session start. Where they differ from this skill, they win (labe
    blocking.
 6. **Hand back.** Need a decision, review or access → `save_issue({ id, state: "Waiting", comment:
    "Needs: …" })`, or the label "Needs decision" / "Needs review". These land in the user's *Needs you*.
+   Work on a branch: the user reviews its diff in the issue's Changes panel, so write from that branch. For
+   UI changes, first `save_comment({ issueId, body, attachments: [{ path: "before.png", alt: "before" },
+   { path: "after.png", alt: "after" }] })`.
 7. **Finish.** `save_issue({ id, state: "Done", comment: "Shipped in PR #123: …" })`. Done, Waiting,
    Canceled and Duplicate all require a `comment`. Work you drop is `Canceled` with a reason; issues are
    never deleted.
@@ -59,7 +62,7 @@ work down (that's an epic), to categorise (labels) or across projects; never inv
 | Next work, overview | `whats_next`, `list_issues({ project, state, label })`, `search({ query })` |
 | One issue / an epic | `get_issue({ id })`, `get_tree({ id })`, `list_comments({ issueId })` |
 | Create or update | `save_issue`, `save_issues` (batch, `ref:` links inside the batch) |
-| Comment | `save_comment({ issueId, body })` |
+| Comment | `save_comment({ issueId, body, attachments })` (screenshots: local png/jpg/gif/webp/pdf paths) |
 | Checklist item | `toggle_task({ id, index, line })` |
 | Safe description edit | `save_issue({ id, description, baseDescription })`; if refused, re-read and re-apply |
 | Projects | `list_projects`, `get_project`, `save_project`, `list_milestones`, `save_milestone` |

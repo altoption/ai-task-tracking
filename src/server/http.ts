@@ -190,6 +190,8 @@ export interface ServerOpts {
   prDiffs?: PrSource
 }
 
+/** Largest request: four 5 MB attachments in base64 (~27 MB) plus the arguments. */
+const MAX_BODY_BYTES = 32 * 1024 * 1024
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 const fail = (status: number, error: string) => json({ error }, status)
 
@@ -295,14 +297,15 @@ export function sseResponse(store: Store, signal: AbortSignal): Response {
 
 async function toolRoute(store: Store, name: string, req: Request, repos?: ServerOpts['repos']): Promise<Response> {
   if (!toolSchemas[name]) return fail(404, `Unknown tool "${name}". Available tools: ${Object.keys(toolSchemas).join(', ')}.`)
-  let body: { args?: unknown; ctx?: { actor?: Actor; repoDir?: unknown } }
+  let body: { args?: unknown; ctx?: { actor?: Actor; repoDir?: unknown; uploads?: unknown } }
   try { body = (await req.json()) as typeof body } catch { return fail(400, 'Request body must be JSON: { "args": {...} }') }
   if (!body || typeof body !== 'object') return fail(400, 'Request body must be a JSON object')
   let ctx: ToolCtx = { actor: { actor: 'you' } }
   if (req.headers.get('x-tracker-agent') === '1') {
     const a = body.ctx?.actor
     if (!a || a.actor !== 'agent') return fail(400, 'ctx.actor.actor must be "agent" when X-Tracker-Agent is set')
-    ctx = { actor: a }
+    // Attachment bytes come only from the agent connection (the proxy reads the files the agent named).
+    ctx = { actor: a, ...(Array.isArray(body.ctx?.uploads) ? { uploads: body.ctx.uploads } : {}) }
     // Learn where this workspace's repo is (checked in repos.learn); never blocks or fails the call.
     if (repos && body.ctx?.repoDir !== undefined) void repos.learn(a.workspace, body.ctx.repoDir).catch(() => {})
   }
@@ -400,6 +403,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
     hostname: opts.hostname ?? '127.0.0.1',
     port: opts.port,
     idleTimeout: 0, // SSE streams are long-lived; heartbeats keep proxies honest
+    maxRequestBodySize: MAX_BODY_BYTES,
     fetch(req) {
       const p = handle(req)
       if (new URL(req.url).pathname !== '/api/events') {
