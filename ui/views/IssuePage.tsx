@@ -11,6 +11,7 @@ import { taskAt, type MdContext } from '../markdown'
 import { href, navigate } from '../router'
 import { IssueActivity } from './IssueActivity'
 import { IssueAttempts } from './IssueAttempts'
+import { ChangesPanel, changeTotals, hasChanges, useChanges } from './ChangesPanel'
 import { IssueChip, IssueProperties } from './IssueProperties'
 
 /**
@@ -308,6 +309,14 @@ export function IssuePage({ id }: { id: string }) {
     return () => { document.title = before }
   }, [id, title])
 
+  // The Changes panel: open per page visit; its data loads with the page (cached on the engine) for the header badge.
+  const [changesOpen, setChangesOpen] = useState(false)
+  const [changesBranch, setChangesBranch] = useState<string | undefined>()
+  useEffect(() => { setChangesOpen(false); setChangesBranch(undefined) }, [id])
+  const canChange = !!detail && hasChanges(detail)
+  const changes = useChanges(id, detail?.updated ?? '', canChange, changesBranch)
+  const closeChanges = useCallback(() => setChangesOpen(false), [])
+
   const save = useCallback(async (args: Record<string, unknown>, otherId?: string) => {
     const out = await callTool<Partial<IssueDetail>>('save_issue', { id: otherId ?? id, ...args })
     if (!otherId) apply(out)
@@ -344,11 +353,16 @@ export function IssuePage({ id }: { id: string }) {
           ))}
           <span className="crumb current"><CopyId id={detail.id} /> <span className="t">{detail.title}</span></span>
         </nav>
+        {canChange && (
+          <button type="button" className={`ghost-btn changes-btn${changesOpen ? ' on' : ''}`} aria-pressed={changesOpen} onClick={() => setChangesOpen((o) => !o)}>
+            Changes{changes.data && changes.data.files?.length ? (() => { const t = changeTotals(changes.data); return <span className="changes-count">{t.files} file{t.files === 1 ? '' : 's'} <span className="dl-add">+{t.added}</span> <span className="dl-del">−{t.removed}</span></span> })() : null}
+          </button>
+        )}
         <IssueMenu id={detail.id} url={detail.url} childCount={summary?.childCount ?? detail.children.length} />
       </header>
       {error && <div className="form-error banner" role="alert">{error}</div>}
       {hidden && <HiddenNotice slug={detail.project} />}
-      <div className="issue-body">
+      <div className={`issue-body${changesOpen ? ' with-changes' : ''}`}>
         <article className="issue-main">
           <Title title={detail.title} save={(title) => save({ title })} />
           <Description key={detail.id} issueId={detail.id} source={detail.description} ctx={ctx} save={save} apply={apply} reload={reload} />
@@ -356,7 +370,9 @@ export function IssuePage({ id }: { id: string }) {
           <IssueAttempts attempts={detail.attempts} now={Date.now()} />
           <IssueActivity issueId={detail.id} activity={detail.activity} feed={feed} ctx={ctx} onSaved={reload} />
         </article>
-        <IssueProperties issue={detail} save={save} />
+        {changesOpen
+          ? <ChangesPanel data={changes.data} error={changes.error} activity={detail.activity} project={detail.project} onBranch={setChangesBranch} onClose={closeChanges} />
+          : <IssueProperties issue={detail} save={save} />}
       </div>
     </section>
   )
