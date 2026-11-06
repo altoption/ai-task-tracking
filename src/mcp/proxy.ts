@@ -8,7 +8,7 @@ import { DEFAULT_AGENTS_MD } from '../store/metaFiles'
 import { agentTools, buildInstructions, toolResult, type ToolResult } from './surface'
 import { homedir } from 'node:os'
 import type { Actor } from '../model'
-import { findClient, resolveSessionWorkspace, resolveWorkspace } from './workspace'
+import { findClient, repoDirOf, resolveSessionWorkspace, resolveWorkspace } from './workspace'
 export const NOT_RUNNING = "AI Task Tracking isn't running — open it from the menu bar (or run: aitt serve)."
 const READ_TIMEOUT_MS = 5000
 const WRITE_TIMEOUT_MS = 30_000
@@ -30,6 +30,11 @@ export async function runProxy(opts: { port: number; home: string; timeouts?: { 
     const branch = s.dir ? resolveWorkspace(s.dir).branch : undefined
     return { actor: 'agent', workspace: s.workspace, ...(branch ? { branch } : {}), ...who }
   }
+  const repoDir = async (): Promise<{ repoDir?: string }> => {
+    const s = await sessionP
+    const dir = s?.dir ? repoDirOf(s.dir) : undefined
+    return dir ? { repoDir: dir } : {}
+  }
   const base = `http://127.0.0.1:${opts.port}`
 
   async function forward(name: string, args: unknown): Promise<ToolResult> {
@@ -40,7 +45,8 @@ export async function runProxy(opts: { port: number; home: string; timeouts?: { 
       res = await fetch(`${base}/api/tool/${name}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'X-Tracker': '1', 'X-Tracker-Agent': '1' },
-        body: JSON.stringify({ args: args ?? {}, ctx: { actor: await actor() } }),
+        // repoDir rides next to the actor, never in it: actors are saved in issue files, paths stay on this Mac.
+        body: JSON.stringify({ args: args ?? {}, ctx: { actor: await actor(), ...(await repoDir()) } }),
         signal: AbortSignal.timeout(ms),
       })
       body = await res.text()
