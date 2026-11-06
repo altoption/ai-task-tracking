@@ -6,7 +6,7 @@ import { FEED_SINCE_MAX } from '../shared/feed'
 import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
-import { changesFor } from '../engine/changes'
+import { changesFor, type PrSource } from '../engine/changes'
 import { allThemes, selectedTheme } from '../engine/themes'
 import {
   feedVisibleTest, hiddenHealth, hiddenProjectsOut, hiddenSlugs, inHiddenFolder, visibleNextNumber, visibleParts, visibleTest,
@@ -186,6 +186,8 @@ export interface ServerOpts {
   ci?: { health(): CiHealth; setSetting(on: boolean): void }
   /** Where agent repos live (src/engine/repos.ts): learned from agent calls, read by the Changes route. */
   repos?: { learn(workspace: string | undefined, dir: unknown): Promise<void>; lookup(workspace: string): Promise<string | undefined> }
+  /** GitHub PR diffs for the Changes panel when the repo isn't here (src/engine/prdiff.ts); gh runs in the background. */
+  prDiffs?: PrSource
 }
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -313,12 +315,12 @@ async function toolRoute(store: Store, name: string, req: Request, repos?: Serve
 }
 
 /** `GET /api/issues/<id>/changes[?branch=]`: the Changes panel (src/engine/changes.ts). The branch must be one the issue recorded. */
-async function changesRoute(store: Store, repos: ServerOpts['repos'], rawId: string, branch: string | null): Promise<Response> {
+async function changesRoute(store: Store, opts: ServerOpts, rawId: string, branch: string | null): Promise<Response> {
   let id: string
   try { id = decodeURIComponent(rawId) } catch { return fail(400, 'bad issue id') }
   const issue = store.get(id)
   if (!issue) return fail(404, `No issue ${id}`)
-  const res = await changesFor(store, repos ?? { lookup: async () => undefined }, issue, branch ?? undefined)
+  const res = await changesFor(store, opts.repos ?? { lookup: async () => undefined }, issue, branch ?? undefined, opts.prDiffs)
   return res.state === 'unknown-branch' ? json(res, 400) : json(res)
 }
 
@@ -508,7 +510,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
             })
           }
           const ch = /^\/api\/issues\/([^/]+)\/changes$/.exec(p)
-          if (ch) return await changesRoute(store, opts.repos, ch[1]!, url.searchParams.get('branch'))
+          if (ch) return await changesRoute(store, opts, ch[1]!, url.searchParams.get('branch'))
           const f = /^\/files\/([^/]+)\/([^/]+)$/.exec(p)
           if (f) return serveDataFile(store.root, f[1]!, f[2]!)
           if (p.startsWith('/api/') || p.startsWith('/files/')) return fail(404, 'not found')

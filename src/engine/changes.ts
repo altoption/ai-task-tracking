@@ -7,17 +7,25 @@
  */
 import type { Issue } from '../model'
 import { attemptsOf } from './attempts'
+import { prOf } from './ci'
 import { baseOf, branchDiff, type BranchDiff } from './diff'
+import type { PrDiff } from './prdiff'
 import type { Store } from './store'
 
 export interface Repos { lookup(workspace: string): Promise<string | undefined> }
+export interface PrSource { get(url: string): PrDiff | null }
 export interface Candidate { workspace: string; branch: string; at: string }
 
-export type ChangesState = BranchDiff['state'] | 'no-branch' | 'repo-unknown' | 'unknown-branch'
+export type ChangesState = BranchDiff['state'] | 'no-branch' | 'repo-unknown' | 'unknown-branch' | 'pending'
 export interface Changes extends Omit<BranchDiff, 'state' | 'branch'> {
   state: ChangesState
-  source: 'local'
+  source: 'local' | 'github'
   branch?: string
+  /** source github: the PR shown, its url and state (OPEN, MERGED, CLOSED); `local` is why the local diff wasn't used. */
+  pr?: number
+  url?: string
+  prState?: string
+  local?: ChangesState
   workspace?: string
   /** The repo folder diffed (this Mac only; never stored in issue files). */
   repo?: string
@@ -41,7 +49,18 @@ export function candidates(s: Pick<Store, 'attempts' | 'statusMoved'>, i: Issue)
 
 const shortBase = (b: string) => b.replace(/^origin\//, '')
 
-export async function changesFor(s: Pick<Store, 'attempts' | 'statusMoved'>, repos: Repos, i: Issue, want?: string): Promise<Changes> {
+/** The local diff; when it can't be had (no repo here, branch gone, no branch) and no branch was asked for, the newest linked GitHub PR's. */
+export async function changesFor(s: Pick<Store, 'attempts' | 'statusMoved'>, repos: Repos, i: Issue, want?: string, prs?: PrSource): Promise<Changes> {
+  const local = await localChanges(s, repos, i, want)
+  if (want !== undefined || !prs || !['repo-unknown', 'branch-gone', 'no-branch'].includes(local.state)) return local
+  const url = [...i.links].reverse().map((l) => l.url).find((u) => prOf(u))
+  const pr = url ? prs.get(url) : null
+  if (!pr) return local
+  const { state, repo: _repo, ...rest } = pr
+  return { ...rest, state, source: 'github', local: local.state, branches: local.branches }
+}
+
+async function localChanges(s: Pick<Store, 'attempts' | 'statusMoved'>, repos: Repos, i: Issue, want?: string): Promise<Changes> {
   const list = candidates(s, i)
   const branches = [...new Set(list.map((c) => c.branch))]
   if (want !== undefined && !branches.includes(want)) return { state: 'unknown-branch', source: 'local', branches }
