@@ -6,6 +6,7 @@ import { FEED_SINCE_MAX } from '../shared/feed'
 import type { GitStatus, SyncResult } from '../engine/git'
 import { ciBadge, issueCi, type CiHealth } from '../engine/ci'
 import { attemptsOf } from '../engine/attempts'
+import { changesFor, type PrSource } from '../engine/changes'
 import { allThemes, selectedTheme } from '../engine/themes'
 import {
   feedVisibleTest, hiddenHealth, hiddenProjectsOut, hiddenSlugs, inHiddenFolder, visibleNextNumber, visibleParts, visibleTest,
@@ -183,8 +184,14 @@ export interface ServerOpts {
   docs?: UiSource
   /** The CI refresher (src/engine/ci.ts): its state in /api/health, and POST /api/ci for the app's setting. */
   ci?: { health(): CiHealth; setSetting(on: boolean): void }
+  /** Where agent repos live (src/engine/repos.ts): learned from agent calls, read by the Changes route. */
+  repos?: { learn(workspace: string | undefined, dir: unknown): Promise<void>; lookup(workspace: string): Promise<string | undefined> }
+  /** GitHub PR diffs for the Changes panel when the repo isn't here (src/engine/prdiff.ts); gh runs in the background. */
+  prDiffs?: PrSource
 }
 
+/** Largest request: four 5 MB attachments in base64 (~27 MB) plus the arguments. */
+const MAX_BODY_BYTES = 32 * 1024 * 1024
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 const fail = (status: number, error: string) => json({ error }, status)
 
@@ -288,16 +295,19 @@ export function sseResponse(store: Store, signal: AbortSignal): Response {
   return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' } })
 }
 
-async function toolRoute(store: Store, name: string, req: Request): Promise<Response> {
+async function toolRoute(store: Store, name: string, req: Request, repos?: ServerOpts['repos']): Promise<Response> {
   if (!toolSchemas[name]) return fail(404, `Unknown tool "${name}". Available tools: ${Object.keys(toolSchemas).join(', ')}.`)
-  let body: { args?: unknown; ctx?: { actor?: Actor } }
+  let body: { args?: unknown; ctx?: { actor?: Actor; repoDir?: unknown; uploads?: unknown } }
   try { body = (await req.json()) as typeof body } catch { return fail(400, 'Request body must be JSON: { "args": {...} }') }
   if (!body || typeof body !== 'object') return fail(400, 'Request body must be a JSON object')
   let ctx: ToolCtx = { actor: { actor: 'you' } }
   if (req.headers.get('x-tracker-agent') === '1') {
     const a = body.ctx?.actor
     if (!a || a.actor !== 'agent') return fail(400, 'ctx.actor.actor must be "agent" when X-Tracker-Agent is set')
-    ctx = { actor: a }
+    // Attachment bytes come only from the agent connection (the proxy reads the files the agent named).
+    ctx = { actor: a, ...(Array.isArray(body.ctx?.uploads) ? { uploads: body.ctx.uploads } : {}) }
+    // Learn where this workspace's repo is (checked in repos.learn); never blocks or fails the call.
+    if (repos && body.ctx?.repoDir !== undefined) void repos.learn(a.workspace, body.ctx.repoDir).catch(() => {})
   }
   try {
     return json(await callTool(store, name, body.args ?? {}, ctx))
@@ -305,6 +315,16 @@ async function toolRoute(store: Store, name: string, req: Request): Promise<Resp
     if (e instanceof ToolError) return fail(400, e.message)
     return fail(500, e instanceof Error ? e.message : String(e))
   }
+}
+
+/** `GET /api/issues/<id>/changes[?branch=]`: the Changes panel (src/engine/changes.ts). The branch must be one the issue recorded. */
+async function changesRoute(store: Store, opts: ServerOpts, rawId: string, branch: string | null): Promise<Response> {
+  let id: string
+  try { id = decodeURIComponent(rawId) } catch { return fail(400, 'bad issue id') }
+  const issue = store.get(id)
+  if (!issue) return fail(404, `No issue ${id}`)
+  const res = await changesFor(store, opts.repos ?? { lookup: async () => undefined }, issue, branch ?? undefined, opts.prDiffs)
+  return res.state === 'unknown-branch' ? json(res, 400) : json(res)
 }
 
 /**
@@ -383,6 +403,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
     hostname: opts.hostname ?? '127.0.0.1',
     port: opts.port,
     idleTimeout: 0, // SSE streams are long-lived; heartbeats keep proxies honest
+    maxRequestBodySize: MAX_BODY_BYTES,
     fetch(req) {
       const p = handle(req)
       if (new URL(req.url).pathname !== '/api/events') {
@@ -492,6 +513,8 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
               ...ciProblems(store, i),
             })
           }
+          const ch = /^\/api\/issues\/([^/]+)\/changes$/.exec(p)
+          if (ch) return await changesRoute(store, opts, ch[1]!, url.searchParams.get('branch'))
           const f = /^\/files\/([^/]+)\/([^/]+)$/.exec(p)
           if (f) return serveDataFile(store.root, f[1]!, f[2]!)
           if (p.startsWith('/api/') || p.startsWith('/files/')) return fail(404, 'not found')
@@ -503,7 +526,7 @@ export function startServer(store: Store, opts: ServerOpts): RunningServer {
           if (m) {
             let name: string
             try { name = decodeURIComponent(m[1]!) } catch { return fail(400, 'malformed tool name') }
-            return await toolRoute(store, name, req)
+            return await toolRoute(store, name, req, opts.repos)
           }
           if (p === '/api/sync') return await syncRoute(opts.git, req)
           if (p === '/api/ci') return await ciRoute(opts.ci, req)

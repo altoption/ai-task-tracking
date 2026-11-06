@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import pkg from '../package.json'
 import { startGit } from './engine/git'
 import { CiRefresher } from './engine/ci'
+import { PrDiffs } from './engine/prdiff'
+import { RepoMap } from './engine/repos'
 import { search } from './engine/queries'
 import { Store } from './engine/store'
 import { generateSynthetic } from './engine/synthetic'
@@ -32,7 +34,8 @@ async function serve(): Promise<void> {
   const git = startGit(store, { commitDelayMs: 2000, pushDelayMs: 300_000 })
   // CI status of linked PRs: `gh` runs only in this background refresher, never on a request.
   const ci = await CiRefresher.start(store)
-  const server = startServer(store, { port: store.port, version: pkg.version, git, ci })
+  const repos = await RepoMap.open(root)
+  const server = startServer(store, { port: store.port, version: pkg.version, git, ci, repos, prDiffs: new PrDiffs() })
   console.log(`aitt ${pkg.version} serving ${root} on http://127.0.0.1:${server.port}`)
   // After git's startup, so the views get their own commit; never holds up or fails the start.
   const seeded = git.ready.catch(() => {}).then(() => store.seedDefaultViews())

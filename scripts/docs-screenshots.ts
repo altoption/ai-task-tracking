@@ -17,6 +17,7 @@
  * engine starts, checked "2 minutes ago" and not due again for a year.
  *
  * The issue shot opens its attempts list: two agent sessions (two tools), the second pausing with a handoff comment.
+ * changes.png opens that issue's Changes panel on a fixture repo (`fixtureRepo`), so no PR diff is fetched with gh.
  * home-light.png is Home in the Light theme (POST /api/theme around that shot; the others are Graphite, the default).
  *
  * `startEngine` and `seed` are exported for a manual look at the same sample data (a scratch folder and port).
@@ -27,7 +28,7 @@ import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { chromium, type Browser, type Page } from 'playwright-core'
 
 const ROOT = join(import.meta.dir, '..')
@@ -61,7 +62,40 @@ class VirtualDate extends RealDate {
 globalThis.Date = VirtualDate
 `
 
-interface Engine { base: string; setTime(ms: number): Promise<void>; stop(): Promise<void> }
+interface Engine { base: string; setTime(ms: number): Promise<void>; stop(): Promise<void>; repo: string }
+
+// ---------- a fixture repo for the Changes panel ----------
+
+/**
+ * `web-app`, the sample agents' repo: main plus the two branches the pricing table's attempts wrote from. Fixed
+ * names and dates, so the commit ids (and the shot) are the same every run. The engine learns where it is from the
+ * seeded agent calls (ctx.repoDir), as it would from the MCP proxy.
+ */
+async function fixtureRepo(scratch: string): Promise<string> {
+  const repo = join(scratch, 'web-app')
+  const run = async (...args: string[]) => {
+    const p = Bun.spawn(['git', '-c', 'commit.gpgsign=false', ...args], {
+      cwd: existsSync(repo) ? repo : scratch, stdout: 'ignore', stderr: 'pipe',
+      env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Sample Agent', GIT_AUTHOR_EMAIL: 'agent@example.com', GIT_COMMITTER_NAME: 'Sample Agent', GIT_COMMITTER_EMAIL: 'agent@example.com', GIT_AUTHOR_DATE: '2026-03-02T10:00:00Z', GIT_COMMITTER_DATE: '2026-03-02T10:00:00Z' },
+    })
+    if ((await p.exited) !== 0) throw new Error(`git ${args.join(' ')}: ${await new Response(p.stderr).text()}`)
+  }
+  const put = (path: string, text: string) => mkdir(join(repo, dirname(path)), { recursive: true }).then(() => writeFile(join(repo, path), text))
+  await run('init', '-q', '-b', 'main', repo)
+  await put('src/plans.ts', "export const plans = [\n  { name: 'Starter', price: 0, seats: 1 },\n  { name: 'Team', price: 20, seats: 10 },\n]\n")
+  await put('src/pricing/PlanCards.tsx', "import { plans } from '../plans'\n\nexport function PlanCards() {\n  return <div className=\"cards\">{plans.map((p) => <Card key={p.name} plan={p} />)}</div>\n}\n")
+  await run('add', '.'); await run('commit', '-q', '-m', 'Plan cards')
+  await run('switch', '-q', '-c', 'feat/pricing-page')
+  await put('src/pricing/Page.tsx', "import { PlanCards } from './PlanCards'\n\nexport function PricingPage() {\n  return <main><h1>Pricing</h1><PlanCards /></main>\n}\n")
+  await run('add', '.'); await run('commit', '-q', '-m', 'Pricing page shell')
+  await run('switch', '-q', '-c', 'feat/pricing-table', 'main')
+  await put('src/plans.ts', "export const plans = [\n  { name: 'Starter', price: 0, seats: 1, sso: false },\n  { name: 'Team', price: 20, seats: 10, sso: false },\n  { name: 'Business', price: 50, seats: 100, sso: true },\n]\n")
+  await run('commit', '-q', '-am', 'Business plan and the SSO limit')
+  await put('src/pricing/CompareTable.tsx', "import { plans } from '../plans'\n\n/** One row per limit, one column per plan; rows come from the plans config. */\nexport function CompareTable() {\n  return (\n    <table className=\"compare\">\n      <thead><tr><th />{plans.map((p) => <th key={p.name}>{p.name}</th>)}</tr></thead>\n      <tbody>\n        <tr><td>Seats</td>{plans.map((p) => <td key={p.name}>{p.seats}</td>)}</tr>\n        <tr><td>SSO</td>{plans.map((p) => <td key={p.name}>{p.sso ? 'Yes' : '—'}</td>)}</tr>\n      </tbody>\n    </table>\n  )\n}\n")
+  await run('add', '.'); await run('commit', '-q', '-m', 'Feature comparison table')
+  await run('switch', '-q', 'main')
+  return repo
+}
 
 // ---------- CI status (no real gh) ----------
 
@@ -102,6 +136,7 @@ export async function startEngine(scratch: string, fixedPort?: number): Promise<
   await writeFile(clock, String(T0))
   await writeFile(preload, CLOCK_PRELOAD)
   await seedCi(home)
+  const repo = await fixtureRepo(scratch)
   const gh = await fakeGh(scratch)
   const port = fixedPort ?? await freePort()
   if (port === 7477) throw new Error('7477 belongs to the installed app')
@@ -120,7 +155,7 @@ export async function startEngine(scratch: string, fixedPort?: number): Promise<
   for (let i = 0; i < 100; i++) {
     const r = await fetch(`${base}/api/health`).catch(() => null)
     if (r?.ok && (await r.json()).home === home) {
-      return { base, stop, setTime: (ms) => writeFile(clock, String(ms)), ghCalls: gh.log }
+      return { base, stop, setTime: (ms) => writeFile(clock, String(ms)), ghCalls: gh.log, repo }
     }
     if (proc.exitCode !== null) break
     await Bun.sleep(100)
@@ -136,13 +171,13 @@ const agent = (workspace: string, branch: string, session = 'shots', client = 'c
 
 export async function seed(engine: Engine): Promise<void> {
   let t = T0
-  const call = async (name: string, args: Args, actor?: ReturnType<typeof agent>, stepHours = 3) => {
+  const call = async (name: string, args: Args, actor?: ReturnType<typeof agent>, stepHours = 3, repoDir?: string) => {
     t += stepHours * HOUR
     await engine.setTime(t)
     const r = await fetch(`${engine.base}/api/tool/${name}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-tracker': '1', ...(actor ? { 'x-tracker-agent': '1' } : {}) },
-      body: JSON.stringify({ args, ...(actor ? { ctx: { actor } } : {}) }),
+      body: JSON.stringify({ args, ...(actor ? { ctx: { actor, ...(repoDir ? { repoDir } : {}) } } : {}) }),
     })
     const body = await r.json() as Record<string, unknown>
     if (!r.ok) throw new Error(`${name}: ${JSON.stringify(body)}`)
@@ -206,7 +241,7 @@ export async function seed(engine: Engine): Promise<void> {
     await call('save_comment', { issueId: step2, body: 'Mobile layout: the table scrolls sideways with the first column pinned.' }, web, 1)
     // A second attempt, from another tool, that pauses with a handoff comment (get_issue's handoff shows it).
     const codex = agent('web-app', 'feat/pricing-table', 'shots-codex', 'codex')
-    await call('save_comment', { issueId: step2, body: 'Done: rows from the plans config. Next: sticky header. Blocking: lint fails on PR #57.' }, codex, 1)
+    await call('save_comment', { issueId: step2, body: 'Done: rows from the plans config. Next: sticky header. Blocking: lint fails on PR #57.' }, codex, 1, engine.repo)
   }
   if (epicId) await call('save_comment', { issueId: epicId, body: 'Step 1 is live behind the pricing flag. Next: the comparison table.' }, web, 1)
 
@@ -297,6 +332,10 @@ async function main(): Promise<void> {
     const shots: Shot[] = [
       { file: 'home.png', route: '#/' },
       { file: 'issue.png', route: `#/issue/${byTitle('Step 2: Feature comparison table')}`, prepare: (page) => page.click('.attempts-head') },
+      {
+        file: 'changes.png', route: `#/issue/${byTitle('Step 2: Feature comparison table')}`,
+        prepare: async (page) => { await page.click('.changes-btn'); await page.waitForSelector('.diff-file') },
+      },
       { file: 'project.png', route: `#/project/${website}` },
       {
         file: 'command-bar.png', route: '#/',

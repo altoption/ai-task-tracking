@@ -158,6 +158,26 @@ Mac's activity log does (see [Picking up where a session stopped](/docs/guides/a
 
 ![An issue page: description, its two attempts (codex and claude-code) opened, comments from agents ending with a handoff, its parent, blocker and blocked issue, and its PR link with failing checks](../../../assets/screenshots/issue.png)
 
+### Reviewing an agent's changes
+
+When an agent worked on a branch, the issue header has **Changes** with a count (`2 files +17 −2`). It opens a panel
+over the properties, so the description and the comment box stay beside it:
+
+- the branch and its base (`origin`'s default branch, else `main`, else `master`), its commits, and each changed file
+  with its diff, from the point where the branch left the base;
+- the screenshots agents attached to comments on that branch (click one to enlarge it);
+- the other branches agents recorded on the issue, to switch to.
+
+The diff comes from the repo on this Mac. The app learns where each repo is from the agents' own calls and keeps
+that in `.tracker/repos.json` in the data folder, which never goes to the backup remote; it shows a repo after its
+agent's first write from it. Only committed work shows: changes still uncommitted in the agent's working copy don't.
+When the repo isn't on this Mac (or the branch is gone) and the issue links a GitHub PR, the panel shows the PR's
+diff instead, fetched in the background with your `gh`, and says so. Esc closes the panel.
+
+Approve or send work back as before, with a comment.
+
+![The Changes panel beside an issue: the branch feat/pricing-table against main, two commits, and the diff of each changed file](../../../assets/screenshots/changes.png)
+
 | Key | Action |
 |---|---|
 | `c` | new issue |

@@ -28,8 +28,8 @@ app uses. It is plain text and a git repo.
 │       ├── project.md          name, key, status, milestones; body = description
 │       ├── issues/<ID>.md      one file per issue, e.g. issues/WEB-12.md
 │       ├── docs/<slug>.md      project documents (front matter: title)
-│       └── files/<name>        attachments, linked from issue text as ../files/<name>
-└── .tracker/                   this Mac's caches (activity log, CI status); git-ignored, never import into it
+│       └── files/<name>        attachments, linked from issue text as ../files/<name> (agents' save_comment attachments land here)
+└── .tracker/                   this Mac's caches (activity log, CI status, agent repo folders); git-ignored, never import into it
 ```
 
 - The project's **slug** is its folder name: lowercase letters, digits and dashes (the app makes it from the name,

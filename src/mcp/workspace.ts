@@ -14,7 +14,7 @@ function git(cwd: string, ...args: string[]): string | undefined {
 }
 
 /** The workspace per folder (it never changes); the branch is not cached, since a session can switch branches. */
-const cache = new Map<string, { workspace: string; inGit: boolean }>()
+const cache = new Map<string, { workspace: string; inGit: boolean; repoDir?: string }>()
 
 /**
  * Workspace = main worktree's folder name (a linked worktree maps to its main repo), else the cwd's basename.
@@ -26,13 +26,18 @@ export function resolveWorkspace(cwd: string): { workspace: string; branch?: str
     const top = git(cwd, 'rev-parse', '--show-toplevel')
     // Main worktree = parent of a `.git` common dir; a submodule's common dir is .git/modules/x, so use its toplevel.
     const common = top ? git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir') : undefined
-    hit = top
-      ? { workspace: basename(common && basename(common) === '.git' ? dirname(common) : top), inGit: true }
-      : { workspace: basename(cwd), inGit: false }
+    const repoDir = top ? (common && basename(common) === '.git' ? dirname(common) : top) : undefined
+    hit = repoDir ? { workspace: basename(repoDir), inGit: true, repoDir } : { workspace: basename(cwd), inGit: false }
     cache.set(cwd, hit)
   }
   const branch = hit.inGit ? git(cwd, 'branch', '--show-current') : undefined
   return branch ? { workspace: hit.workspace, branch } : { workspace: hit.workspace }
+}
+
+/** The main worktree's folder (absolute) for a cwd inside a git repo: where the Changes panel diffs branches. */
+export function repoDirOf(cwd: string): string | undefined {
+  resolveWorkspace(cwd)
+  return cache.get(cwd)?.repoDir
 }
 
 /** System places an MCP client may start us in that are not anyone's project. */
@@ -42,6 +47,18 @@ const NOT_PROJECT = /^\/(Applications|System|Library|usr|bin|sbin|opt)(\/|$)|\.a
 export function isProjectDir(cwd: string, userHome: string): boolean {
   if (cwd === '/' || cwd === userHome || userHome.startsWith(`${cwd}/`)) return false
   return !NOT_PROJECT.test(cwd)
+}
+
+/**
+ * Folders save_comment attachments may be read from: the session's project (its whole repo when the repo root is
+ * itself a project folder) and the temp folders. Every folder is checked as it goes into the list, so a session in
+ * `/` or $HOME, or a repo rooted at $HOME (dotfiles), never opens the home folder.
+ */
+export function attachmentRoots(sessionDir: string | undefined, userHome: string, temp: string[], repoOf: (d: string) => string | undefined = repoDirOf): string[] {
+  const project = (p: string | undefined) => (p && isProjectDir(p, userHome) ? p : undefined)
+  const dir = project(sessionDir)
+  const top = dir ? project(repoOf(dir)) ?? dir : undefined
+  return [...(top ? [top] : []), ...temp]
 }
 
 const isDir = (p: string) => { try { return statSync(p).isDirectory() } catch { return false } }

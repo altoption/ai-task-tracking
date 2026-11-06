@@ -157,6 +157,7 @@ Add a comment to an issue: findings, decisions, PR links (GitHub PR/commit URLs 
 |---|---|---|---|
 | `issueId` | string | yes | Issue id, e.g. "ENG-27". |
 | `body` | string | yes | Markdown text. |
+| `attachments` | { path, alt? }[] (at most 4) |  | Up to 4 files shown with the comment. For UI changes, attach before and after screenshots. |
 
 ## toggle_task
 
