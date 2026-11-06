@@ -49,6 +49,18 @@ export function isProjectDir(cwd: string, userHome: string): boolean {
   return !NOT_PROJECT.test(cwd)
 }
 
+/**
+ * Folders save_comment attachments may be read from: the session's project (its whole repo when the repo root is
+ * itself a project folder) and the temp folders. Every folder is checked as it goes into the list, so a session in
+ * `/` or $HOME, or a repo rooted at $HOME (dotfiles), never opens the home folder.
+ */
+export function attachmentRoots(sessionDir: string | undefined, userHome: string, temp: string[], repoOf: (d: string) => string | undefined = repoDirOf): string[] {
+  const project = (p: string | undefined) => (p && isProjectDir(p, userHome) ? p : undefined)
+  const dir = project(sessionDir)
+  const top = dir ? project(repoOf(dir)) ?? dir : undefined
+  return [...(top ? [top] : []), ...temp]
+}
+
 const isDir = (p: string) => { try { return statSync(p).isDirectory() } catch { return false } }
 
 /**
