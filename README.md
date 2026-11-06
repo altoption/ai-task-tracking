@@ -92,6 +92,10 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
 - **Hidden projects.** Hide a project you don't want to see (Settings ▸ Projects, or Hide project on its page):
   it leaves the sidebar, lists, Home, search, the board and the menu bar. Its links still open it, with Unhide, and
   agents see no change. See [Hidden projects](site/src/content/docs/use/daily-use.md#hidden-projects).
+- **Changes panel.** When an agent worked on a branch, **Changes** in the issue header shows that branch's diff
+  against its base (commits, files, a diff per file) and the screenshots the agent attached, next to the comment box.
+  It reads the repo on this Mac; when the repo isn't here, it shows the linked GitHub PR's diff (with your `gh`).
+  See [Reviewing an agent's changes](site/src/content/docs/use/daily-use.md#reviewing-an-agents-changes).
 - **Attempts and handoff.** The issue page counts the agent sessions that worked on an issue ("3 attempts · 2
   tools"); when an agent opens In Progress work, `get_issue` leads with where the last session stopped.
 - **Settings**: a page in the main window (the gear in the sidebar, or ⌘, in the app) with tabs for General, Appearance,
