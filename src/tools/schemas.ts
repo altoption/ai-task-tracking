@@ -140,7 +140,13 @@ const defs = {
   save_comment: {
     title: 'Add comment',
     description: 'Add a comment to an issue: findings, decisions, PR links (GitHub PR/commit URLs are also added to its links). When you also change the status, pass comment to save_issue instead. Example: save_comment({ issueId: "ENG-27", body: "Root cause: stale cache." })',
-    input: z.object({ issueId, body: z.string().min(1).describe('Markdown text.') }),
+    input: z.object({
+      issueId, body: z.string().min(1).describe('Markdown text.'),
+      attachments: z.array(z.object({
+        path: z.string().min(1).describe('Local file: png, jpg, gif, webp or pdf, at most 5 MB, inside your project or the temp folder.'),
+        alt: z.string().optional().describe('Caption, e.g. "before" / "after".'),
+      })).max(4).optional().describe('Up to 4 files shown with the comment. For UI changes, attach before and after screenshots.'),
+    }),
   },
   toggle_task: {
     title: 'Tick checklist item',

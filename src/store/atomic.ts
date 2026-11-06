@@ -31,13 +31,13 @@ export async function removeStaleTemps(dir: string, minAgeMs: number): Promise<s
 
 const tempFor = (path: string) => join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`)
 
-async function writeTemp(tmp: string, data: string, mode?: number): Promise<void> {
+async function writeTemp(tmp: string, data: string | Uint8Array, mode?: number): Promise<void> {
   // With a mode, the temp file is created with it (the umask can only narrow it) and then set exactly,
   // so the file never exists with wider permissions than asked for.
   const fh = await open(tmp, 'wx', mode ?? 0o666)
   try {
     if (mode !== undefined) await fh.chmod(mode)
-    await fh.writeFile(data, 'utf8')
+    await fh.writeFile(data, typeof data === 'string' ? 'utf8' : undefined)
     await fh.sync()
   } finally {
     await fh.close()
@@ -45,7 +45,7 @@ async function writeTemp(tmp: string, data: string, mode?: number): Promise<void
 }
 
 /** Write `data` to `path` atomically: temp file in the same dir, fsync, rename. `mode`: the file's permissions (default: umask). */
-export async function atomicWrite(path: string, data: string, mode?: number): Promise<void> {
+export async function atomicWrite(path: string, data: string | Uint8Array, mode?: number): Promise<void> {
   const tmp = tempFor(path)
   try {
     await writeTemp(tmp, data, mode)
@@ -60,7 +60,7 @@ export async function atomicWrite(path: string, data: string, mode?: number): Pr
  * Create `path` with `data` atomically and exclusively: temp file, fsync, hard-link into place.
  * Fails with code EEXIST (leaving the existing file untouched) if `path` already exists.
  */
-export async function atomicCreate(path: string, data: string): Promise<void> {
+export async function atomicCreate(path: string, data: string | Uint8Array): Promise<void> {
   const tmp = tempFor(path)
   try {
     await writeTemp(tmp, data)

@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import { storeAttachments } from './attachments'
 import type { Actor, Filter, Issue, Project, View } from '../model'
 import { ancestors, filterIssues, home, progress, search, stalledOf, subtree, writerWorkspaces, type Tree } from '../engine/queries'
 import type { Store } from '../engine/store'
@@ -18,7 +19,8 @@ import { type ToolArgs, type ToolName, toolSchemas } from './schemas'
 export { ToolError } from './rules'
 
 /** Who is calling. The MCP proxy fills workspace/branch/session/client for agents; the UI passes { actor: 'you' }. */
-export interface ToolCtx { actor: Actor }
+/** `uploads`: the bytes of save_comment attachments, read by the MCP proxy (src/tools/attachments.ts). */
+export interface ToolCtx { actor: Actor; uploads?: unknown }
 
 type Args<K extends ToolName> = ToolArgs<K>
 type Handler = (s: Store, args: any, ctx: ToolCtx) => Promise<unknown> | unknown
@@ -173,9 +175,11 @@ const handlers: Record<string, Handler> = {
     }
   },
 
-  async save_comment(s, a: Args<'save_comment'>, { actor }) {
+  async save_comment(s, a: Args<'save_comment'>, { actor, uploads }) {
     const issue = mustIssue(s, a.issueId)
-    const entry = await s.addComment(issue.id, a.body, actor)
+    let md = ''
+    try { md = await storeAttachments(s.root, issue, a.attachments ?? [], uploads) } catch (e) { throw new ToolError(e instanceof Error ? e.message : String(e)) }
+    const entry = await s.addComment(issue.id, md ? `${a.body}\n\n${md}` : a.body, actor)
     noteExplanation(s, issue.id, actor.session)
     const found = extractLinks(a.body)
     if (found.length) {
