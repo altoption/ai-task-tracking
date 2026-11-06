@@ -9,7 +9,7 @@ import { agentTools, buildInstructions, toolResult, type ToolResult } from './su
 import { homedir, tmpdir } from 'node:os'
 import type { Actor } from '../model'
 import { readUploads, type Upload } from '../tools/attachments'
-import { findClient, isProjectDir, repoDirOf, resolveSessionWorkspace, resolveWorkspace } from './workspace'
+import { attachmentRoots, findClient, repoDirOf, resolveSessionWorkspace, resolveWorkspace } from './workspace'
 export const NOT_RUNNING = "AI Task Tracking isn't running — open it from the menu bar (or run: aitt serve)."
 const READ_TIMEOUT_MS = 5000
 const WRITE_TIMEOUT_MS = 30_000
@@ -41,11 +41,8 @@ export async function runProxy(opts: { port: number; home: string; timeouts?: { 
   const uploads = async (name: string, args: unknown): Promise<{ uploads?: Upload[] }> => {
     const list = name === 'save_comment' && args && typeof args === 'object' ? (args as { attachments?: unknown }).attachments : undefined
     if (!Array.isArray(list) || !list.length) return {}
-    // Allowed: the session's project (its whole repo) and the temp folders. No project folder (a desktop app started
-    // in / or $HOME): only the temp folders, never the folder it started in.
-    const found = (await where()).dir
-    const dir = found && isProjectDir(found, process.env.HOME || homedir()) ? found : undefined
-    const roots = [...(dir ? [repoDirOf(dir) ?? dir] : []), tmpdir(), '/tmp']
+    const dir = (await where()).dir
+    const roots = attachmentRoots(dir, process.env.HOME || homedir(), [tmpdir(), '/tmp'])
     return { uploads: await readUploads(list, dir ?? tmpdir(), roots) }
   }
   const base = `http://127.0.0.1:${opts.port}`

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ATTACH_MAX_BYTES, readUploads, storeAttachments } from '../../src/tools/attachments'
+import { attachmentRoots } from '../../src/mcp/workspace'
 import { Store } from '../../src/engine/store'
 import { startServer, type RunningServer } from '../../src/server/http'
 import { miniCopy } from '../engine/helpers'
@@ -48,6 +49,20 @@ describe('readUploads (proxy side)', () => {
     const list = [null, 7, { path: '' }, ...Array.from({ length: 6 }, () => ({ path: 'shots/before.png' }))]
     expect((await readUploads(list, project, [project])).length).toBeLessThanOrEqual(4)
     expect(await readUploads('nope', project, [project])).toEqual([])
+  })
+})
+
+describe('attachmentRoots', () => {
+  const home = '/Users/sam'
+  const T = ['/tmp']
+  test('the repo root of a project folder, plus the temp folders', () => {
+    expect(attachmentRoots('/Users/sam/dev/shop/sub', home, T, () => '/Users/sam/dev/shop')).toEqual(['/Users/sam/dev/shop', '/tmp'])
+  })
+  test('a repo rooted at the home folder opens only the session folder', () => {
+    expect(attachmentRoots('/Users/sam/dev/shop', home, T, () => '/Users/sam')).toEqual(['/Users/sam/dev/shop', '/tmp'])
+  })
+  test('no project folder (/, $HOME, an app bundle, none): temp folders only', () => {
+    for (const d of ['/', home, '/Applications/Foo.app/Contents', undefined]) expect(attachmentRoots(d, home, T, () => undefined)).toEqual(['/tmp'])
   })
 })
 
