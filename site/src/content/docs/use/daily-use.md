@@ -315,3 +315,5 @@ ci:
 Agents print issues as `[ATT-1 Title](http://127.0.0.1:7477/#/issue/ATT-1) · aitt://issue/ATT-1`. The `aitt://`
 link opens the app. From a terminal, `aitt open ATT-1` (or a project slug, or either link) does the same, falling
 back to the browser when the app isn't installed.
+
+In a browser, an issue's tab is titled `ATT-1 · Title`, so the id stays readable when many tabs squeeze the titles.
