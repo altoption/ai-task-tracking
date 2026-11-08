@@ -300,6 +300,14 @@ export function IssuePage({ id }: { id: string }) {
   const keys = useMemo(() => new Set([...state.projects.map((p) => p.key), ...Object.keys(state.config?.nextNumber ?? {})]), [state.projects, state.config])
   const ctx = useMemo<MdContext>(() => ({ project: detail?.project ?? '', keys }), [detail?.project, keys])
 
+  // Tab title starts with the issue id, so narrow tabs (Chrome cuts from the end) still say which issue.
+  const title = detail?.title
+  useEffect(() => {
+    const before = document.title
+    document.title = title ? `${id} · ${title}` : id
+    return () => { document.title = before }
+  }, [id, title])
+
   const save = useCallback(async (args: Record<string, unknown>, otherId?: string) => {
     const out = await callTool<Partial<IssueDetail>>('save_issue', { id: otherId ?? id, ...args })
     if (!otherId) apply(out)
