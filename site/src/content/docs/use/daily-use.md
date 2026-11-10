@@ -117,6 +117,14 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
   **View ▸ Toggle Sidebar** in the app. Collapsed, each icon shows its name when you point at it; projects show their
   initials. The sidebar stays the way you left it, and collapses on its own in a narrow window.
 
+### Changing several issues at once
+
+In a list, point at a row and tick the box at its left edge to select it. Shift-click another box to select every row
+in between, and ⌘A selects all the rows shown. A bar above the list says how many are selected and changes them all
+in one step: **Status**, **Priority**, **Add label**, **Remove label** (labels some of them have) and **Move to
+project**. Moving them to Done, Canceled or Duplicate asks for an optional reason, added as a comment on each. If any
+one can't be changed, none are, and the bar says why. **Clear** or Esc clears the selection. Boards don't select yet.
+
 The app adds four saved views to your data folder the first time the engine starts, on a new folder or an existing one:
 
 | View | Shows | Laid out as |
