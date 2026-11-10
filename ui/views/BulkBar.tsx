@@ -1,0 +1,71 @@
+import { useMemo, useState } from 'react'
+import type { IssueSummary } from '../../src/model'
+import { asksReason, bulkItems, type BulkPatch } from '../bulk'
+import { callTool, listedProjects, useTracker } from '../client'
+import { PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
+import { Picker, type PickOption } from '../components/Picker'
+import { labelOptions } from '../issuePage'
+
+/** Shown above the list while rows are selected: change all of them in one save_issues call (all or nothing). */
+export function BulkBar({ ids, byId, onDone, onClear }: {
+  ids: string[]
+  byId: ReadonlyMap<string, IssueSummary>
+  onDone: () => void
+  onClear: () => void
+}) {
+  const state = useTracker()
+  const { config } = state
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [closing, setClosing] = useState<string | null>(null)
+  const [reason, setReason] = useState('')
+
+  const run = async (patch: BulkPatch, why?: string) => {
+    setBusy(true); setError('')
+    try {
+      await callTool('save_issues', { issues: bulkItems(ids, patch, why) })
+      setClosing(null); setReason('')
+      onDone()
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+
+  const statusOpts: PickOption[] = (config?.statuses ?? []).map((s) => ({ value: s.name, label: s.name, group: null, icon: <StatusIcon status={s.name} config={config} /> }))
+  const priorityOpts: PickOption[] = PRIORITIES.map((p, n) => ({ value: String(n), label: p, group: null, icon: <PriorityIcon priority={n} /> }))
+  const addLabelOpts = useMemo(() => labelOptions(state.labels), [state.labels])
+  // Remove offers only labels some selected issue has.
+  const removeLabelOpts = useMemo(() => {
+    const on = new Set(ids.flatMap((id) => byId.get(id)?.labels ?? []))
+    return addLabelOpts.filter((o) => on.has(o.value))
+  }, [ids, byId, addLabelOpts])
+  const projectOpts: PickOption[] = listedProjects(state.projects).map((p) => ({ value: p.slug, label: p.name, group: null, color: p.color }))
+
+  const pickStatus = (name: string) => {
+    if (asksReason(config?.statuses.find((s) => s.name === name))) { setClosing(name); setReason('') }
+    else void run({ state: name })
+  }
+  const n = ids.length
+  return (
+    <div className="bulk-bar" role="toolbar" aria-label="Bulk edit">
+      <span className="bulk-count">{n} selected</span>
+      {closing ? (
+        <form className="bulk-reason" onSubmit={(e) => { e.preventDefault(); void run({ state: closing }, reason) }}>
+          <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional, added as a comment)" aria-label="Reason"
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setClosing(null) } }} />
+          <button type="submit" className="primary small-btn" disabled={busy}>Move {n} to {closing}</button>
+          <button type="button" className="ghost-btn" onClick={() => setClosing(null)}>Back</button>
+        </form>
+      ) : (
+        <>
+          <Picker label="Status" options={statusOpts} selected={[]} onPick={pickStatus} trigger={<span>Status</span>} />
+          <Picker label="Priority" options={priorityOpts} selected={[]} onPick={(v) => void run({ priority: Number(v) })} trigger={<span>Priority</span>} />
+          <Picker label="Add label" options={addLabelOpts} selected={[]} onPick={(v) => void run({ addLabels: [v] })} trigger={<span>Add label</span>} />
+          {removeLabelOpts.length > 0 && <Picker label="Remove label" options={removeLabelOpts} selected={[]} onPick={(v) => void run({ removeLabels: [v] })} trigger={<span>Remove label</span>} />}
+          <Picker label="Project" options={projectOpts} selected={[]} onPick={(v) => void run({ project: v })} trigger={<span>Move to project</span>} />
+        </>
+      )}
+      {busy && <span className="muted small">Saving…</span>}
+      <button type="button" className="ghost-btn bulk-clear" onClick={onClear}>Clear</button>
+      {error && <div className="form-error bulk-error" role="alert">{error}</div>}
+    </div>
+  )
+}

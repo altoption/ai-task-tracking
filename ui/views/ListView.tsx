@@ -1,14 +1,17 @@
 /**
  * The list: collapsible groups, rows virtualized with @tanstack/react-virtual so 10k issues
  * scroll smoothly, sub-issues indented under their parent with out-of-group ancestors dimmed for context.
+ * Rows can be selected (checkbox, shift-click for a range, ⌘A, Esc clears) and changed together in the bulk bar.
  */
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Config, IssueSummary, ViewDisplay } from '../../src/model'
 import { ConceptIcon, PriorityIcon, ProgressPill, StatusIcon, Icon } from '../components/icons'
 import { href, navigate } from '../router'
 import { listRows, type ListRow, type ViewGroup } from '../viewModel'
 import { PropertyCells, type CellCtx } from './IssueCells'
+import { BulkBar } from './BulkBar'
+import { clickSelect, visibleSelection } from '../bulk'
 
 type Item = { kind: 'group'; group: ViewGroup; collapsed: boolean } | ({ kind: 'row' } & ListRow)
 const ROW = 40
@@ -46,9 +49,36 @@ export function ListView({ groups, display, byId, config, cells }: {
   const props = useMemo(() => new Set(display.properties), [display.properties])
   const toggle = (key: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
 
+  // Selection: ids of the visible rows in order (group headers skipped), the selected ones, and the last clicked row.
+  const rowIds = useMemo(() => items.flatMap((it) => (it.kind === 'row' ? [it.issue.id] : [])), [items])
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const anchor = useRef<number | null>(null)
+  const picked = useMemo(() => visibleSelection(selected, rowIds), [selected, rowIds])
+  const clear = useCallback(() => { setSelected(new Set()); anchor.current = null }, [])
+  const check = (rowIndex: number, shift: boolean) => {
+    const from = anchor.current // read now: the updater runs later, after the anchor moves
+    setSelected((s) => clickSelect(s, rowIds, rowIndex, from, shift))
+    anchor.current = rowIndex
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
+      if (e.key === 'Escape' && picked.length) { clear() }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && rowIds.length) { e.preventDefault(); setSelected(new Set(rowIds)) }
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [picked.length, rowIds, clear])
+  let rowIndex = -1
+  const rowIndexAt = new Map<number, number>()
+  items.forEach((it, k) => { if (it.kind === 'row') rowIndexAt.set(k, ++rowIndex) })
+
   if (!items.length) return <div className="view-empty muted">No issues match this view.</div>
   return (
-    <div className="view-scroll" ref={scroller} role="list">
+    <>
+    {picked.length > 0 && <BulkBar ids={picked} byId={byId} onDone={clear} onClear={clear} />}
+    <div className={`view-scroll${picked.length ? ' selecting' : ''}`} ref={scroller} role="list">
       <div style={{ height: v.getTotalSize(), position: 'relative' }}>
         {v.getVirtualItems().map((vi) => {
           const it = items[vi.index]!
@@ -65,8 +95,10 @@ export function ListView({ groups, display, byId, config, cells }: {
             )
           }
           const i = it.issue
-          return (
-            <a key={`r:${i.id}:${vi.index}`} className={`list-row${it.context ? ' context' : ''}`} style={{ ...style, paddingLeft: 20 + it.depth * 26 }} href={href({ name: 'issue', id: i.id })}
+          const ri = rowIndexAt.get(vi.index)!
+          const on = selected.has(i.id)
+          return [
+            <a key={`r:${i.id}:${vi.index}`} className={`list-row${it.context ? ' context' : ''}${on ? ' selected' : ''}`} style={{ ...style, paddingLeft: 20 + it.depth * 26 }} href={href({ name: 'issue', id: i.id })}
               role="listitem" onClick={(e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate({ name: 'issue', id: i.id }) } }}>
               {props.has('priority') && <PriorityIcon priority={i.priority} />}
               {props.has('id') && <span className="id">{i.id}</span>}
@@ -74,10 +106,13 @@ export function ListView({ groups, display, byId, config, cells }: {
               <span className="title">{i.title}</span>
               <ProgressPill done={i.progress.done} total={i.progress.total} config={config} />
               <span className="cells"><PropertyCells issue={i} props={props} ctx={cells} /></span>
-            </a>
-          )
+            </a>,
+            <input key={`c:${i.id}:${vi.index}`} type="checkbox" className="row-check" style={{ top: vi.start + (ROW - 14) / 2 }} checked={on}
+              aria-label={`Select ${i.id}`} onChange={() => {}} onClick={(e) => check(ri, e.shiftKey)} />,
+          ]
         })}
       </div>
     </div>
+    </>
   )
 }

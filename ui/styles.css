@@ -877,3 +877,15 @@ span.tree-toggle { transform: none; }
   .settings-row-text { flex-basis: 200px; }
   .settings-themes { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
 }
+
+/* ---------- bulk edit (list views) ---------- */
+.row-check { position: absolute; left: 3px; width: 14px; height: 14px; margin: 0; opacity: 0; accent-color: var(--accent); cursor: pointer; z-index: 1; }
+.list-row:hover + .row-check, .row-check:hover, .row-check:focus-visible, .row-check:checked, .selecting .row-check { opacity: 1; }
+.list-row.selected { background: var(--hover); }
+.bulk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.bulk-count { font-weight: 600; margin-right: 6px; }
+.bulk-bar .prop-button { border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; }
+.bulk-reason { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.bulk-reason input { flex: 1; min-width: 160px; max-width: 420px; padding: 3px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
+.bulk-clear { margin-left: auto; }
+.bulk-error { flex-basis: 100%; white-space: pre-wrap; }
