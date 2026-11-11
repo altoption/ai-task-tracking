@@ -93,7 +93,8 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   it leaves the sidebar, lists, Home, search, the board and the menu bar. Its links still open it, with Unhide, and
   agents see no change. See [Hidden projects](site/src/content/docs/use/daily-use.md#hidden-projects).
 - **Changes panel.** When an agent worked on a branch, **Changes** in the issue header shows that branch's diff
-  against its base (commits, files, a diff per file) and the screenshots the agent attached, next to the comment box.
+  against its base (commits, the files by folder, a numbered diff per file) and the screenshots the agent attached,
+  next to the comment box. On an epic it covers each sub-issue's branch too.
   It reads the repo on this Mac; when the repo isn't here, it shows the linked GitHub PR's diff (with your `gh`).
   See [Reviewing an agent's changes](site/src/content/docs/use/daily-use.md#reviewing-an-agents-changes).
 - **Attempts and handoff.** The issue page counts the agent sessions that worked on an issue ("3 attempts · 2

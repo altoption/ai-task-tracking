@@ -170,6 +170,11 @@ Click the ID at the top of an issue page to copy it.
 A sub-issue's page starts with where it sits in its parent, such as "2 of 3 in Epic: New pricing page" with the
 parent's progress ring, and links to the sub-issues before and after it.
 
+An issue with sub-issues (an epic) shows them under a bar of how many sit in each status, read from done to not
+started. Each row has what you'd otherwise open the sub-issue for: the open issues blocking it ("blocked by
+WEBSI-3"), its PR's checks, and when it last changed. **Next** marks the first one that hasn't started and has
+nothing open blocking it.
+
 An issue page has the description (checklists included), sub-issues, its attempts ("3 attempts · 2 tools": one per
 agent session, which opens into each session's tool, repo, branch, writes and the status it left the issue in), the
 activity with each agent's repo and branch, and the properties and relations on the right. Attempts start when this
@@ -182,10 +187,19 @@ Mac's activity log does (see [Picking up where a session stopped](/docs/guides/a
 When an agent worked on a branch, the issue header has **Changes** with a count (`2 files +17 −2`). It opens a panel
 over the properties, so the description and the comment box stay beside it:
 
-- the branch and its base (`origin`'s default branch, else `main`, else `master`), its commits, and each changed file
-  with its diff, from the point where the branch left the base;
-- the screenshots agents attached to comments on that branch (click one to enlarge it);
-- the other branches agents recorded on the issue, to switch to.
+- the branch, as tabs when agents recorded several on the issue, and its base (`origin`'s default branch, else
+  `main`, else `master`);
+- its commits;
+- the changed files by folder, each marked added (A), modified (M), deleted (D) or renamed (R) with its line
+  counts; click one to jump to its diff, or use **Collapse all**;
+- each file's diff with old and new line numbers, from the point where the branch left the base. A file's header
+  stays in view while you scroll its lines;
+- the screenshots agents attached to comments on that branch (click one to enlarge it).
+
+On an issue with sub-issues, **Changes** counts its own branch and theirs (`3 files +22 −2 · 2 branches`), and the
+panel starts with one row per branch, naming the issue and sub-issues that worked on it. A diff belongs to a
+branch, not to a step: sub-issues done on the same branch share one row. Click a row to read that branch without
+leaving the epic.
 
 The diff comes from the repo on this Mac. The app learns where each repo is from the agents' own calls and keeps
 that in `.tracker/repos.json` in the data folder, which never goes to the backup remote; it shows a repo after its
@@ -195,7 +209,7 @@ diff instead, fetched in the background with your `gh`, and says so. Esc closes 
 
 Approve or send work back as before, with a comment.
 
-![The Changes panel beside an issue: the branch feat/pricing-table against main, two commits, and the diff of each changed file](../../../assets/screenshots/changes.png)
+![The Changes panel beside an issue: tabs for its two branches, two commits, the changed files by folder, and each file's diff with line numbers](../../../assets/screenshots/changes.png)
 
 | Key | Action |
 |---|---|
