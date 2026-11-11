@@ -771,7 +771,7 @@ span.tree-toggle { transform: none; }
 
 /* list rows */
 .list-group {
-  display: flex; align-items: center; gap: 8px; padding: 0 16px 0 10px; background: var(--group-bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; padding: 0 16px 0 17px; background: var(--group-bg); border-bottom: 1px solid var(--border);
   font-weight: 500;
 }
 .list-group .count { color: var(--muted); font-weight: 400; }
@@ -987,10 +987,21 @@ span.tree-toggle { transform: none; }
 .row-check { position: absolute; left: 3px; width: 14px; height: 14px; margin: 0; opacity: 0; accent-color: var(--accent); cursor: pointer; z-index: 1; }
 .list-row:hover + .row-check, .row-check:hover, .row-check:focus-visible, .row-check:checked, .selecting .row-check { opacity: 1; }
 .list-row.selected { background: var(--hover); }
-.bulk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.group-check { top: 13px; }
+.list-group:hover .group-check { opacity: 1; }
+/* The bar floats over the foot of the list: ticking a box never moves the rows under the pointer. */
+.view-screen { position: relative; }
+.selecting { padding-bottom: 72px; }
+.bulk-bar {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 15; width: max-content; max-width: calc(100% - 32px);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 8px 7px 14px;
+  background: var(--card); border: 1px solid var(--border-focus); border-radius: 10px; box-shadow: 0 12px 32px var(--shadow);
+}
+.bulk-bar .menu { top: auto; bottom: calc(100% + 8px); }
+.bulk-kids { color: var(--link); border-color: var(--border); }
 .bulk-count { font-weight: 600; margin-right: 6px; }
 .bulk-bar .prop-button { border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; }
 .bulk-reason { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .bulk-reason input { flex: 1; min-width: 160px; max-width: 420px; padding: 3px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
-.bulk-clear { margin-left: auto; }
+.bulk-clear { margin-left: 6px; }
 .bulk-error { flex-basis: 100%; white-space: pre-wrap; }

@@ -120,10 +120,15 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
 ### Changing several issues at once
 
 In a list, point at a row and tick the box at its left edge to select it. Shift-click another box to select every row
-in between, and ⌘A selects all the rows shown. A bar above the list says how many are selected and changes them all
-in one step: **Status**, **Priority**, **Add label**, **Remove label** (labels some of them have) and **Move to
-project**. Moving them to Done, Canceled or Duplicate asks for an optional reason, added as a comment on each. If any
-one can't be changed, none are, and the bar says why. **Clear** or Esc clears the selection. Boards don't select yet.
+in between, tick the box on a group's heading to take the whole group, and ⌘A selects every row. When a selected
+issue has sub-issues that aren't selected, the bar offers them (**+ 3 sub-issues**); ⌥-click a box to take or drop
+an issue together with its sub-issues.
+
+A bar over the foot of the list says how many are selected and changes them all in one step: **Status**,
+**Priority**, **Add label**, **Remove label** (labels some of them have) and **Move to project**. Moving them to
+Done, Canceled or Duplicate asks for an optional reason, added as a comment on each. If any one can't be changed,
+none are, and the bar says why. The selection stays after a change, so you can make another; **Clear** or Esc
+clears it. Boards don't select yet.
 
 The app adds four saved views to your data folder the first time the engine starts, on a new folder or an existing one:
 

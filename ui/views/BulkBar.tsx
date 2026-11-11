@@ -6,12 +6,18 @@ import { PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
 import { Picker, type PickOption } from '../components/Picker'
 import { labelOptions } from '../issuePage'
 
-/** Shown above the list while rows are selected: change all of them in one save_issues call (all or nothing). */
-export function BulkBar({ ids, byId, onDone, onClear }: {
+/**
+ * Floats over the foot of the list while rows are selected (so ticking a box never moves the rows): change all of
+ * them in one save_issues call (all or nothing). The selection stays after a change, for the next one; rows a change
+ * moves out of the view drop out of it by themselves.
+ */
+export function BulkBar({ ids, byId, onClear, kids, onAddKids }: {
   ids: string[]
   byId: ReadonlyMap<string, IssueSummary>
-  onDone: () => void
   onClear: () => void
+  /** Sub-issues of the selected rows that aren't selected, and the way to take them. */
+  kids: number
+  onAddKids: () => void
 }) {
   const state = useTracker()
   const { config } = state
@@ -25,7 +31,6 @@ export function BulkBar({ ids, byId, onDone, onClear }: {
     try {
       await callTool('save_issues', { issues: bulkItems(ids, patch, why) })
       setClosing(null); setReason('')
-      onDone()
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
 
@@ -47,6 +52,7 @@ export function BulkBar({ ids, byId, onDone, onClear }: {
   return (
     <div className="bulk-bar" role="toolbar" aria-label="Bulk edit">
       <span className="bulk-count">{n} selected</span>
+      {kids > 0 && !closing && <button type="button" className="ghost-btn bulk-kids" onClick={onAddKids} title="Also select the sub-issues of the selected issues">+ {kids} sub-issue{kids === 1 ? '' : 's'}</button>}
       {closing ? (
         <form className="bulk-reason" onSubmit={(e) => { e.preventDefault(); void run({ state: closing }, reason) }}>
           <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional, added as a comment)" aria-label="Reason"
