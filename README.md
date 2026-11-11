@@ -84,6 +84,15 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   Priority, Shipped This Week), yours to change or delete. Keys: `c` new issue, `/` or ⌘K search, `g h` Home, `g i` all issues, ⌘[ / ⌘] back and
   forward (also the ← → buttons at the top of the sidebar, beside ⌂ Home), ⌘\ collapses the sidebar to icons and
   back.
+- **Projects, epics and sub-issues.** A project page is one header, a summary line (description, a chip per
+  milestone that filters the list, documents) and its issues. Lists draw sub-issues as a tree under their parent, with
+  a chevron to fold it; an epic's page shows how many steps sit in each status, what blocks each one and which is
+  next, and a step's page says where it sits ("2 of 3 in Epic: New pricing page") with the steps before and after.
+
+  ![A project page: the header, the summary line with a milestone chip, and its issues grouped by status, a step nested under its epic](site/src/assets/screenshots/project.png)
+- **Changing several issues at once.** Tick rows in a list (shift-click for a range, a group's box for the group,
+  ⌘A for all; a selected epic offers its sub-issues) and set their status, priority, labels or project in one step.
+  See [Changing several issues at once](site/src/content/docs/use/daily-use.md#changing-several-issues-at-once).
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
   a badge on the issue page, a dot on rows, and failing checks in Needs you. Without `gh` nothing shows.
 - **Themes.** Graphite (the default), Dark, Light, Match macOS, Midnight, Plum, Paper and High contrast, or your own theme file
@@ -97,6 +106,8 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   next to the comment box. On an epic it covers each sub-issue's branch too.
   It reads the repo on this Mac; when the repo isn't here, it shows the linked GitHub PR's diff (with your `gh`).
   See [Reviewing an agent's changes](site/src/content/docs/use/daily-use.md#reviewing-an-agents-changes).
+
+  ![The Changes panel beside an issue: tabs for its two branches, two commits, the changed files by folder, and each file's diff with line numbers](site/src/assets/screenshots/changes.png)
 - **Attempts and handoff.** The issue page counts the agent sessions that worked on an issue ("3 attempts · 2
   tools"); when an agent opens In Progress work, `get_issue` leads with where the last session stopped.
 - **Settings**: a page in the main window (the gear in the sidebar, or ⌘, in the app) with tabs for General, Appearance,

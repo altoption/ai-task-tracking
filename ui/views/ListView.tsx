@@ -39,8 +39,9 @@ export function ListView({ groups, display, byId, config, cells }: {
   const grouped = display.groupBy !== 'none'
   const [folded, setFolded] = useState<Set<string>>(() => new Set())
   const fold = (id: string) => setFolded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  // `items`: what is drawn. `groupIds`: each group's rows, and `family`: each row's sub-issues anywhere in the view
-  // (an epic's steps sit in other status groups); both count rows folded away.
+  // `items`: what is drawn. `groupIds`: each group's drawn rows. `family`: each row's sub-issues anywhere in the
+  // view (an epic's steps sit in other status groups), folded-away ones included: taking them unfolds them, because a
+  // bulk change only ever touches rows on screen.
   const { items, family, groupIds, allIds } = useMemo(() => {
     const out: Item[] = []
     const groupIds = new Map<string, string[]>()
@@ -50,10 +51,10 @@ export function ListView({ groups, display, byId, config, cells }: {
       if (grouped) out.push({ kind: 'group', group: g, collapsed: isCollapsed })
       if (isCollapsed) continue
       const full = listRows(g.issues, byId, display.showSubIssues)
-      const ids = full.map((r) => r.issue.id)
-      groupIds.set(g.key, ids)
-      allIds.push(...ids)
-      for (const r of folded.size ? listRows(g.issues, byId, display.showSubIssues, folded) : full) out.push({ kind: 'row', ...r })
+      allIds.push(...full.map((r) => r.issue.id))
+      const drawn = folded.size ? listRows(g.issues, byId, display.showSubIssues, folded) : full
+      groupIds.set(g.key, drawn.map((r) => r.issue.id))
+      for (const r of drawn) out.push({ kind: 'row', ...r })
     }
     return { items: out, family: families(allIds, (id) => byId.get(id)?.parent), groupIds, allIds }
   }, [groups, collapsed, folded, byId, display.showSubIssues, grouped])
@@ -67,8 +68,11 @@ export function ListView({ groups, display, byId, config, cells }: {
   const rowIds = useMemo(() => items.flatMap((it) => (it.kind === 'row' ? [it.issue.id] : [])), [items])
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const anchor = useRef<number | null>(null)
-  const picked = useMemo(() => visibleSelection(selected, allIds), [selected, allIds])
+  // Only rows on screen count: a selected row that a fold or a filter hides is left alone, and the count says so.
+  const picked = useMemo(() => visibleSelection(selected, rowIds), [selected, rowIds])
   const clear = useCallback(() => { setSelected(new Set()); anchor.current = null }, [])
+  /** Open these parents, so the sub-issues just selected under them are on screen. */
+  const unfold = (ids: string[]) => setFolded((f) => { const n = new Set(f); for (const x of ids) n.delete(x); return n.size === f.size ? f : n })
   const check = (rowIndex: number, shift: boolean, alt: boolean) => {
     const id = rowIds[rowIndex]!
     const kids = family.get(id)
@@ -76,7 +80,7 @@ export function ListView({ groups, display, byId, config, cells }: {
       // ⌥-click: the row and every sub-issue under it, taken or dropped together. Folded ones are shown.
       const on = !selected.has(id) || kids.some((k) => !selected.has(k))
       setSelected((s) => setMany(s, [id, ...kids], on))
-      if (on) setFolded((f) => { if (!f.has(id)) return f; const n = new Set(f); n.delete(id); return n })
+      if (on) unfold([id, ...kids])
     } else {
       const from = anchor.current // read now: the updater runs later, after the anchor moves
       setSelected((s) => clickSelect(s, rowIds, rowIndex, from, shift))
@@ -84,20 +88,17 @@ export function ListView({ groups, display, byId, config, cells }: {
     anchor.current = rowIndex
   }
   const kidsToAdd = useMemo(() => missingKids(new Set(picked), family), [picked, family])
-  const addKids = () => {
-    setSelected((s) => setMany(s, kidsToAdd, true))
-    setFolded((f) => { const n = new Set([...f].filter((id) => !selected.has(id))); return n.size === f.size ? f : n })
-  }
+  const addKids = () => { setSelected((s) => setMany(s, kidsToAdd, true)); unfold([...picked, ...kidsToAdd]) }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
       if (e.key === 'Escape' && picked.length) { clear() }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && allIds.length) { e.preventDefault(); setSelected(new Set(allIds)) }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && rowIds.length) { e.preventDefault(); setSelected(new Set(rowIds)) }
     }
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
-  }, [picked.length, allIds, clear])
+  }, [picked.length, rowIds, clear])
   let rowIndex = -1
   const rowIndexAt = new Map<number, number>()
   items.forEach((it, k) => { if (it.kind === 'row') rowIndexAt.set(k, ++rowIndex) })
