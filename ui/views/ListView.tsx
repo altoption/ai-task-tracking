@@ -2,7 +2,8 @@
  * The list: collapsible groups, rows virtualized with @tanstack/react-virtual so 10k issues
  * scroll smoothly. Sub-issues form a tree under their parent (guide lines, a chevron to fold a parent away); a
  * sub-issue whose parent is in another group names it in a crumb after the title instead of repeating the parent row.
- * Rows can be selected (checkbox, shift-click for a range, ⌘A, Esc clears) and changed together in the bulk bar.
+ * Rows can be selected (checkbox, shift-click for a range, ⌥-click for a row with its sub-issues, a group's box for
+ * the group, ⌘A, Esc clears) and changed together in the bulk bar, which floats over the foot of the list.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -12,7 +13,7 @@ import { href, navigate } from '../router'
 import { listRows, type ListRow, type ViewGroup } from '../viewModel'
 import { PropertyCells, type CellCtx } from './IssueCells'
 import { BulkBar } from './BulkBar'
-import { clickSelect, visibleSelection } from '../bulk'
+import { clickSelect, families, missingKids, setMany, visibleSelection } from '../bulk'
 
 type Item = { kind: 'group'; group: ViewGroup; collapsed: boolean } | ({ kind: 'row' } & ListRow)
 const ROW = 40
@@ -38,15 +39,23 @@ export function ListView({ groups, display, byId, config, cells }: {
   const grouped = display.groupBy !== 'none'
   const [folded, setFolded] = useState<Set<string>>(() => new Set())
   const fold = (id: string) => setFolded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  const items = useMemo(() => {
+  // `items`: what is drawn. `groupIds`: each group's rows, and `family`: each row's sub-issues anywhere in the view
+  // (an epic's steps sit in other status groups); both count rows folded away.
+  const { items, family, groupIds, allIds } = useMemo(() => {
     const out: Item[] = []
+    const groupIds = new Map<string, string[]>()
+    const allIds: string[] = []
     for (const g of groups) {
       const isCollapsed = collapsed.has(g.key)
       if (grouped) out.push({ kind: 'group', group: g, collapsed: isCollapsed })
       if (isCollapsed) continue
-      for (const r of listRows(g.issues, byId, display.showSubIssues, folded)) out.push({ kind: 'row', ...r })
+      const full = listRows(g.issues, byId, display.showSubIssues)
+      const ids = full.map((r) => r.issue.id)
+      groupIds.set(g.key, ids)
+      allIds.push(...ids)
+      for (const r of folded.size ? listRows(g.issues, byId, display.showSubIssues, folded) : full) out.push({ kind: 'row', ...r })
     }
-    return out
+    return { items: out, family: families(allIds, (id) => byId.get(id)?.parent), groupIds, allIds }
   }, [groups, collapsed, folded, byId, display.showSubIssues, grouped])
   const v = useVirtualizer({ count: items.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 12 })
   const props = useMemo(() => new Set(display.properties), [display.properties])
@@ -58,23 +67,37 @@ export function ListView({ groups, display, byId, config, cells }: {
   const rowIds = useMemo(() => items.flatMap((it) => (it.kind === 'row' ? [it.issue.id] : [])), [items])
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const anchor = useRef<number | null>(null)
-  const picked = useMemo(() => visibleSelection(selected, rowIds), [selected, rowIds])
+  const picked = useMemo(() => visibleSelection(selected, allIds), [selected, allIds])
   const clear = useCallback(() => { setSelected(new Set()); anchor.current = null }, [])
-  const check = (rowIndex: number, shift: boolean) => {
-    const from = anchor.current // read now: the updater runs later, after the anchor moves
-    setSelected((s) => clickSelect(s, rowIds, rowIndex, from, shift))
+  const check = (rowIndex: number, shift: boolean, alt: boolean) => {
+    const id = rowIds[rowIndex]!
+    const kids = family.get(id)
+    if (alt && kids) {
+      // ⌥-click: the row and every sub-issue under it, taken or dropped together. Folded ones are shown.
+      const on = !selected.has(id) || kids.some((k) => !selected.has(k))
+      setSelected((s) => setMany(s, [id, ...kids], on))
+      if (on) setFolded((f) => { if (!f.has(id)) return f; const n = new Set(f); n.delete(id); return n })
+    } else {
+      const from = anchor.current // read now: the updater runs later, after the anchor moves
+      setSelected((s) => clickSelect(s, rowIds, rowIndex, from, shift))
+    }
     anchor.current = rowIndex
+  }
+  const kidsToAdd = useMemo(() => missingKids(new Set(picked), family), [picked, family])
+  const addKids = () => {
+    setSelected((s) => setMany(s, kidsToAdd, true))
+    setFolded((f) => { const n = new Set([...f].filter((id) => !selected.has(id))); return n.size === f.size ? f : n })
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
       if (e.key === 'Escape' && picked.length) { clear() }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && rowIds.length) { e.preventDefault(); setSelected(new Set(rowIds)) }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && allIds.length) { e.preventDefault(); setSelected(new Set(allIds)) }
     }
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
-  }, [picked.length, rowIds, clear])
+  }, [picked.length, allIds, clear])
   let rowIndex = -1
   const rowIndexAt = new Map<number, number>()
   items.forEach((it, k) => { if (it.kind === 'row') rowIndexAt.set(k, ++rowIndex) })
@@ -82,15 +105,18 @@ export function ListView({ groups, display, byId, config, cells }: {
   if (!items.length) return <div className="view-empty muted">No issues match this view.</div>
   return (
     <>
-    {picked.length > 0 && <BulkBar ids={picked} byId={byId} onDone={clear} onClear={clear} />}
     <div className={`view-scroll${picked.length ? ' selecting' : ''}`} ref={scroller} role="list">
       <div style={{ height: v.getTotalSize(), position: 'relative' }}>
         {v.getVirtualItems().map((vi) => {
           const it = items[vi.index]!
           const style = { position: 'absolute' as const, top: 0, left: 0, right: 0, height: ROW, transform: `translateY(${vi.start}px)` }
           if (it.kind === 'group') {
+            const gids = groupIds.get(it.group.key) ?? []
+            const gOn = gids.length > 0 && gids.every((x) => selected.has(x))
             return (
               <div key={`g:${it.group.key}`} className="list-group" style={style} role="listitem">
+                {gids.length > 0 && <input type="checkbox" className="row-check group-check" checked={gOn} aria-label={`Select all ${gids.length} in ${it.group.label}`}
+                  ref={(el) => { if (el) el.indeterminate = !gOn && gids.some((x) => selected.has(x)) }} onChange={() => setSelected((s) => setMany(s, gids, !gOn))} />}
                 <button className={`tree-toggle${it.collapsed ? '' : ' open'}`} aria-label={it.collapsed ? 'Expand group' : 'Collapse group'} onClick={() => toggle(it.group.key)}><Icon name="chevron" size={12} /></button>
                 <GroupIcon by={display.groupBy} group={it.group} config={config} />
                 <span className="group-label">{it.group.label}</span>
@@ -125,11 +151,12 @@ export function ListView({ groups, display, byId, config, cells }: {
               <span className="cells"><PropertyCells issue={i} props={props} ctx={cells} /></span>
             </a>,
             <input key={`c:${i.id}:${vi.index}`} type="checkbox" className="row-check" style={{ top: vi.start + (ROW - 14) / 2 }} checked={on}
-              aria-label={`Select ${i.id}`} onChange={() => {}} onClick={(e) => check(ri, e.shiftKey)} />,
+              aria-label={`Select ${i.id}`} title={it.kids ? 'Option-click to select it with its sub-issues' : undefined} onChange={() => {}} onClick={(e) => check(ri, e.shiftKey, e.altKey)} />,
           ]
         })}
       </div>
     </div>
+    {picked.length > 0 && <BulkBar ids={picked} byId={byId} onClear={clear} kids={kidsToAdd.length} onAddKids={addKids} />}
     </>
   )
 }

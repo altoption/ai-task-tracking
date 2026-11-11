@@ -23,6 +23,39 @@ export function clickSelect(selected: ReadonlySet<string>, ids: readonly string[
   return next
 }
 
+/**
+ * Each listed issue's sub-issues, at any depth, among the issues listed (`ids`: every row of the view, whatever group
+ * it is in, so an epic in one status takes its steps in the others). Issues without any are left out. Cycle-safe.
+ */
+export function families(ids: readonly string[], parentOf: (id: string) => string | null | undefined): Map<string, string[]> {
+  const listed = new Set(ids)
+  const out = new Map<string, string[]>()
+  for (const id of listed) {
+    const seen = new Set([id])
+    for (let p = parentOf(id); p && !seen.has(p); p = parentOf(p)) {
+      seen.add(p)
+      if (!listed.has(p)) continue
+      const l = out.get(p)
+      if (l) l.push(id); else out.set(p, [id])
+    }
+  }
+  return out
+}
+
+/** The sub-issues (at any depth) of selected rows that aren't selected themselves: what "Add sub-issues" would add. */
+export function missingKids(selected: ReadonlySet<string>, family: ReadonlyMap<string, readonly string[]>): string[] {
+  const out = new Set<string>()
+  for (const id of selected) for (const k of family.get(id) ?? []) if (!selected.has(k)) out.add(k)
+  return [...out]
+}
+
+/** The selection after taking (`on`) or dropping every id in `ids`. */
+export function setMany(selected: ReadonlySet<string>, ids: readonly string[], on: boolean): Set<string> {
+  const next = new Set(selected)
+  for (const id of ids) { if (on) next.add(id); else next.delete(id) }
+  return next
+}
+
 /** The selected ids still visible, in row order (a filter change can hide selected rows; actions skip those). */
 export const visibleSelection = (selected: ReadonlySet<string>, ids: readonly string[]) => [...new Set(ids)].filter((id) => selected.has(id))
 

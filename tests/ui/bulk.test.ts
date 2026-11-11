@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { asksReason, bulkItems, clickSelect, visibleSelection } from '../../ui/bulk'
+import { asksReason, bulkItems, clickSelect, families, missingKids, setMany, visibleSelection } from '../../ui/bulk'
 
 const ids = ['A-1', 'A-2', 'A-3', 'A-4', 'A-5']
 const set = (...x: string[]) => new Set(x)
@@ -36,4 +36,27 @@ test('bulkItems: one item per id, the reason as a comment when given', () => {
     { id: 'A-1', state: 'Canceled', comment: 'dropped' }, { id: 'A-2', state: 'Canceled', comment: 'dropped' },
   ])
   expect(bulkItems(['A-1'], { addLabels: ['Bug'] }, ' ')).toEqual([{ id: 'A-1', addLabels: ['Bug'] }])
+})
+
+describe('a parent and its sub-issues', () => {
+  // E-1 > S-1 > T-1, E-1 > S-2, E-2 > S-3; H-1 (not listed) > T-9 > U-9; a cycle C-1 <> C-2.
+  const parents: Record<string, string> = { 'S-1': 'E-1', 'T-1': 'S-1', 'S-2': 'E-1', 'S-3': 'E-2', 'T-9': 'H-1', 'U-9': 'T-9', 'C-1': 'C-2', 'C-2': 'C-1' }
+  const fam = families(['E-1', 'S-1', 'T-1', 'S-2', 'X-1', 'E-2', 'S-3', 'T-9', 'U-9', 'C-1', 'C-2'], (id) => parents[id])
+  test('families: every listed sub-issue at any depth, whatever its group; unlisted parents are skipped, cycles end', () => {
+    expect(fam.get('E-1')).toEqual(['S-1', 'T-1', 'S-2'])
+    expect(fam.get('S-1')).toEqual(['T-1'])
+    expect(fam.get('E-2')).toEqual(['S-3'])
+    expect(fam.get('T-9')).toEqual(['U-9'])
+    expect(fam.has('H-1')).toBe(false)
+    expect(fam.get('C-1')).toEqual(['C-2'])
+    expect(fam.has('X-1')).toBe(false)
+  })
+  test('missingKids: unselected sub-issues of selected rows, once each', () => {
+    expect(missingKids(set('E-1', 'S-1', 'X-1'), fam)).toEqual(['T-1', 'S-2'])
+    expect(missingKids(set('X-1', 'S-3'), fam)).toEqual([])
+  })
+  test('setMany takes or drops a set of rows', () => {
+    expect([...setMany(set('A-1'), ['A-2', 'A-3'], true)].sort()).toEqual(['A-1', 'A-2', 'A-3'])
+    expect([...setMany(set('A-1', 'A-2'), ['A-2', 'A-3'], false)]).toEqual(['A-1'])
+  })
 })
