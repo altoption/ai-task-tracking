@@ -23,3 +23,21 @@ export function targetLabel(target: string | undefined): string {
   const d = new Date(`${target}T12:00:00`)
   return Number.isNaN(d.getTime()) ? target : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+/** The first line of a markdown description as plain text, for the one-line summary (empty when there is none). */
+export function firstLine(markdown: string): string {
+  for (const raw of markdown.split('\n')) {
+    const line = raw.replace(/^\s*(#{1,6}|[-*+]|\d+\.|>)\s+/, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '').trim()
+    if (line) return line
+  }
+  return ''
+}
+
+/** A milestone's target without the year when it is this year ("Mar 27"); non-ISO text as written. */
+export function shortTarget(target: string | undefined, now = new Date()): string {
+  if (!target) return ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return target
+  const d = new Date(`${target}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return target
+  return d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' })
+}

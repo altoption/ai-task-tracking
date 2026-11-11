@@ -1,6 +1,7 @@
 /**
  * The list: collapsible groups, rows virtualized with @tanstack/react-virtual so 10k issues
- * scroll smoothly, sub-issues indented under their parent with out-of-group ancestors dimmed for context.
+ * scroll smoothly. Sub-issues form a tree under their parent (guide lines, a chevron to fold a parent away); a
+ * sub-issue whose parent is in another group names it in a crumb after the title instead of repeating the parent row.
  * Rows can be selected (checkbox, shift-click for a range, ⌘A, Esc clears) and changed together in the bulk bar.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,18 +36,22 @@ export function ListView({ groups, display, byId, config, cells }: {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const scroller = useRef<HTMLDivElement>(null)
   const grouped = display.groupBy !== 'none'
+  const [folded, setFolded] = useState<Set<string>>(() => new Set())
+  const fold = (id: string) => setFolded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const items = useMemo(() => {
     const out: Item[] = []
     for (const g of groups) {
       const isCollapsed = collapsed.has(g.key)
       if (grouped) out.push({ kind: 'group', group: g, collapsed: isCollapsed })
       if (isCollapsed) continue
-      for (const r of listRows(g.issues, byId, display.showSubIssues)) out.push({ kind: 'row', ...r })
+      for (const r of listRows(g.issues, byId, display.showSubIssues, folded)) out.push({ kind: 'row', ...r })
     }
     return out
-  }, [groups, collapsed, byId, display.showSubIssues, grouped])
+  }, [groups, collapsed, folded, byId, display.showSubIssues, grouped])
   const v = useVirtualizer({ count: items.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 12 })
   const props = useMemo(() => new Set(display.properties), [display.properties])
+  // A slot for the fold chevron only when some row has sub-issues here, so flat lists keep their left edge.
+  const tree = useMemo(() => items.some((it) => it.kind === 'row' && it.kids > 0), [items])
   const toggle = (key: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
 
   // Selection: ids of the visible rows in order (group headers skipped), the selected ones, and the last clicked row.
@@ -98,13 +103,25 @@ export function ListView({ groups, display, byId, config, cells }: {
           const ri = rowIndexAt.get(vi.index)!
           const on = selected.has(i.id)
           return [
-            <a key={`r:${i.id}:${vi.index}`} className={`list-row${it.context ? ' context' : ''}${on ? ' selected' : ''}`} style={{ ...style, paddingLeft: 20 + it.depth * 26 }} href={href({ name: 'issue', id: i.id })}
-              role="listitem" onClick={(e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate({ name: 'issue', id: i.id }) } }}>
+            <a key={`r:${i.id}:${vi.index}`} className={`list-row${it.kids ? ' parent' : ''}${on ? ' selected' : ''}`} style={style} href={href({ name: 'issue', id: i.id })}
+              role="listitem" aria-level={it.depth + 1} onClick={(e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate({ name: 'issue', id: i.id }) } }}>
+              {it.rails.map((on, k) => <span key={k} className={`tree-guide${k === it.depth - 1 ? (on ? ' tee' : ' end') : on ? ' rail' : ''}`} aria-hidden="true" />)}
+              {tree && (it.kids > 0
+                ? <button type="button" className={`tree-toggle${folded.has(i.id) ? '' : ' open'}`} aria-expanded={!folded.has(i.id)} aria-label={`${folded.has(i.id) ? 'Show' : 'Hide'} sub-issues of ${i.id}`}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); fold(i.id) }}><Icon name="chevron" size={12} /></button>
+                : <span className="tree-toggle" aria-hidden="true" />)}
               {props.has('priority') && <PriorityIcon priority={i.priority} />}
               {props.has('id') && <span className="id">{i.id}</span>}
               {props.has('status') && <StatusIcon status={i.status} config={config} />}
               <span className="title">{i.title}</span>
               <ProgressPill done={i.progress.done} total={i.progress.total} config={config} />
+              {it.via && (
+                <span className="via" role="link" tabIndex={0} title={`Sub-issue of ${it.via.id} ${it.via.title} (${it.via.status})`}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate({ name: 'issue', id: it.via!.id }) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); navigate({ name: 'issue', id: it.via!.id }) } }}>
+                  <ConceptIcon concept="parent" size={12} /><StatusIcon status={it.via.status} config={config} size={12} /><span className="t">{it.via.title}</span>
+                </span>
+              )}
               <span className="cells"><PropertyCells issue={i} props={props} ctx={cells} /></span>
             </a>,
             <input key={`c:${i.id}:${vi.index}`} type="checkbox" className="row-check" style={{ top: vi.start + (ROW - 14) / 2 }} checked={on}

@@ -126,15 +126,34 @@ function byPrioThenId(a: string, b: string): number {
 
 describe('listRows (list view nesting)', () => {
   const byId = new Map(issues.map((i) => [i.id, i]))
-  test('children nest under a parent in the group; ancestors outside it are dimmed context rows', () => {
-    const todo = applyView(issues, { ...board, display: { ...board.display, layout: 'list', rowsBy: undefined } }, ctx).groups.find((g) => g.key === 'Todo')!
-    expect(listRows(todo.issues, byId, true).map((r) => [r.issue.id, r.depth, r.context])).toEqual([
-      ['Q-269', 0, false], ['Q-275', 1, false], ['Q-271', 1, false], ['Q-272', 1, false],
+  const list = { ...board, display: { ...board.display, layout: 'list' as const, rowsBy: undefined } }
+  test('children nest under a parent in the group; a parent outside it is a crumb on the row, not a row', () => {
+    const todo = applyView(issues, list, ctx).groups.find((g) => g.key === 'Todo')!
+    expect(listRows(todo.issues, byId, true).map((r) => [r.issue.id, r.depth, r.kids, r.via?.id])).toEqual([
+      ['Q-269', 0, 3, undefined], ['Q-275', 1, 0, undefined], ['Q-271', 1, 0, undefined], ['Q-272', 1, 0, undefined],
     ])
-    const waiting = applyView(issues, { ...board, display: { ...board.display, layout: 'list', rowsBy: undefined } }, ctx).groups.find((g) => g.key === 'Waiting')!
-    expect(listRows(waiting.issues, byId, true).map((r) => [r.issue.id, r.depth, r.context])).toEqual([
-      ['Q-78', 0, true], ['Q-93', 1, false], ['Q-302', 0, false],
+    const waiting = applyView(issues, list, ctx).groups.find((g) => g.key === 'Waiting')!
+    // Q-93's parent is Done (another group); Q-302's parent doesn't exist.
+    expect(listRows(waiting.issues, byId, true).map((r) => [r.issue.id, r.depth, r.via?.id])).toEqual([
+      ['Q-93', 0, 'Q-78'], ['Q-302', 0, undefined],
     ])
+  })
+  test('rails: a line runs past every sub-issue but the last, which ends it', () => {
+    const todo = applyView(issues, list, ctx).groups.find((g) => g.key === 'Todo')!
+    expect(listRows(todo.issues, byId, true).map((r) => r.rails)).toEqual([[], [true], [true], [false]])
+    const deep = [mk('Q-1', 'Todo', 1, null), mk('Q-2', 'Todo', 1, 'Q-1'), mk('Q-3', 'Todo', 1, 'Q-2'), mk('Q-4', 'Todo', 1, 'Q-1')]
+    expect(listRows(deep, new Map(deep.map((i) => [i.id, i])), true).map((r) => [r.issue.id, r.rails])).toEqual([
+      ['Q-1', []], ['Q-2', [true]], ['Q-3', [true, false]], ['Q-4', [false]],
+    ])
+  })
+  test('a collapsed parent keeps its row and count, and hides its descendants', () => {
+    const todo = applyView(issues, list, ctx).groups.find((g) => g.key === 'Todo')!
+    expect(listRows(todo.issues, byId, true, new Set(['Q-269'])).map((r) => [r.issue.id, r.kids])).toEqual([['Q-269', 3]])
+  })
+  test('a grandchild nests under its grandparent when the parent between them is in another group', () => {
+    const tree = [mk('Q-1', 'Todo', 1, null), mk('Q-2', 'Done', 1, 'Q-1'), mk('Q-3', 'Todo', 1, 'Q-2')]
+    const rows = listRows([tree[0]!, tree[2]!], new Map(tree.map((i) => [i.id, i])), true)
+    expect(rows.map((r) => [r.issue.id, r.depth, r.via?.id])).toEqual([['Q-1', 0, undefined], ['Q-3', 1, 'Q-2']])
   })
   test('flat when sub-issues are off', () => {
     const g = applyView(issues, { ...board, display: { ...board.display, layout: 'list', rowsBy: undefined } }, ctx).groups.find((x) => x.key === 'Todo')!

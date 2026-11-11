@@ -200,34 +200,46 @@ export function swimlanes(groups: ViewGroup[], rowsBy: string, ctx: ViewCtx & { 
 
 // ---------- list nesting ----------
 
-export interface ListRow { issue: IssueSummary; depth: number; /** an ancestor shown for context (not in this group) */ context: boolean }
+export interface ListRow {
+  issue: IssueSummary
+  depth: number
+  /** Sub-issues of this issue in the same group (a row with some can be collapsed). */
+  kids: number
+  /**
+   * The tree guides left of the row, one per level of depth: whether a line runs on past this row at that level.
+   * The last entry is the row's own level: false for a parent's last sub-issue (the line stops and turns in).
+   */
+  rails: boolean[]
+  /** The parent, when it isn't an ancestor row here (another group, or filtered out): shown as a crumb on the row. */
+  via?: IssueSummary
+}
 
 /**
- * Pure: list rows of one group. With `nest`, sub-issues sit under their nearest ancestor and ancestors that are
- * not in the group appear as dimmed context rows. Parents land where their first row would be.
- * Cycle-safe: each issue appears once.
+ * Pure: list rows of one group. With `nest`, a sub-issue sits under its nearest ancestor that is in the group; when
+ * its own parent isn't in the group the row carries it as `via` instead of repeating the parent as a row. Parents land
+ * where their first row would be. Descendants of an issue in `collapsed` are left out. Cycle-safe: each issue appears once.
  */
-export function listRows(group: IssueSummary[], byId: ReadonlyMap<string, IssueSummary>, nest: boolean): ListRow[] {
-  if (!nest) return group.map((issue) => ({ issue, depth: 0, context: false }))
-  interface Node { issue: IssueSummary; context: boolean; children: Node[] }
-  const inGroup = new Set(group.map((i) => i.id))
+export function listRows(group: IssueSummary[], byId: ReadonlyMap<string, IssueSummary>, nest: boolean, collapsed?: ReadonlySet<string>): ListRow[] {
+  if (!nest) return group.map((issue) => ({ issue, depth: 0, kids: 0, rails: [] }))
+  interface Node { issue: IssueSummary; children: Node[] }
+  const inGroup = new Map(group.map((i) => [i.id, i]))
   const nodes = new Map<string, Node>()
   const roots: Node[] = []
   for (const i of group) {
+    // The ancestors that are rows of this group, nearest first.
     const chain: IssueSummary[] = []
     const seen = new Set([i.id])
     for (let p = i.parent; p && !seen.has(p);) {
       seen.add(p)
-      const a = byId.get(p)
-      if (!a) break
-      chain.push(a)
-      p = a.parent
+      const a = inGroup.get(p)
+      if (a) chain.push(a)
+      p = (a ?? byId.get(p))?.parent ?? null
     }
     let parent: Node | null = null
     for (const x of [...chain.reverse(), i]) {
       let n = nodes.get(x.id)
       if (!n) {
-        n = { issue: x, context: !inGroup.has(x.id), children: [] }
+        n = { issue: x, children: [] }
         nodes.set(x.id, n)
         ;(parent ? parent.children : roots).push(n)
       }
@@ -235,11 +247,15 @@ export function listRows(group: IssueSummary[], byId: ReadonlyMap<string, IssueS
     }
   }
   const out: ListRow[] = []
-  const stack: [Node, number][] = roots.map((n) => [n, 0] as [Node, number]).reverse()
+  const stack: [Node, boolean[]][] = roots.map((n) => [n, []] as [Node, boolean[]]).reverse()
   while (stack.length) {
-    const [n, depth] = stack.pop()!
-    out.push({ issue: n.issue, depth, context: n.context })
-    for (let k = n.children.length - 1; k >= 0; k--) stack.push([n.children[k]!, depth + 1])
+    const [n, rails] = stack.pop()!
+    const p = n.issue.parent
+    const via = p && p !== n.issue.id && !inGroup.has(p) ? byId.get(p) : undefined
+    out.push({ issue: n.issue, depth: rails.length, kids: n.children.length, rails, ...(via ? { via } : {}) })
+    if (collapsed?.has(n.issue.id)) continue
+    const last = n.children.length - 1
+    for (let k = last; k >= 0; k--) stack.push([n.children[k]!, [...rails, k < last]])
   }
   return out
 }
