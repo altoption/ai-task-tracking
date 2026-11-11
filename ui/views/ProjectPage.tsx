@@ -1,6 +1,8 @@
 /**
- * `#/project/:slug`: header (name, status), description, milestones with progress, documents, then the project's
- * issues (the shared list/board screen with the project locked in). Markdown edits carry the text they started from
+ * `#/project/:slug`: one header (name, status, progress), a one-line summary (description, a chip per milestone that
+ * filters the list to it, the document count) that opens into the description, milestones and documents, then the
+ * project's issues (the shared list/board screen with the project locked in). Whether the details are open is kept per
+ * project in this browser. Markdown edits carry the text they started from
  * (`baseDescription` / `baseContent`) so a newer save by an agent is refused instead of overwritten.
  *
  * A hidden project (`hiddenProjects` in config.yml) isn't in the live store; its link still opens it, read from
@@ -13,15 +15,29 @@ import { callTool, getProject, hiddenRevOf, inScope, isHiddenProject, NO_PROJECT
 import { ConceptIcon, Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
-import { milestoneProgress, targetLabel } from '../projectPage'
+import { firstLine, milestoneProgress, shortTarget, targetLabel } from '../projectPage'
+import { replaceRoute } from '../router'
 import { HiddenNotice } from './HiddenNotice'
 import { ViewScreen } from './ViewScreen'
-import type { ViewState } from '../viewModel'
-import { DEFAULT_DISPLAY } from '../viewModel'
+import { DEFAULT_DISPLAY, viewFromQuery, viewToQuery, type ViewState } from '../viewModel'
 
 const STALE_RE = /changed since you started editing/
 const STATUSES = ['Planned', 'Active', 'Paused', 'Completed', 'Canceled']
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
+const BASE: ViewState = { filter: {}, display: DEFAULT_DISPLAY }
+
+/** Whether a project's details (description, milestones, documents) are open: a per-viewer convenience, kept in this browser. */
+const ABOUT_KEY = 'tracker.projectAbout'
+function readAbout(slug: string): boolean {
+  try { return (JSON.parse(localStorage.getItem(ABOUT_KEY) ?? '[]') as unknown[]).includes(slug) } catch { return false }
+}
+function writeAbout(slug: string, open: boolean): void {
+  try {
+    const cur = new Set((JSON.parse(localStorage.getItem(ABOUT_KEY) ?? '[]') as unknown[]).filter((x): x is string => typeof x === 'string'))
+    if (open) cur.add(slug); else cur.delete(slug)
+    localStorage.setItem(ABOUT_KEY, JSON.stringify([...cur]))
+  } catch { /* private mode: closed again next time */ }
+}
 
 /** Rendered markdown with Edit / Save / Cancel (⌘↩ saves). `save(text, base)` throws to show an error. */
 function MarkdownBlock({ source, ctx, save, emptyLabel, label }: {
@@ -88,7 +104,7 @@ function Name({ project }: { project: Project }) {
   }
   return (
     <>
-      <input className="project-name" value={draft ?? project.name} aria-label="Project name"
+      <input className="project-name" value={draft ?? project.name} size={Math.max(4, (draft ?? project.name).length)} aria-label="Project name"
         onFocus={() => { cancelled.current = false; setDraft(project.name) }} onChange={(e) => setDraft(e.target.value)} onBlur={() => void commit()}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
@@ -247,6 +263,9 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
   const direct = useDirectProject(slug, state.ready && !live && hidden && slug !== NO_PROJECT)
   const project = live ?? direct.detail?.project
   const [statusError, setStatusError] = useState('')
+  const [about, setAboutState] = useState(() => readAbout(slug))
+  useEffect(() => setAboutState(readAbout(slug)), [slug])
+  const setAbout = (open: boolean) => { setAboutState(open); writeAbout(slug, open) }
   const keys = useMemo(() => new Set([...state.projects.map((p) => p.key), ...Object.keys(state.config?.nextNumber ?? {})]), [state.projects, state.config])
   const ctx = useMemo<MdContext>(() => ({ project: slug, keys }), [slug, keys])
 
@@ -271,11 +290,20 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
     )
   }
   const statuses = STATUSES.includes(project.status) ? STATUSES : [project.status, ...STATUSES]
-  const base: ViewState = { filter: {}, display: DEFAULT_DISPLAY }
+  const current = viewFromQuery(query ?? '', BASE)
+  const picked = new Set(current.filter.milestone ?? [])
+  /** A milestone chip filters the list to that milestone; again clears it. */
+  const pickMilestone = (name: string) => {
+    const { milestone: _drop, ...rest } = current.filter
+    const filter = picked.has(name) && picked.size === 1 ? rest : { ...rest, milestone: [name] }
+    replaceRoute(routeQuery(viewToQuery({ ...current, filter }, BASE) || undefined))
+  }
+  const summary = firstLine(project.description)
+  const empty = !summary && !project.milestones.length && !project.docs.length
   return (
     <div className="project-page">
       <header className="project-head">
-        <span className="project-icon" style={{ color: project.color ?? 'var(--muted)' }}><ConceptIcon concept="project" size={20} /></span>
+        <span className="project-icon" style={{ color: project.color ?? 'var(--muted)' }}><ConceptIcon concept="project" size={18} /></span>
         <Name key={project.name} project={project} />
         <select className="project-status" aria-label="Project status" value={project.status}
           onChange={(e) => {
@@ -290,14 +318,37 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
         {!hidden && <HideButton slug={project.slug} />}
       </header>
       {hidden && <div className="project-hidden"><HiddenNotice slug={project.slug} /></div>}
-      <div className="project-body">
-        <MarkdownBlock key={project.slug} source={project.description} ctx={ctx} label="Project description" emptyLabel="Add description…"
-          save={async (text, base) => { await callTool('save_project', { id: project.slug, description: text, baseDescription: base }) }} />
-        <Milestones project={project} progress={progress} />
-        <Documents project={project} ctx={ctx} />
-        <h2 className="proj-issues-h">Issues</h2>
+      <div className="project-about">
+        <button type="button" className={`about-toggle${about ? ' open' : ''}`} aria-expanded={about} aria-controls="project-details" onClick={() => setAbout(!about)}>
+          <span className="about-chev"><Icon name="chevron" size={12} /></span>
+          <span className={`about-line${summary ? '' : ' none'}`}>{about ? 'About this project' : summary || (empty ? 'Add a description, milestones or documents' : 'No description')}</span>
+        </button>
+        {!about && project.milestones.map((m) => {
+          const p = progress.get(m.name) ?? { done: 0, total: 0 }
+          const on = picked.has(m.name)
+          return (
+            <button key={m.name} type="button" className={`m-chip${on ? ' on' : ''}`} aria-pressed={on} onClick={() => pickMilestone(m.name)}
+              title={on ? `Showing ${m.name} only. Click to show every issue.` : `Show only the issues in ${m.name}`}>
+              <ConceptIcon concept="milestone" size={12} />
+              <span className="m-chip-name">{m.name}</span>
+              {m.target && <span className="m-chip-date">{shortTarget(m.target)}</span>}
+              {p.total > 0 && <><ProgressRing done={p.done} total={p.total} config={state.config} size={12} noun="issues" /><span aria-hidden="true">{p.done}/{p.total}</span></>}
+            </button>
+          )
+        })}
+        {!about && project.docs.length > 0 && (
+          <button type="button" className="m-chip" onClick={() => setAbout(true)}><ConceptIcon concept="content" size={12} />{project.docs.length} {project.docs.length === 1 ? 'document' : 'documents'}</button>
+        )}
       </div>
-      <ViewScreen key={`project:${slug}`} title={project.name} defaults={base} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery}
+      {about && (
+        <div className="project-body" id="project-details">
+          <MarkdownBlock key={project.slug} source={project.description} ctx={ctx} label="Project description" emptyLabel="Add description…"
+            save={async (text, base) => { await callTool('save_project', { id: project.slug, description: text, baseDescription: base }) }} />
+          <Milestones project={project} progress={progress} />
+          <Documents project={project} ctx={ctx} />
+        </div>
+      )}
+      <ViewScreen key={`project:${slug}`} title={project.name} defaults={BASE} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery} embedded
         {...(directIssues ? { issues: directIssues, extraProjects: [project] } : {})} />
     </div>
   )

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { IssueSummary } from '../../src/model'
-import { milestoneProgress, targetLabel } from '../../ui/projectPage'
+import { firstLine, milestoneProgress, shortTarget, targetLabel } from '../../ui/projectPage'
 
 const iss = (id: string, project: string, status: string, milestone: string | null): IssueSummary => ({ id, project, status, milestone }) as IssueSummary
 const closed = (s: string) => s === 'Done' || s === 'Canceled'
@@ -29,13 +29,31 @@ describe('targetLabel', () => {
   })
 })
 
+describe('the summary line', () => {
+  test('firstLine: the first line with text, without markdown marks', () => {
+    expect(firstLine('\n# The **marketing** site\nmore')).toBe('The marketing site')
+    expect(firstLine('- see [the plan](https://example.com/p) and `code`')).toBe('see the plan and code')
+    expect(firstLine('  \n')).toBe('')
+  })
+  test('shortTarget: no year in the current year, the year otherwise, odd text as written', () => {
+    const now = new Date('2026-03-12T12:00:00')
+    expect(shortTarget('2026-03-27', now)).toBe('Mar 27')
+    expect(shortTarget('2027-01-05', now)).toBe('Jan 5, 2027')
+    expect(shortTarget('Q3 maybe', now)).toBe('Q3 maybe')
+    expect(shortTarget(undefined, now)).toBe('')
+  })
+})
+
 describe('final fix: embedded view has a bounded scroll container', () => {
   // jsdom has no layout; this pins the CSS contract the virtualizer depends on (verified in a browser at 10k).
-  test('the project page gives its ViewScreen a definite (viewport) height, not a % of an auto-height parent', async () => {
+  test('the project page has a definite (viewport) height and its ViewScreen flexes inside it, not a % of an auto-height parent', async () => {
     const css = await Bun.file(new URL('../../ui/styles.css', import.meta.url)).text()
-    const rule = /\.project-page\s*>\s*\.view-screen\s*\{([^}]*)\}/.exec(css)
-    expect(rule).not.toBeNull()
-    const height = /(?:^|;)\s*height:\s*([^;]+)/.exec(rule![1]!)?.[1]?.trim() ?? ''
-    expect(height).toMatch(/vh|cqh/)
+    const decl = (rule: RegExpExecArray | null, prop: string) => new RegExp(`(?:^|;)\\s*${prop}:\\s*([^;]+)`).exec(rule?.[1] ?? '')?.[1]?.trim() ?? ''
+    const page = /\.project-page\s*\{([^}]*)\}/.exec(css)
+    expect(decl(page, 'height')).toMatch(/vh|cqh/)
+    expect(decl(page, 'display')).toBe('flex')
+    expect(decl(page, 'flex-direction')).toBe('column')
+    const view = /\.project-page\s*>\s*\.view-screen\s*\{([^}]*)\}/.exec(css)
+    expect(decl(view, 'flex')).toBe('1 1 0') // takes what the header leaves; a zero basis keeps it from growing with its rows
   })
 })

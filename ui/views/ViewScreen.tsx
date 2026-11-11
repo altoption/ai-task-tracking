@@ -23,7 +23,7 @@ export function savedState(v: ViewDef): ViewState {
   return { filter: v.filter ?? {}, display: { ...DEFAULT_DISPLAY, ...v.display } }
 }
 
-export function ViewScreen({ title, icon, saved, defaults, base, locked, query, routeFor, issues, extraProjects }: {
+export function ViewScreen({ title, icon, saved, defaults, base, locked, query, routeFor, issues, extraProjects, embedded }: {
   title: string
   icon?: ReactNode
   saved?: ViewDef
@@ -40,6 +40,8 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
    */
   issues?: IssueSummary[]
   extraProjects?: Project[]
+  /** Inside a page that already names what this lists (the project page): the head keeps the count and the tools only. */
+  embedded?: boolean
 }) {
   const state = useTracker()
   const scope = useScope()
@@ -112,10 +114,10 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
 
   return (
     <section className="view-screen">
-      <header className="page-head view-head">
+      <header className={`page-head view-head${embedded ? ' embedded' : ''}`}>
         <div className="crumbs">
-          {icon ?? <ConceptIcon concept={saved ? 'views' : 'issues'} />}
-          <h1>{title}</h1>
+          {!embedded && (icon ?? <ConceptIcon concept={saved ? 'views' : 'issues'} />)}
+          {embedded ? <h2 className="sr-only">Issues</h2> : <h1>{title}</h1>}
           {saved && (
             <button className={`icon-button star${saved.favorite ? ' on' : ''}`} aria-pressed={!!saved.favorite} aria-label={saved.favorite ? 'Remove from favorites' : 'Add to favorites'} onClick={toggleFavorite}>
               <ConceptIcon concept="favorite" />

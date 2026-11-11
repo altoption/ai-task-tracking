@@ -506,7 +506,21 @@ a.ov-event-main:hover { text-decoration: underline; }
 .markdown table { border-collapse: collapse; font-size: 13px; }
 .markdown th, .markdown td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
 
+/* where the issue sits in its parent */
+.parent-strip { display: flex; align-items: center; gap: 10px; margin: -14px 0 12px -8px; font-size: 13px; color: var(--muted); min-width: 0; }
+.parent-strip a { display: inline-flex; align-items: center; gap: 7px; padding: 3px 8px; border-radius: var(--radius); min-width: 0; }
+.parent-strip a:hover { background: var(--hover); color: var(--text); }
+.parent-strip .n { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.parent-strip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.parent-strip .steps { display: inline-flex; gap: 2px; margin-left: auto; flex: none; }
+.parent-strip .step .id { font-variant-numeric: tabular-nums; }
+.parent-strip .arrow { display: inline-grid; color: var(--faint); }
+.parent-strip .arrow.prev { transform: rotate(90deg); }
+.parent-strip .arrow.next { transform: rotate(-90deg); }
+
 /* sub-issues */
+.sub-issues.none { margin-top: 20px; border-top: 0; padding-top: 0; margin-left: -8px; }
+.sub-issues.none .ghost-btn { margin-left: 0; }
 .sub-issues { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 14px; }
 .sub-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .sub-head .ghost-btn { margin-left: auto; }
@@ -708,7 +722,21 @@ span.tree-toggle { transform: none; }
 .list-row:hover { background: var(--hover); }
 .list-row .id { color: var(--id); font-variant-numeric: tabular-nums; min-width: 54px; flex: none; }
 .list-row .title { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-row.context { opacity: .5; }
+.list-row { padding-left: 20px; }
+.list-row.parent .title { font-weight: 500; }
+/* The tree: one guide per level. A rail runs past the row; the row's own level turns in to it (a tee when more
+   sub-issues follow, an end when it is the last), then the fold chevron or its empty slot. */
+.tree-guide { flex: none; width: 16px; align-self: stretch; margin-right: -4px; position: relative; }
+.tree-guide.rail::before, .tree-guide.tee::before, .tree-guide.end::before { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; border-left: 1px solid var(--border-focus); }
+.tree-guide.end::before { bottom: 50%; }
+.tree-guide.tee::after, .tree-guide.end::after { content: ""; position: absolute; left: 5px; top: 50%; width: 11px; border-top: 1px solid var(--border-focus); }
+.list-row .tree-toggle { margin: 0 -4px; }
+.list-row .tree-toggle:hover { color: var(--text); }
+/* A sub-issue whose parent is in another group: the parent, quietly, after the title. */
+.via { display: inline-flex; align-items: center; gap: 5px; min-width: 0; flex: 0 1 auto; max-width: 32%; padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--faint); }
+.via .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.via .icon, .via .status-icon { opacity: .75; }
+.via:hover { background: var(--active); color: var(--text); }
 .list-row .cells { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; max-width: 55%; overflow: hidden; justify-content: flex-end; }
 .date { color: var(--muted); font-size: 12px; min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
 .pill { display: inline-flex; align-items: center; gap: 5px; }
@@ -758,19 +786,36 @@ span.tree-toggle { transform: none; }
 .menu .switch.on, .menu .switch.on:hover { background: var(--accent); }
 
 /* ---------- project page ---------- */
-.project-page { min-height: 100%; }
-/* The embedded issue view gets the height of the .main viewport (100vh minus .main's 8+8 px margin and
-   1+1 px border), like a standalone view, so its list/board virtualizers have a bounded scroll container.
-   `height: 100%` would resolve to auto here (the page only has a min-height) and render every row. */
-.project-page > .view-screen { height: calc(100vh - 18px); }
-.project-head { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-bottom: 1px solid var(--border); }
+/* One header, a one-line summary, then the list, which takes the rest of the height (so its rows virtualize and the
+   page has a single scrollbar). Opened, the details scroll inside their own share of the page. */
+/* The page gets the height of the .main viewport (100vh minus .main's 8+8 px margin and 1+1 px border), and the
+   list flexes into what the header leaves: a bounded scroll container for the list/board virtualizers. `height: 100%`
+   isn't used: it resolves to auto when the parent has no definite height, and every row would render. */
+.project-page { display: flex; flex-direction: column; height: calc(100vh - 18px); min-height: 0; }
+.project-page > .view-screen { flex: 1 1 0; height: auto; min-height: 220px; }
+.project-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 20px; flex: none; }
 .project-icon { display: inline-flex; }
-.project-name { flex: 0 1 420px; min-width: 0; background: none; border: 1px solid transparent; border-radius: var(--radius); outline: none; padding: 2px 6px; margin-left: -6px; font-size: 20px; font-weight: 600; color: var(--text); }
+.project-name { flex: 0 1 auto; min-width: 0; max-width: 420px; background: none; border: 1px solid transparent; border-radius: var(--radius); outline: none; padding: 2px 6px; margin-left: -6px; font-size: 16px; font-weight: 600; color: var(--text); }
 .project-name:hover { background: var(--hover); }
 .project-name:focus { border-color: var(--accent); background: none; }
 .project-status { background: var(--panel); color: var(--text); border: 1px solid var(--pill-border); border-radius: var(--radius); padding: 2px 6px; font-size: 12px; }
 .project-count { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
-.project-body { max-width: 860px; padding: 24px 40px 8px; }
+.project-about { display: flex; align-items: center; gap: 6px; padding: 0 12px 9px 14px; flex: none; min-width: 0; border-bottom: 1px solid var(--border); }
+.about-toggle { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; margin-right: 6px; padding: 3px 8px 3px 4px; background: none; border: 0; border-radius: var(--radius); color: var(--muted); text-align: left; }
+.about-toggle:hover { background: var(--hover); color: var(--text); }
+.about-chev { display: inline-grid; flex: none; transform: rotate(-90deg); transition: transform .1s; }
+.about-toggle.open .about-chev { transform: none; }
+.about-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.about-line.none { color: var(--faint); }
+.m-chip { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 24px; padding: 0 9px; background: none; border: 1px solid var(--pill-border); border-radius: 12px; color: var(--pill-text); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.m-chip:hover { background: var(--hover); color: var(--text); }
+.m-chip.on { background: var(--active); color: var(--text); border-color: var(--accent); }
+.m-chip-name { color: var(--text); }
+.m-chip-date { color: var(--muted); }
+.project-body { flex: 0 1 auto; min-height: 0; max-height: 52%; overflow: auto; padding: 18px 40px 22px; border-bottom: 1px solid var(--border); }
+.project-body > * { max-width: 820px; }
+.view-head.embedded { position: static; padding-top: 6px; padding-bottom: 6px; }
+.view-head.embedded .count-label { margin-left: 4px; }
 /* Hidden projects (hiddenProjects in config.yml): the quiet line on a page opened by its link, and on a view filtered to one. */
 .hidden-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 24px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
 .hidden-note .ghost-btn.inline { margin-left: 2px; }
@@ -779,8 +824,7 @@ span.tree-toggle { transform: none; }
 .tree-hidden { padding-left: 8px; }
 .proj-section { margin-top: 28px; }
 .proj-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.proj-section h2, .proj-issues-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; }
-.proj-issues-h { margin-top: 32px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.proj-section h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; }
 .milestones, .docs { list-style: none; margin: 0; padding: 0; }
 .milestone-row { display: grid; grid-template-columns: 14px minmax(120px, 1fr) auto 72px; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--divider); }
 .milestone-row .m-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

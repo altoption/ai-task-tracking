@@ -3,10 +3,10 @@ import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary } from '../../src/model'
 import { callTool, getIssue, getIssueFeed, hiddenRevOf, isHiddenProject, isStub, NO_PROJECT, projectName, useTracker, type HiddenStub, type IssueDetail } from '../client'
 import { CopyId } from '../components/CopyId'
-import { ConceptIcon, Icon, ProgressPill, StatusIcon } from '../components/icons'
+import { ConceptIcon, Icon, ProgressPill, ProgressRing, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { HiddenNotice } from './HiddenNotice'
-import { buildTree, treeProgress, type TreeNode } from '../issuePage'
+import { buildTree, positionInParent, treeProgress, type TreeNode } from '../issuePage'
 import { taskAt, type MdContext } from '../markdown'
 import { href, navigate } from '../router'
 import { IssueActivity } from './IssueActivity'
@@ -119,6 +119,10 @@ function SubIssues({ id, children }: { id: string; children: (IssueSummary | Hid
   const progress = useMemo(() => treeProgress(tree, closed), [tree, closed])
   const [open, setOpenSet] = useState<Set<string>>(new Set())
   const toggle = (x: string) => setOpenSet((s) => { const n = new Set(s); if (n.has(x)) n.delete(x); else n.add(x); return n })
+  // A leaf: no heading over nothing, just the way to add one.
+  if (!tree.length && !stubs.length) {
+    return <div className="sub-issues none"><button type="button" className="ghost-btn" onClick={() => navigate({ name: 'new', parent: id })}><span className="plus">+</span> Add sub-issue</button></div>
+  }
   return (
     <section className="sub-issues" aria-label="Sub-issues">
       <div className="sub-head">
@@ -129,6 +133,36 @@ function SubIssues({ id, children }: { id: string; children: (IssueSummary | Hid
       {tree.map((n) => <SubIssueRow key={n.issue.id} node={n} depth={0} open={open} setOpen={toggle} closed={closed} />)}
       {stubs.map((c) => <div key={c.id} className="tree-hidden"><IssueChip id={c.id} /></div>)}
     </section>
+  )
+}
+
+/**
+ * Where this issue sits in its parent: "2 of 3 in WEBSI-1 Epic…" with the parent's progress, and the sub-issues
+ * before and after it. Nothing for a top-level issue, or when the parent isn't in the live store (a hidden project).
+ */
+function ParentStrip({ id }: { id: string }) {
+  const { issues, config } = useTracker()
+  const closed = useMemo(() => {
+    const types = new Map((config?.statuses ?? []).map((s) => [s.name, s.type]))
+    return (s: string) => { const t = types.get(s); return t === 'completed' || t === 'canceled' || t === 'duplicate' }
+  }, [config])
+  const pos = useMemo(() => positionInParent(issues, id, closed), [issues, id, closed])
+  if (!pos) return null
+  const step = (i: typeof pos.prev, dir: 'Previous' | 'Next') => (i
+    ? <a className="step" href={href({ name: 'issue', id: i.id })} title={`${dir}: ${i.id} ${i.title} (${i.status})`} aria-label={`${dir} sub-issue: ${i.id} ${i.title}`}>
+        {dir === 'Previous' && <span className="arrow prev"><Icon name="chevron" size={12} /></span>}<StatusIcon status={i.status} config={config} size={12} /><span className="id">{i.id}</span>{dir === 'Next' && <span className="arrow next"><Icon name="chevron" size={12} /></span>}
+      </a>
+    : null)
+  return (
+    <nav className="parent-strip" aria-label="Position in the parent issue">
+      <a className="up" href={href({ name: 'issue', id: pos.parent.id })} title={`${pos.parent.id} ${pos.parent.title}`}>
+        <ProgressRing done={pos.done} total={pos.total} config={config} size={14} />
+        <span className="n">{pos.total > 1 ? `${pos.index} of ${pos.total}` : 'Sub-issue'}</span>
+        <span className="in">{pos.total > 1 ? 'in' : 'of'}</span>
+        <span className="t">{pos.parent.title}</span>
+      </a>
+      <span className="steps">{step(pos.prev, 'Previous')}{step(pos.next, 'Next')}</span>
+    </nav>
   )
 }
 
@@ -364,6 +398,7 @@ export function IssuePage({ id }: { id: string }) {
       {hidden && <HiddenNotice slug={detail.project} />}
       <div className={`issue-body${changesOpen ? ' with-changes' : ''}`}>
         <article className="issue-main">
+          <ParentStrip id={detail.id} />
           <Title title={detail.title} save={(title) => save({ title })} />
           <Description key={detail.id} issueId={detail.id} source={detail.description} ctx={ctx} save={save} apply={apply} reload={reload} />
           <SubIssues id={detail.id} children={detail.children} />

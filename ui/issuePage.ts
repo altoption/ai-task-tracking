@@ -39,6 +39,32 @@ export function treeProgress(nodes: TreeNode[], closed: (status: string) => bool
   return { done, total }
 }
 
+// ---------- position among the parent's sub-issues ----------
+
+export interface Position {
+  parent: IssueSummary
+  /** 1-based place among the parent's sub-issues, in id order (the order the issue page lists them). */
+  index: number
+  total: number
+  done: number
+  prev?: IssueSummary
+  next?: IssueSummary
+}
+
+/** Pure: where `id` sits among its parent's sub-issues. Null without a parent the live store holds. */
+export function positionInParent(issues: ReadonlyMap<string, IssueSummary>, id: string, closed: (status: string) => boolean): Position | null {
+  const me = issues.get(id)
+  const parent = me?.parent && me.parent !== id ? issues.get(me.parent) : undefined
+  if (!me || !parent) return null
+  const sibs: IssueSummary[] = []
+  for (const i of issues.values()) if (i.parent === parent.id && i.id !== parent.id) sibs.push(i)
+  sibs.sort(byIssueNumber)
+  const at = sibs.findIndex((i) => i.id === id)
+  if (at < 0) return null
+  const prev = sibs[at - 1], next = sibs[at + 1]
+  return { parent, index: at + 1, total: sibs.length, done: sibs.reduce((n, i) => n + (closed(i.status) ? 1 : 0), 0), ...(prev ? { prev } : {}), ...(next ? { next } : {}) }
+}
+
 // ---------- activity ----------
 
 export type ActivityItem =

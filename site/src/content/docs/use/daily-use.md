@@ -153,11 +153,22 @@ opens them in the browser.
 
 ![Home, the daily overview: the date and today's summary; Needs you with each request, how long it has waited and its action; In progress and Ready next; on the right, Agent activity with today's counts, the live session and what finished](../../../assets/screenshots/home.png)
 
-A project shows its description, milestones and documents above its issues, grouped by status:
+A project page is one header (name, status, how many issues are done), a summary line, then its issues, grouped by
+status. The summary line has the first line of the description, a chip per milestone with its date and progress,
+and the number of documents. Click a milestone chip to show only that milestone's issues (again to show all); click
+the description to open the full description, milestones and documents above the list, where you edit them. The
+page remembers, per project in this browser, whether they are open.
 
-![A project page with its issues grouped by status](../../../assets/screenshots/project.png)
+![A project page: the header, the summary line with a milestone chip, and its issues grouped by status](../../../assets/screenshots/project.png)
+
+In a list, sub-issues sit under their parent on a tree line, and the chevron beside a parent folds them away. A
+sub-issue whose parent isn't in the same group (another status, or filtered out) names the parent after its title
+instead; click that name to open the parent. Group counts and **select all** cover exactly the rows you see.
 
 Click the ID at the top of an issue page to copy it.
+
+A sub-issue's page starts with where it sits in its parent, such as "2 of 3 in Epic: New pricing page" with the
+parent's progress ring, and links to the sub-issues before and after it.
 
 An issue page has the description (checklists included), sub-issues, its attempts ("3 attempts · 2 tools": one per
 agent session, which opens into each session's tool, repo, branch, writes and the status it left the issue in), the

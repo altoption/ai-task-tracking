@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { CopyId, copyText } from '../../ui/components/CopyId'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, LabelDef } from '../../src/model'
-import { activityItems, buildTree, filterOptions, labelOptions, treeProgress } from '../../ui/issuePage'
+import { activityItems, buildTree, filterOptions, labelOptions, positionInParent, treeProgress } from '../../ui/issuePage'
 import { isAllowedUrl, linkifyIds, makeSanitizer, renderMarkdown, rewriteUrl, toggleTask } from '../../ui/markdown'
 import { taskLines } from '../../src/shared/tasks'
 
@@ -189,5 +189,22 @@ describe('copying the issue ID', () => {
     expect(written).toEqual(['ATT-56'])
     expect(await copyText('ATT-56', { writeText: async () => { throw new Error('denied') } })).toBe(false)
     expect(await copyText('ATT-56', undefined as never)).toBe(false)
+  })
+})
+
+describe('positionInParent', () => {
+  const s = (id: string, status: string, parent: string | null) => ({ id, status, parent }) as IssueSummary
+  const map = new Map([s('Q-1', 'In Progress', null), s('Q-10', 'Todo', 'Q-1'), s('Q-2', 'Done', 'Q-1'), s('Q-3', 'In Progress', 'Q-1'), s('Q-7', 'Todo', 'Q-99')].map((i) => [i.id, i]))
+  const done = (st: string) => st === 'Done'
+  test('place, total and done among the parent\'s sub-issues in id order, with the neighbours', () => {
+    const p = positionInParent(map, 'Q-3', done)!
+    expect([p.parent.id, p.index, p.total, p.done, p.prev?.id, p.next?.id]).toEqual(['Q-1', 2, 3, 1, 'Q-2', 'Q-10'])
+    expect(positionInParent(map, 'Q-2', done)!.prev).toBeUndefined()
+    expect(positionInParent(map, 'Q-10', done)!.next).toBeUndefined()
+  })
+  test('null for a top-level issue, an unknown one, and a parent the store does not hold', () => {
+    expect(positionInParent(map, 'Q-1', done)).toBeNull()
+    expect(positionInParent(map, 'Q-404', done)).toBeNull()
+    expect(positionInParent(map, 'Q-7', done)).toBeNull()
   })
 })
