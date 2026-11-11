@@ -90,8 +90,9 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   next, and a step's page says where it sits ("2 of 3 in Epic: New pricing page") with the steps before and after.
 
   ![A project page: the header, the summary line with a milestone chip, and its issues grouped by status, a step nested under its epic](site/src/assets/screenshots/project.png)
-- **Changing several issues at once.** Tick rows in a list (shift-click for a range, a group's box for the group,
-  ⌘A for all; a selected epic offers its sub-issues) and set their status, priority, labels or project in one step.
+- **Changing several issues at once.** Tick rows in a list or cards on a board (shift-click for a range, a group's
+  box for the group, ⌘A for all, or `j` `k` and `x` from the keyboard; a selected epic offers its sub-issues) and set
+  their status, priority, labels, parent, milestone or project in one step.
   See [Changing several issues at once](site/src/content/docs/use/daily-use.md#changing-several-issues-at-once).
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
   a badge on the issue page, a dot on rows, and failing checks in Needs you. Without `gh` nothing shows.

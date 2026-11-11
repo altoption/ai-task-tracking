@@ -2,9 +2,10 @@
  * The board: columns from `groupBy`, optional swimlanes from `rowsBy`, cards dragged between
  * cells call `save_issue` (status / priority / project / labels for the column, parent / project for the row).
  * Empty columns go to a "Hidden columns" panel unless shown. Swimlanes are virtualized (10k issues by parent means
- * thousands of rows); each cell renders 50 cards, then "Show more".
+ * thousands of rows); each cell renders 50 cards, then "Show more". Cards can be selected (the box at a card's corner,
+ * shift-click for a run, ⌘A, Esc) and changed together in the bulk bar, like list rows.
  */
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Config, IssueSummary, ViewDisplay } from '../../src/model'
 import { Icon, PriorityIcon, ProgressPill, StatusIcon } from '../components/icons'
@@ -12,6 +13,8 @@ import { href, navigate } from '../router'
 import { swimlanes, NONE, type ViewGroup, type ViewCtx } from '../viewModel'
 import { GroupIcon } from './ListView'
 import { PropertyCells, shortDate, type CellCtx } from './IssueCells'
+import { BulkBar } from './BulkBar'
+import { useSelection } from './useSelection'
 
 const PAGE = 50
 
@@ -47,6 +50,27 @@ export function BoardView({ groups, hidden, display, ctx, config, cells, onDrop 
     getItemKey: (n) => lanes[n]!.key,
   })
 
+  // Selection: the cards on the board in reading order (lane by lane, column by column; collapsed lanes and cards
+  // behind "Show more" aren't on the board, so they don't count).
+  const cardIds = useMemo(() => {
+    const out: string[] = []
+    for (const lane of lanes) {
+      if (collapsed.has(lane.key)) continue
+      for (const g of groups) {
+        const key = `${g.key}\u0000${lane.key}`
+        for (const i of (cellsByKey.get(key) ?? []).slice(0, more[key] ?? PAGE)) out.push(i.id)
+      }
+    }
+    return out
+  }, [lanes, groups, cellsByKey, collapsed, more])
+  const parentOf = useCallback((id: string) => ctx.byId.get(id)?.parent, [ctx.byId])
+  const sel = useSelection(cardIds, cardIds, parentOf)
+  const indexOf = useMemo(() => new Map(cardIds.map((id, k) => [id, k])), [cardIds])
+  const pick = useCallback((id: string, shift: boolean, alt: boolean) => {
+    if (alt && sel.family.has(id)) sel.toggleFamily(id)
+    else sel.click(indexOf.get(id) ?? -1, shift)
+  }, [sel, indexOf])
+
   const drop = (g: string, r: string) => (e: DragEvent) => {
     e.preventDefault()
     setOver(null)
@@ -57,7 +81,7 @@ export function BoardView({ groups, hidden, display, ctx, config, cells, onDrop 
 
   if (!groups.length) return <div className="view-empty muted">No issues match this view.</div>
   return (
-    <div className="board-wrap">
+    <div className={`board-wrap${sel.picked.length ? ' selecting' : ''}`}>
       <div className="view-scroll board-scroll" ref={scroller}>
         <div className="board" style={{ width: 'max-content' }}>
           <div className="board-head" style={grid}>
@@ -102,7 +126,7 @@ export function BoardView({ groups, hidden, display, ctx, config, cells, onDrop 
                           onDragOver={(e) => { e.preventDefault(); if (over !== key) setOver(key) }}
                           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((o) => (o === key ? null : o)) }}
                           onDrop={drop(g.key, lane.key)}>
-                          {list.slice(0, shown).map((i) => <Card key={i.id} issue={i} props={props} config={config} cells={cells} onDrag={(x) => setDragging(x && { issue: x, row: lane.key })} />)}
+                          {list.slice(0, shown).map((i) => <Card key={i.id} issue={i} props={props} config={config} cells={cells} selected={sel.selected.has(i.id)} onPick={pick} onDrag={(x) => setDragging(x && { issue: x, row: lane.key })} />)}
                           {list.length > shown && <button className="home-more" onClick={() => setMore((m) => ({ ...m, [key]: shown + PAGE }))}>Show {Math.min(PAGE, list.length - shown)} more of {list.length - shown}</button>}
                         </div>
                       )
@@ -115,6 +139,7 @@ export function BoardView({ groups, hidden, display, ctx, config, cells, onDrop 
           </div>
         </div>
       </div>
+      {sel.picked.length > 0 && <BulkBar ids={sel.picked} byId={ctx.byId} onClear={sel.clear} kids={sel.kidsToAdd.length} onAddKids={() => sel.set(sel.kidsToAdd, true)} />}
       {hidden.length > 0 && (
         <aside className="hidden-cols">
           <div className="muted small">Hidden columns</div>
@@ -127,12 +152,19 @@ export function BoardView({ groups, hidden, display, ctx, config, cells, onDrop 
   )
 }
 
-function Card({ issue: i, props, config, cells, onDrag }: { issue: IssueSummary; props: Set<string>; config: Config | null; cells: CellCtx; onDrag: (i: IssueSummary | null) => void }) {
+function Card({ issue: i, props, config, cells, selected, onPick, onDrag }: {
+  issue: IssueSummary; props: Set<string>; config: Config | null; cells: CellCtx
+  selected: boolean; onPick: (id: string, shift: boolean, alt: boolean) => void; onDrag: (i: IssueSummary | null) => void
+}) {
   return (
-    <a className="card view-card" href={href({ name: 'issue', id: i.id })} draggable
+    <a className={`card view-card${selected ? ' selected' : ''}`} href={href({ name: 'issue', id: i.id })} draggable
       onClick={(e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate({ name: 'issue', id: i.id }) } }}
       onDragStart={(e) => { e.dataTransfer.setData('text/plain', i.id); e.dataTransfer.effectAllowed = 'move'; onDrag(i) }}
       onDragEnd={() => onDrag(null)}>
+      {/* Not an <input>: inside a link, a real checkbox's click would have to be cancelled, which un-ticks it. */}
+      <span className="card-check" role="checkbox" aria-checked={selected} aria-label={`Select ${i.id}`} tabIndex={0}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPick(i.id, e.shiftKey, e.altKey) }}
+        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onPick(i.id, e.shiftKey, e.altKey) } }}>{selected ? '✓' : ''}</span>
       {props.has('id') && <span className="id">{i.id}</span>}
       <span className="card-title"><StatusIcon status={i.status} config={config} /><span className="t">{i.title}</span></span>
       <span className="card-props">

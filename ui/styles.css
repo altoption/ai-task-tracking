@@ -987,11 +987,24 @@ span.tree-toggle { transform: none; }
 .row-check { position: absolute; left: 3px; width: 14px; height: 14px; margin: 0; opacity: 0; accent-color: var(--accent); cursor: pointer; z-index: 1; }
 .list-row:hover + .row-check, .row-check:hover, .row-check:focus-visible, .row-check:checked, .selecting .row-check { opacity: 1; }
 .list-row.selected { background: var(--hover); }
+.list-row.cursor { box-shadow: inset 2px 0 0 var(--accent); background: var(--hover); }
+/* board cards: the box sits at the card's top right corner */
+.view-card { position: relative; }
+.card-check {
+  position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; display: grid; place-items: center; opacity: 0;
+  border: 1px solid var(--border-focus); border-radius: 4px; background: var(--panel); color: var(--on-accent); font-size: 11px; line-height: 1; cursor: pointer;
+}
+.view-card:hover .card-check, .card-check:focus-visible, .selecting .card-check, .card-check[aria-checked="true"] { opacity: 1; }
+.card-check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.view-card.selected { border-color: var(--accent); }
+.board-wrap { position: relative; }
+.board-wrap.selecting .board-scroll { padding-bottom: 72px; }
+
 .group-check { top: 13px; }
 .list-group:hover .group-check { opacity: 1; }
 /* The bar floats over the foot of the list: ticking a box never moves the rows under the pointer. */
 .view-screen { position: relative; }
-.selecting { padding-bottom: 72px; }
+.view-scroll.selecting { padding-bottom: 72px; }
 .bulk-bar {
   position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 15; width: max-content; max-width: calc(100% - 32px);
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 8px 7px 14px;
