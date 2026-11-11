@@ -33,8 +33,9 @@ export function IssueChip({ id, onRemove }: { id: string; onRemove?: () => void 
   )
 }
 
-/** Issue options for parent/blocked-by/blocks/related: id or title matches from the live store, then full-text hits from /api/search. */
-function useIssueOptions(selfId: string, project: string) {
+/** Issue options for parent/blocked-by/blocks/related (`self`: the issue, or the issues, that can't be picked): id or title matches from the live store, then full-text hits from /api/search. */
+export function useIssueOptions(self: string | ReadonlySet<string>, project: string) {
+  const isSelf = useMemo(() => (typeof self === 'string' ? (id: string) => id === self : (id: string) => self.has(id)), [self])
   const { issues, config } = useTracker()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<IssueSummary[]>([])
@@ -46,7 +47,7 @@ function useIssueOptions(selfId: string, project: string) {
   }, [q])
   const toOpt = (i: IssueSummary): PickOption => ({ value: i.id, label: `${i.id} ${i.title}`, group: null, icon: <StatusIcon status={i.status} config={config} size={12} /> })
   const options = useMemo(() => (query: string) => {
-    const all = [...issues.values()].filter((i) => i.id !== selfId)
+    const all = [...issues.values()].filter((i) => !isSelf(i.id))
     let base: IssueSummary[]
     if (!query.trim()) base = all.filter((i) => i.project === project).sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 30)
     else {
@@ -55,8 +56,8 @@ function useIssueOptions(selfId: string, project: string) {
       base = [...all.filter((i) => i.id === up), ...local.map((o) => o.i).sort((a, b) => b.updated.localeCompare(a.updated))].slice(0, 50)
     }
     const seen = new Set<string>()
-    return [...base, ...hits.filter((h) => h.id !== selfId)].filter((i) => !seen.has(i.id) && !!seen.add(i.id)).map(toOpt)
-  }, [issues, hits, selfId, project, config])
+    return [...base, ...hits.filter((h) => !isSelf(h.id))].filter((i) => !seen.has(i.id) && !!seen.add(i.id)).map(toOpt)
+  }, [issues, hits, isSelf, project, config])
   return { options, onQuery: setQ }
 }
 

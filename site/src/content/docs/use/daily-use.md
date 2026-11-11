@@ -120,16 +120,29 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
 ### Changing several issues at once
 
 In a list, point at a row and tick the box at its left edge to select it. Shift-click another box to select every row
-in between, tick the box on a group's heading to take the whole group, and ⌘A selects every row. When a selected
-issue has sub-issues that aren't selected, the bar offers them (**+ 3 sub-issues**); ⌥-click a box to take or drop
-an issue together with its sub-issues. Either way a folded parent opens to show them: a change only ever touches
-rows on screen, and a selected row that a fold or a filter hides is left alone until it shows again.
+in between, tick the box on a group's heading to take the whole group, and ⌘A selects every row. On a board, the
+box is at a card's top right corner, and shift-click and ⌘A work the same way. When a selected issue has sub-issues
+that aren't selected, the bar offers them (**+ 3 sub-issues**); ⌥-click a box to take or drop an issue together
+with its sub-issues. Either way a folded parent opens to show them: a change only ever touches rows on screen, and a
+selected row that a fold or a filter hides is left alone until it shows again.
+
+From the keyboard, in a list:
+
+| Key | Action |
+|---|---|
+| ↓ ↑ or `j` `k` | move to the next or previous row |
+| Shift+↓ Shift+↑ | move and select as you go |
+| `x` or Space | select the row, or unselect it |
+| Shift+`x` | select the row with its sub-issues, or unselect them all |
+| Enter or `o` | open the row's issue |
+| ⌘A, Esc | select every row; clear the selection |
 
 A bar over the foot of the list says how many are selected and changes them all in one step: **Status**,
-**Priority**, **Add label**, **Remove label** (labels some of them have) and **Move to project**. Moving them to
-Done, Canceled or Duplicate asks for an optional reason, added as a comment on each. If any one can't be changed,
-none are, and the bar says why. The selection stays after a change, so you can make another; **Clear** or Esc
-clears it. Boards don't select yet.
+**Priority**, **Add label**, **Remove label** (labels some of them have), **Parent** (make them sub-issues of an
+issue you search for, or **No parent**), **Milestone** (when they are all in one project that has milestones) and
+**Move to project**. Moving them to Done, Canceled or Duplicate asks for an optional reason, added as a comment on
+each. If any one can't be changed, none are, and the bar says why. The selection stays after a change, so you can
+make another; **Clear** or Esc clears it.
 
 The app adds four saved views to your data folder the first time the engine starts, on a new folder or an existing one:
 

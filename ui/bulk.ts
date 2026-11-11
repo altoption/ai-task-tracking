@@ -7,6 +7,8 @@ export type BulkPatch =
   | { addLabels: string[] }
   | { removeLabels: string[] }
   | { project: string }
+  | { parentId: string | null }
+  | { milestone: string | null }
 
 /**
  * The selection after a click on row `id` (at `index` among `ids`, the visible rows in order).
@@ -66,4 +68,26 @@ export const asksReason = (st: StatusDef | undefined) => !!st && (st.type === 'c
 export function bulkItems(ids: readonly string[], patch: BulkPatch, reason?: string): Record<string, unknown>[] {
   const comment = reason?.trim()
   return ids.map((id) => ({ id, ...patch, ...(comment ? { comment } : {}) }))
+}
+
+/** What a key does in a list: move the cursor row, select it (`family`: with its sub-issues), or open it. */
+export type ListKey = 'down' | 'up' | 'extendDown' | 'extendUp' | 'toggle' | 'family' | 'open'
+export function listKey(key: string, shift: boolean): ListKey | null {
+  if (key === 'ArrowDown' || key === 'j' || key === 'J') return shift ? 'extendDown' : 'down'
+  if (key === 'ArrowUp' || key === 'k' || key === 'K') return shift ? 'extendUp' : 'up'
+  if (key === 'x' || key === ' ') return 'toggle'
+  if (key === 'X') return 'family'
+  if (key === 'Enter' || key === 'o') return 'open'
+  return null
+}
+
+/** The one project every selected issue is in (milestones belong to a project), or null when they differ. */
+export function commonProject(ids: readonly string[], projectOf: (id: string) => string | undefined): string | null {
+  let p: string | undefined
+  for (const id of ids) {
+    const x = projectOf(id)
+    if (x === undefined || (p !== undefined && x !== p)) return null
+    p = x
+  }
+  return p ?? null
 }

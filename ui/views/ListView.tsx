@@ -3,7 +3,7 @@
  * scroll smoothly. Sub-issues form a tree under their parent (guide lines, a chevron to fold a parent away); a
  * sub-issue whose parent is in another group names it in a crumb after the title instead of repeating the parent row.
  * Rows can be selected (checkbox, shift-click for a range, ⌥-click for a row with its sub-issues, a group's box for
- * the group, ⌘A, Esc clears) and changed together in the bulk bar, which floats over the foot of the list.
+ * the group, ⌘A, Esc clears; from the keyboard ↑ ↓ or j k, x, Shift+X, Enter) and changed together in the bulk bar, which floats over the foot of the list.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -13,7 +13,8 @@ import { href, navigate } from '../router'
 import { listRows, type ListRow, type ViewGroup } from '../viewModel'
 import { PropertyCells, type CellCtx } from './IssueCells'
 import { BulkBar } from './BulkBar'
-import { clickSelect, families, missingKids, setMany, visibleSelection } from '../bulk'
+import { listKey } from '../bulk'
+import { useSelection } from './useSelection'
 
 type Item = { kind: 'group'; group: ViewGroup; collapsed: boolean } | ({ kind: 'row' } & ListRow)
 const ROW = 40
@@ -42,7 +43,7 @@ export function ListView({ groups, display, byId, config, cells }: {
   // `items`: what is drawn. `groupIds`: each group's drawn rows. `family`: each row's sub-issues anywhere in the
   // view (an epic's steps sit in other status groups), folded-away ones included: taking them unfolds them, because a
   // bulk change only ever touches rows on screen.
-  const { items, family, groupIds, allIds } = useMemo(() => {
+  const { items, groupIds, allIds } = useMemo(() => {
     const out: Item[] = []
     const groupIds = new Map<string, string[]>()
     const allIds: string[] = []
@@ -56,7 +57,7 @@ export function ListView({ groups, display, byId, config, cells }: {
       groupIds.set(g.key, drawn.map((r) => r.issue.id))
       for (const r of drawn) out.push({ kind: 'row', ...r })
     }
-    return { items: out, family: families(allIds, (id) => byId.get(id)?.parent), groupIds, allIds }
+    return { items: out, groupIds, allIds }
   }, [groups, collapsed, folded, byId, display.showSubIssues, grouped])
   const v = useVirtualizer({ count: items.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 12 })
   const props = useMemo(() => new Set(display.properties), [display.properties])
@@ -64,44 +65,60 @@ export function ListView({ groups, display, byId, config, cells }: {
   const tree = useMemo(() => items.some((it) => it.kind === 'row' && it.kids > 0), [items])
   const toggle = (key: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
 
-  // Selection: ids of the visible rows in order (group headers skipped), the selected ones, and the last clicked row.
+  // Selection: ids of the visible rows in order (group headers skipped). Only rows on screen count: a selected row
+  // that a fold or a filter hides is left alone, and the count says so.
   const rowIds = useMemo(() => items.flatMap((it) => (it.kind === 'row' ? [it.issue.id] : [])), [items])
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const anchor = useRef<number | null>(null)
-  // Only rows on screen count: a selected row that a fold or a filter hides is left alone, and the count says so.
-  const picked = useMemo(() => visibleSelection(selected, rowIds), [selected, rowIds])
-  const clear = useCallback(() => { setSelected(new Set()); anchor.current = null }, [])
+  const parentOf = useCallback((id: string) => byId.get(id)?.parent, [byId])
+  const sel = useSelection(rowIds, allIds, parentOf)
+  const { selected, picked, kidsToAdd, clear } = sel
   /** Open these parents, so the sub-issues just selected under them are on screen. */
   const unfold = (ids: string[]) => setFolded((f) => { const n = new Set(f); for (const x of ids) n.delete(x); return n.size === f.size ? f : n })
+  /** The row with every sub-issue under it, taken or dropped together (⌥-click, Shift+X). Folded ones are shown. */
+  const takeFamily = (id: string) => { if (sel.toggleFamily(id)) unfold([id, ...(sel.family.get(id) ?? [])]) }
   const check = (rowIndex: number, shift: boolean, alt: boolean) => {
     const id = rowIds[rowIndex]!
-    const kids = family.get(id)
-    if (alt && kids) {
-      // ⌥-click: the row and every sub-issue under it, taken or dropped together. Folded ones are shown.
-      const on = !selected.has(id) || kids.some((k) => !selected.has(k))
-      setSelected((s) => setMany(s, [id, ...kids], on))
-      if (on) unfold([id, ...kids])
-    } else {
-      const from = anchor.current // read now: the updater runs later, after the anchor moves
-      setSelected((s) => clickSelect(s, rowIds, rowIndex, from, shift))
-    }
-    anchor.current = rowIndex
+    if (alt && sel.family.has(id)) { takeFamily(id); sel.anchor.current = rowIndex } else sel.click(rowIndex, shift)
   }
-  const kidsToAdd = useMemo(() => missingKids(new Set(picked), family), [picked, family])
-  const addKids = () => { setSelected((s) => setMany(s, kidsToAdd, true)); unfold([...picked, ...kidsToAdd]) }
+  const addKids = () => { sel.set(kidsToAdd, true); unfold([...picked, ...kidsToAdd]) }
+
+  let rowIndex = -1
+  const rowIndexAt = new Map<number, number>()
+  const itemOfRow: number[] = []
+  items.forEach((it, k) => { if (it.kind === 'row') { rowIndexAt.set(k, ++rowIndex); itemOfRow.push(k) } })
+
+  // The keyboard: a cursor row moved with ↑ ↓ (or j k; with shift, selecting as it goes), x or space to select it,
+  // Shift+X with its sub-issues, Enter or o to open it. The cursor follows the issue, not the position.
+  const [cursorId, setCursorId] = useState<string | null>(null)
+  const cursor = cursorId === null ? -1 : rowIds.indexOf(cursorId)
+  const keys = useRef({ cursor, rowIds, itemOfRow, check, takeFamily, sel })
+  keys.current = { cursor, rowIds, itemOfRow, check, takeFamily, sel }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
       const t = e.target as HTMLElement | null
-      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
-      if (e.key === 'Escape' && picked.length) { clear() }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && rowIds.length) { e.preventDefault(); setSelected(new Set(rowIds)) }
+      if (t?.closest('input:not([type="checkbox"]), textarea, select, button, [contenteditable="true"], [role="dialog"]') || document.querySelector('.overlay')) return
+      const k = keys.current
+      const act = listKey(e.key, e.shiftKey)
+      if (!act || !k.rowIds.length) { if (e.key === 'Escape' && !k.sel.picked.length) setCursorId(null); return }
+      if (act === 'down' || act === 'up' || act === 'extendDown' || act === 'extendUp') {
+        const step = act === 'down' || act === 'extendDown' ? 1 : -1
+        const next = k.cursor < 0 ? (step > 0 ? 0 : k.rowIds.length - 1) : Math.min(k.rowIds.length - 1, Math.max(0, k.cursor + step))
+        e.preventDefault()
+        if (act.startsWith('extend')) k.sel.set([...(k.cursor >= 0 ? [k.rowIds[k.cursor]!] : []), k.rowIds[next]!], true)
+        setCursorId(k.rowIds[next]!)
+        v.scrollToIndex(k.itemOfRow[next]!, { align: 'auto' })
+        return
+      }
+      if (k.cursor < 0) return
+      e.preventDefault()
+      const id = k.rowIds[k.cursor]!
+      if (act === 'toggle') k.check(k.cursor, false, false)
+      else if (act === 'family') k.takeFamily(id)
+      else navigate({ name: 'issue', id })
     }
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
-  }, [picked.length, rowIds, clear])
-  let rowIndex = -1
-  const rowIndexAt = new Map<number, number>()
-  items.forEach((it, k) => { if (it.kind === 'row') rowIndexAt.set(k, ++rowIndex) })
+  }, [v])
 
   if (!items.length) return <div className="view-empty muted">No issues match this view.</div>
   return (
@@ -117,7 +134,7 @@ export function ListView({ groups, display, byId, config, cells }: {
             return (
               <div key={`g:${it.group.key}`} className="list-group" style={style} role="listitem">
                 {gids.length > 0 && <input type="checkbox" className="row-check group-check" checked={gOn} aria-label={`Select all ${gids.length} in ${it.group.label}`}
-                  ref={(el) => { if (el) el.indeterminate = !gOn && gids.some((x) => selected.has(x)) }} onChange={() => setSelected((s) => setMany(s, gids, !gOn))} />}
+                  ref={(el) => { if (el) el.indeterminate = !gOn && gids.some((x) => selected.has(x)) }} onChange={() => sel.set(gids, !gOn)} />}
                 <button className={`tree-toggle${it.collapsed ? '' : ' open'}`} aria-label={it.collapsed ? 'Expand group' : 'Collapse group'} onClick={() => toggle(it.group.key)}><Icon name="chevron" size={12} /></button>
                 <GroupIcon by={display.groupBy} group={it.group} config={config} />
                 <span className="group-label">{it.group.label}</span>
@@ -130,7 +147,7 @@ export function ListView({ groups, display, byId, config, cells }: {
           const ri = rowIndexAt.get(vi.index)!
           const on = selected.has(i.id)
           return [
-            <a key={`r:${i.id}:${vi.index}`} className={`list-row${it.kids ? ' parent' : ''}${on ? ' selected' : ''}`} style={style} href={href({ name: 'issue', id: i.id })}
+            <a key={`r:${i.id}:${vi.index}`} className={`list-row${it.kids ? ' parent' : ''}${on ? ' selected' : ''}${ri === cursor ? ' cursor' : ''}`} style={style} href={href({ name: 'issue', id: i.id })}
               role="listitem" aria-level={it.depth + 1} onClick={(e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate({ name: 'issue', id: i.id }) } }}>
               {it.rails.map((on, k) => <span key={k} className={`tree-guide${k === it.depth - 1 ? (on ? ' tee' : ' end') : on ? ' rail' : ''}`} aria-hidden="true" />)}
               {tree && (it.kids > 0

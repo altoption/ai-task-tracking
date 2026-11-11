@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { asksReason, bulkItems, clickSelect, families, missingKids, setMany, visibleSelection } from '../../ui/bulk'
+import { asksReason, bulkItems, clickSelect, commonProject, listKey, families, missingKids, setMany, visibleSelection } from '../../ui/bulk'
 
 const ids = ['A-1', 'A-2', 'A-3', 'A-4', 'A-5']
 const set = (...x: string[]) => new Set(x)
@@ -59,4 +59,24 @@ describe('a parent and its sub-issues', () => {
     expect([...setMany(set('A-1'), ['A-2', 'A-3'], true)].sort()).toEqual(['A-1', 'A-2', 'A-3'])
     expect([...setMany(set('A-1', 'A-2'), ['A-2', 'A-3'], false)]).toEqual(['A-1'])
   })
+})
+
+test('listKey: arrows and j/k move (shift extends), x or space selects, X takes the family, Enter or o opens', () => {
+  expect([listKey('j', false), listKey('ArrowDown', false), listKey('k', false), listKey('ArrowUp', false)]).toEqual(['down', 'down', 'up', 'up'])
+  expect([listKey('ArrowDown', true), listKey('J', true), listKey('ArrowUp', true)]).toEqual(['extendDown', 'extendDown', 'extendUp'])
+  expect([listKey('x', false), listKey(' ', false), listKey('X', true), listKey('Enter', false), listKey('o', false)]).toEqual(['toggle', 'toggle', 'family', 'open', 'open'])
+  expect(listKey('c', false)).toBeNull()
+})
+
+test('commonProject: the project when every selected issue shares it', () => {
+  const p: Record<string, string> = { 'A-1': 'web', 'A-2': 'web', 'B-1': 'app' }
+  expect(commonProject(['A-1', 'A-2'], (id) => p[id])).toBe('web')
+  expect(commonProject(['A-1', 'B-1'], (id) => p[id])).toBeNull()
+  expect(commonProject(['A-1', 'GONE'], (id) => p[id])).toBeNull()
+  expect(commonProject([], (id) => p[id])).toBeNull()
+})
+
+test('bulkItems carries a parent or a milestone, and null to clear one', () => {
+  expect(bulkItems(['A-1'], { parentId: 'E-1' })).toEqual([{ id: 'A-1', parentId: 'E-1' }])
+  expect(bulkItems(['A-1'], { milestone: null })).toEqual([{ id: 'A-1', milestone: null }])
 })

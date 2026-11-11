@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { IssueSummary } from '../../src/model'
-import { asksReason, bulkItems, type BulkPatch } from '../bulk'
+import { asksReason, bulkItems, commonProject, type BulkPatch } from '../bulk'
 import { callTool, listedProjects, useTracker } from '../client'
 import { PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
 import { Picker, type PickOption } from '../components/Picker'
 import { labelOptions } from '../issuePage'
+import { NO_PROJECT } from '../client'
+import { useIssueOptions } from './IssueProperties'
 
 /**
  * Floats over the foot of the list while rows are selected (so ticking a box never moves the rows): change all of
@@ -44,6 +46,15 @@ export function BulkBar({ ids, byId, onClear, kids, onAddKids }: {
   }, [ids, byId, addLabelOpts])
   const projectOpts: PickOption[] = listedProjects(state.projects).map((p) => ({ value: p.slug, label: p.name, group: null, color: p.color }))
 
+  // A parent: any issue but the selected ones, found as you type. A milestone: only when they share a project.
+  const idSet = useMemo(() => new Set(ids), [ids])
+  const project = useMemo(() => commonProject(ids, (id) => byId.get(id)?.project), [ids, byId])
+  const { options: issueOptions, onQuery } = useIssueOptions(idSet, project ?? '')
+  const anyParent = ids.some((id) => byId.get(id)?.parent)
+  const parentOpts = useMemo(() => (q: string): PickOption[] => [...(anyParent && !q.trim() ? [{ value: '', label: 'No parent', group: null }] : []), ...issueOptions(q)], [issueOptions, anyParent])
+  const milestones = project && project !== NO_PROJECT ? state.projects.find((p) => p.slug === project)?.milestones ?? [] : []
+  const milestoneOpts: PickOption[] = [{ value: '', label: 'No milestone', group: null }, ...milestones.map((m) => ({ value: m.name, label: m.name, group: null, ...(m.target ? { hint: m.target } : {}) }))]
+
   const pickStatus = (name: string) => {
     if (asksReason(config?.statuses.find((s) => s.name === name))) { setClosing(name); setReason('') }
     else void run({ state: name })
@@ -66,6 +77,8 @@ export function BulkBar({ ids, byId, onClear, kids, onAddKids }: {
           <Picker label="Priority" options={priorityOpts} selected={[]} onPick={(v) => void run({ priority: Number(v) })} trigger={<span>Priority</span>} />
           <Picker label="Add label" options={addLabelOpts} selected={[]} onPick={(v) => void run({ addLabels: [v] })} trigger={<span>Add label</span>} />
           {removeLabelOpts.length > 0 && <Picker label="Remove label" options={removeLabelOpts} selected={[]} onPick={(v) => void run({ removeLabels: [v] })} trigger={<span>Remove label</span>} />}
+          <Picker label="Parent" options={parentOpts} onQuery={onQuery} selected={[]} onPick={(v) => void run({ parentId: v || null })} trigger={<span>Parent</span>} placeholder="Make them sub-issues of…" />
+          {milestones.length > 0 && <Picker label="Milestone" options={milestoneOpts} selected={[]} onPick={(v) => void run({ milestone: v || null })} trigger={<span>Milestone</span>} />}
           <Picker label="Project" options={projectOpts} selected={[]} onPick={(v) => void run({ project: v })} trigger={<span>Move to project</span>} />
         </>
       )}
