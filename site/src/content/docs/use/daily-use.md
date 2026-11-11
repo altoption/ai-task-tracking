@@ -122,7 +122,8 @@ All issues, projects and saved views are in the sidebar, as lists or boards. At 
 In a list, point at a row and tick the box at its left edge to select it. Shift-click another box to select every row
 in between, tick the box on a group's heading to take the whole group, and ⌘A selects every row. When a selected
 issue has sub-issues that aren't selected, the bar offers them (**+ 3 sub-issues**); ⌥-click a box to take or drop
-an issue together with its sub-issues.
+an issue together with its sub-issues. Either way a folded parent opens to show them: a change only ever touches
+rows on screen, and a selected row that a fold or a filter hides is left alone until it shows again.
 
 A bar over the foot of the list says how many are selected and changes them all in one step: **Status**,
 **Priority**, **Add label**, **Remove label** (labels some of them have) and **Move to project**. Moving them to
