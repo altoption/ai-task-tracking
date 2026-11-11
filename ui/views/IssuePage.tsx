@@ -6,12 +6,14 @@ import { CopyId } from '../components/CopyId'
 import { ConceptIcon, Icon, ProgressPill, ProgressRing, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { HiddenNotice } from './HiddenNotice'
-import { buildTree, positionInParent, treeProgress, type TreeNode } from '../issuePage'
+import { buildTree, flatten, nextUp, openBlockers, positionInParent, statusMix, treeProgress, type TreeNode } from '../issuePage'
 import { taskAt, type MdContext } from '../markdown'
 import { href, navigate } from '../router'
 import { IssueActivity } from './IssueActivity'
 import { IssueAttempts } from './IssueAttempts'
-import { ChangesPanel, changeTotals, hasChanges, useChanges } from './ChangesPanel'
+import { ChangesPanel, changeTotals, hasChanges, rollupBadge, useChanges, useRollup, type ChangeScope } from './ChangesPanel'
+import { CiDot } from '../components/Ci'
+import { relTime } from '../home'
 import { IssueChip, IssueProperties } from './IssueProperties'
 
 /**
@@ -73,14 +75,18 @@ function useIssueDetail(id: string) {
   return { detail, feed, missing, error, reload, apply }
 }
 
-function SubIssueRow({ node, depth, open, setOpen, closed }: { node: TreeNode; depth: number; open: Set<string>; setOpen: (id: string) => void; closed: (s: string) => boolean }) {
+/** What a sub-issue row needs beyond the issue: who blocks it, which one is next, the clock. */
+interface RowCtx { issues: ReadonlyMap<string, IssueSummary>; closed: (s: string) => boolean; next?: string; now: number }
+
+function SubIssueRow({ node, depth, open, setOpen, ctx }: { node: TreeNode; depth: number; open: Set<string>; setOpen: (id: string) => void; ctx: RowCtx }) {
   const { config } = useTracker()
   const i = node.issue
-  const prog = treeProgress(node.children, closed)
+  const prog = treeProgress(node.children, ctx.closed)
   const expanded = open.has(i.id)
+  const blockers = ctx.closed(i.status) ? [] : openBlockers(i, ctx.issues, ctx.closed)
   return (
     <>
-      <div className="tree-row" style={{ paddingLeft: 8 + depth * 18 }}>
+      <div className={`tree-row${ctx.closed(i.status) ? ' closed' : ''}`} style={{ paddingLeft: 8 + depth * 18 }}>
         {node.children.length > 0
           ? <button type="button" className={`tree-toggle ${expanded ? 'open' : ''}`} onClick={() => setOpen(i.id)} aria-expanded={expanded} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${i.id}`}><Icon name="chevron" size={12} /></button>
           : <span className="tree-toggle" />}
@@ -89,9 +95,15 @@ function SubIssueRow({ node, depth, open, setOpen, closed }: { node: TreeNode; d
           <span className="id">{i.id}</span>
           <span className="t">{i.title}</span>
           <ProgressPill done={prog.done} total={prog.total} config={config} />
+          <span className="tree-meta">
+            {blockers.length > 0 && <span className="blk" title={blockers.map((b) => `${b.id} ${b.title} (${b.status})`).join('\n')}>blocked by {blockers.map((b) => b.id).join(', ')}</span>}
+            {ctx.next === i.id && <span className="pill next-pill" title="Not started, and nothing open blocks it">Next</span>}
+            <CiDot ci={i.ci} />
+            <span className="date" title={`Updated ${i.updated}`}>{relTime(i.updated, ctx.now)}</span>
+          </span>
         </a>
       </div>
-      {expanded && node.children.map((c) => <SubIssueRow key={c.issue.id} node={c} depth={depth + 1} open={open} setOpen={setOpen} closed={closed} />)}
+      {expanded && node.children.map((c) => <SubIssueRow key={c.issue.id} node={c} depth={depth + 1} open={open} setOpen={setOpen} ctx={ctx} />)}
     </>
   )
 }
@@ -117,6 +129,20 @@ function SubIssues({ id, children }: { id: string; children: (IssueSummary | Hid
     return (s: string) => { const t = types.get(s); return t === 'completed' || t === 'canceled' || t === 'duplicate' }
   }, [config])
   const progress = useMemo(() => treeProgress(tree, closed), [tree, closed])
+  const all = useMemo(() => flatten(tree), [tree])
+  // Closed first, then started, then the rest: the bar reads from done to not started.
+  const order = useMemo(() => {
+    const rank = { completed: 0, canceled: 1, duplicate: 1, started: 2, unstarted: 3, backlog: 4 } as const
+    return [...(config?.statuses ?? [])].sort((a, b) => rank[a.type] - rank[b.type]).map((s) => s.name)
+  }, [config])
+  const mix = useMemo(() => statusMix(all, order), [all, order])
+  const started = useMemo(() => {
+    const types = new Map((config?.statuses ?? []).map((s) => [s.name, s.type]))
+    return (s: string) => types.get(s) === 'started'
+  }, [config])
+  const next = useMemo(() => nextUp(all, issues, started, closed)?.id, [all, issues, started, closed])
+  const ctx: RowCtx = { issues, closed, now: Date.now(), ...(next ? { next } : {}) }
+  const colorOf = (status: string) => { const d = config?.statuses.find((x) => x.name === status); return d ? `var(--status-${d.type}, ${d.color})` : 'var(--muted)' }
   const [open, setOpenSet] = useState<Set<string>>(new Set())
   const toggle = (x: string) => setOpenSet((s) => { const n = new Set(s); if (n.has(x)) n.delete(x); else n.add(x); return n })
   // A leaf: no heading over nothing, just the way to add one.
@@ -130,7 +156,13 @@ function SubIssues({ id, children }: { id: string; children: (IssueSummary | Hid
         <ProgressPill done={progress.done} total={progress.total} config={config} />
         <button type="button" className="ghost-btn" onClick={() => navigate({ name: 'new', parent: id })}><span className="plus">+</span> Add sub-issue</button>
       </div>
-      {tree.map((n) => <SubIssueRow key={n.issue.id} node={n} depth={0} open={open} setOpen={toggle} closed={closed} />)}
+      {all.length > 1 && (
+        <div className="mix" role="img" aria-label={mix.map((m) => `${m.count} ${m.status}`).join(', ')}>
+          <div className="mix-bar">{mix.map((m) => <i key={m.status} style={{ flexGrow: m.count, background: colorOf(m.status) }} />)}</div>
+          <div className="mix-legend" aria-hidden="true">{mix.map((m) => <span key={m.status}><StatusIcon status={m.status} config={config} size={12} /> {m.count} {m.status}</span>)}</div>
+        </div>
+      )}
+      {tree.map((n) => <SubIssueRow key={n.issue.id} node={n} depth={0} open={open} setOpen={toggle} ctx={ctx} />)}
       {stubs.map((c) => <div key={c.id} className="tree-hidden"><IssueChip id={c.id} /></div>)}
     </section>
   )
@@ -344,12 +376,27 @@ export function IssuePage({ id }: { id: string }) {
   }, [id, title])
 
   // The Changes panel: open per page visit; its data loads with the page (cached on the engine) for the header badge.
+  // An issue with sub-issues also reads theirs: the badge totals them and the panel lists them to choose from.
   const [changesOpen, setChangesOpen] = useState(false)
   const [changesBranch, setChangesBranch] = useState<string | undefined>()
-  useEffect(() => { setChangesOpen(false); setChangesBranch(undefined) }, [id])
-  const canChange = !!detail && hasChanges(detail)
-  const changes = useChanges(id, detail?.updated ?? '', canChange, changesBranch)
+  const [scopePick, setScopePick] = useState<string | undefined>()
+  useEffect(() => { setChangesOpen(false); setChangesBranch(undefined); setScopePick(undefined) }, [id])
+  const ownChanges = !!detail && hasChanges(detail)
+  const kids = useMemo(() => (detail?.children ?? []).filter((c): c is IssueSummary => !isStub(c)), [detail?.children])
+  const kidChanges = useRollup(kids.map((k) => k.id), kids.map((k) => `${k.id}@${k.updated}`).join(','))
+  const kidsWithChanges = kids.filter((k) => { const c = kidChanges.get(k.id); return !!c && c.state !== 'no-branch' })
+  const canChange = ownChanges || kidsWithChanges.length > 0
+  // Whose changes the panel shows: the pick, else the issue's own, else its first sub-issue with a diff.
+  const scopeId = scopePick ?? (ownChanges ? id : kidsWithChanges.find((k) => kidChanges.get(k.id)?.files?.length)?.id ?? kidsWithChanges[0]?.id ?? id)
+  const scopeUpdated = scopeId === id ? detail?.updated ?? '' : kids.find((k) => k.id === scopeId)?.updated ?? ''
+  const own = useChanges(id, detail?.updated ?? '', ownChanges)
+  const changes = useChanges(scopeId, scopeUpdated, canChange, changesBranch)
   const closeChanges = useCallback(() => setChangesOpen(false), [])
+  const pickScope = useCallback((s: string) => { setScopePick(s); setChangesBranch(undefined) }, [])
+  const scopes: ChangeScope[] | undefined = detail && kidsWithChanges.length > 0
+    ? [...(ownChanges ? [{ issue: detail, own: true, changes: own.data }] : []), ...kidsWithChanges.map((k) => ({ issue: k, own: false, changes: kidChanges.get(k.id) ?? null }))]
+    : undefined
+  const badge = scopes ? rollupBadge(own.data, kidChanges) : own.data?.files?.length ? { ...changeTotals(own.data), branches: 1 } : null
 
   const save = useCallback(async (args: Record<string, unknown>, otherId?: string) => {
     const out = await callTool<Partial<IssueDetail>>('save_issue', { id: otherId ?? id, ...args })
@@ -389,7 +436,7 @@ export function IssuePage({ id }: { id: string }) {
         </nav>
         {canChange && (
           <button type="button" className={`ghost-btn changes-btn${changesOpen ? ' on' : ''}`} aria-pressed={changesOpen} onClick={() => setChangesOpen((o) => !o)}>
-            Changes{changes.data && changes.data.files?.length ? (() => { const t = changeTotals(changes.data); return <span className="changes-count">{t.files} file{t.files === 1 ? '' : 's'} <span className="dl-add">+{t.added}</span> <span className="dl-del">−{t.removed}</span></span> })() : null}
+            Changes{badge && badge.files > 0 && <span className="changes-count">{badge.files} file{badge.files === 1 ? '' : 's'} <span className="dl-add">+{badge.added}</span> <span className="dl-del">−{badge.removed}</span>{badge.branches > 1 ? ` · ${badge.branches} branches` : ''}</span>}
           </button>
         )}
         <IssueMenu id={detail.id} url={detail.url} childCount={summary?.childCount ?? detail.children.length} />
@@ -406,7 +453,8 @@ export function IssuePage({ id }: { id: string }) {
           <IssueActivity issueId={detail.id} activity={detail.activity} feed={feed} ctx={ctx} onSaved={reload} />
         </article>
         {changesOpen
-          ? <ChangesPanel data={changes.data} error={changes.error} activity={detail.activity} project={detail.project} onBranch={setChangesBranch} onClose={closeChanges} />
+          ? <ChangesPanel data={changes.data} error={changes.error} activity={scopeId === id ? detail.activity : []} project={detail.project} onBranch={setChangesBranch} onClose={closeChanges}
+              {...(scopes ? { scopes, scope: scopeId, onScope: pickScope, config: state.config } : {})} />
           : <IssueProperties issue={detail} save={save} />}
       </div>
     </section>

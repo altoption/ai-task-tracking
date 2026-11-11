@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { CopyId, copyText } from '../../ui/components/CopyId'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, LabelDef } from '../../src/model'
-import { activityItems, buildTree, filterOptions, labelOptions, positionInParent, treeProgress } from '../../ui/issuePage'
+import { activityItems, buildTree, filterOptions, labelOptions, flatten, nextUp, openBlockers, positionInParent, statusMix, treeProgress } from '../../ui/issuePage'
 import { isAllowedUrl, linkifyIds, makeSanitizer, renderMarkdown, rewriteUrl, toggleTask } from '../../ui/markdown'
 import { taskLines } from '../../src/shared/tasks'
 
@@ -206,5 +206,31 @@ describe('positionInParent', () => {
     expect(positionInParent(map, 'Q-1', done)).toBeNull()
     expect(positionInParent(map, 'Q-404', done)).toBeNull()
     expect(positionInParent(map, 'Q-7', done)).toBeNull()
+  })
+})
+
+describe('an epic\'s roll-up', () => {
+  const s = (id: string, status: string, blockedBy: string[] = []) => ({ id, status, blockedBy, parent: 'Q-1' }) as unknown as IssueSummary
+  const list = [s('Q-2', 'Done'), s('Q-3', 'In Progress', ['Q-2']), s('Q-4', 'Backlog', ['Q-3']), s('Q-5', 'Todo', ['Q-2']), s('Q-6', 'Todo')]
+  const map = new Map(list.map((i) => [i.id, i]))
+  const closed = (st: string) => st === 'Done'
+  const started = (st: string) => st === 'In Progress'
+  test('statusMix counts per status in the given order, unknown statuses last', () => {
+    expect(statusMix([...list, s('Q-7', 'Odd')], ['Done', 'In Progress', 'Todo', 'Backlog'])).toEqual([
+      { status: 'Done', count: 1 }, { status: 'In Progress', count: 1 }, { status: 'Todo', count: 2 }, { status: 'Backlog', count: 1 }, { status: 'Odd', count: 1 },
+    ])
+  })
+  test('openBlockers leaves out closed and unknown blockers', () => {
+    expect(openBlockers(list[2]!, map, closed).map((b) => b.id)).toEqual(['Q-3'])
+    expect(openBlockers(list[1]!, map, closed)).toEqual([])
+    expect(openBlockers(s('Q-9', 'Todo', ['Q-404']), map, closed)).toEqual([])
+  })
+  test('nextUp is the first not-started sub-issue nothing open blocks', () => {
+    expect(nextUp(list, map, started, closed)?.id).toBe('Q-5') // Q-4 waits on Q-3
+    expect(nextUp([list[0]!, list[1]!, list[2]!], map, started, closed)).toBeUndefined()
+  })
+  test('flatten lists parents before their children', () => {
+    const t = [{ issue: list[0]!, children: [{ issue: list[1]!, children: [] }] }, { issue: list[2]!, children: [] }]
+    expect(flatten(t).map((i) => i.id)).toEqual(['Q-2', 'Q-3', 'Q-4'])
   })
 })

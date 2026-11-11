@@ -534,7 +534,17 @@ span.tree-toggle { transform: none; }
 .tree-toggle.open { transform: none; }
 .tree-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding-right: 8px; }
 .tree-link .id { color: var(--id); font-variant-numeric: tabular-nums; min-width: 48px; }
-.tree-link .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-link .t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-row.closed .t { color: var(--muted); }
+.tree-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; padding-left: 8px; font-size: 12px; }
+.tree-meta .date { min-width: 26px; }
+.next-pill { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+/* an epic's sub-issues by status: one bar, read from done to not started */
+.mix { margin: 2px 0 10px; }
+.mix-bar { display: flex; gap: 2px; height: 4px; border-radius: 2px; overflow: hidden; }
+.mix-bar i { min-width: 4px; opacity: .85; }
+.mix-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 7px; font-size: 12px; color: var(--muted); }
+.mix-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 
 /* activity */
 .activity { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 14px; }
@@ -609,27 +619,78 @@ span.tree-toggle { transform: none; }
 .changes-source { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .changes-source a { color: var(--link); }
 .changes-close { margin-left: auto; font-size: 16px; line-height: 1; }
-.changes-scroll { overflow: auto; padding: 12px 16px 32px; display: flex; flex-direction: column; gap: 10px; }
+.changes-scroll { overflow: auto; padding: 12px 16px 32px; display: flex; flex-direction: column; gap: 12px; }
+/* whose changes: the issue's own and each sub-issue's */
+.changes-scopes { list-style: none; margin: -4px -8px 0; padding: 0 0 10px; border-bottom: 1px solid var(--border); }
+.scope-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 3px 8px; background: none; border: 0; border-radius: var(--radius); color: var(--text); text-align: left; font-size: 12px; }
+.scope-row:hover { background: var(--hover); }
+.scope-row.on { background: var(--active); }
+.scope-row code { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scope-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px 10px; overflow: hidden; color: var(--muted); }
+.scope-who span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.scope-stat { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); }
+/* the branch */
+.branch-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; background: var(--hover); border-radius: 8px; width: fit-content; max-width: 100%; }
+.branch-tabs button { border: 0; background: none; color: var(--muted); padding: 3px 10px; border-radius: 6px; }
+.branch-tabs button:hover { color: var(--text); }
+.branch-tabs button.on { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--border); cursor: default; }
 .changes-summary { margin: 0; font-size: 13px; }
-.changes-branches { margin: 0; color: var(--muted); }
-.changes-shots { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.diff-stat { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.changes-shots { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; flex: none; }
 .shot { flex: none; width: 180px; padding: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; text-align: left; cursor: zoom-in; }
 .shot img { display: block; width: 100%; height: 110px; object-fit: cover; object-position: top; }
 .shot span { display: block; padding: 4px 8px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shot-zoom { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: var(--overlay); border: 0; padding: 32px; cursor: zoom-out; }
 .shot-zoom img { max-width: 100%; max-height: 100%; border-radius: 8px; }
-.changes-commits summary, .diff-file summary { cursor: pointer; font-size: 12px; }
-.changes-commits ul { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
-.diff-file { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.diff-file > summary { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg); font-variant-numeric: tabular-nums; }
+/* its commits */
+.changes-commits summary { cursor: pointer; font-size: 12px; color: var(--muted); width: fit-content; }
+.changes-commits summary:hover { color: var(--text); }
+.changes-commits ul { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; border-left: 1px solid var(--border); font-size: 12px; display: flex; flex-direction: column; gap: 5px; }
+.changes-commits li { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.changes-commits li code { color: var(--muted); flex: none; }
+.changes-commits li .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.changes-commits li .muted { flex: none; font-size: 11px; }
+/* the files, by folder */
+.changes-outline { border: 1px solid var(--border); border-radius: 8px; padding: 4px; flex: none; }
+.outline-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 2px 8px; font-size: 12px; color: var(--muted); }
+.outline-dirname { padding: 4px 8px 1px; font: 11px var(--mono); color: var(--faint); }
+.outline-file { display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 8px; background: none; border: 0; border-radius: 4px; color: var(--text); text-align: left; font-size: 12px; }
+.outline-file.in { padding-left: 20px; }
+.outline-file:hover { background: var(--hover); }
+.outline-file .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+.blocks { display: inline-flex; gap: 1px; flex: none; }
+.blocks i { width: 7px; height: 7px; border-radius: 1px; background: var(--border); }
+.blocks i.a { background: var(--ok); }
+.blocks i.d { background: var(--danger); }
+.fk { flex: none; width: 14px; text-align: center; font: 600 10px/14px var(--mono); border-radius: 3px; color: var(--muted); }
+.fk-added { color: var(--ok); }
+.fk-deleted { color: var(--danger); }
+.fk-renamed { color: var(--link); }
+.fk-modified { color: var(--warn); }
+/* each file's diff: the header stays in view while its lines scroll */
+.diff-file { border: 1px solid var(--border); border-radius: 8px; flex: none; }
+.diff-file > summary { position: sticky; top: -12px; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg); border-radius: 7px; font-size: 12px; font-variant-numeric: tabular-nums; cursor: pointer; list-style: none; }
+.diff-file > summary::-webkit-details-marker { display: none; }
+.diff-file[open] > summary { border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; }
+.diff-chev { display: inline-grid; color: var(--muted); transform: rotate(-90deg); transition: transform .1s; }
+.diff-file[open] .diff-chev { transform: none; }
 .diff-path { flex: 1; min-width: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.diff-body { margin: 0; padding: 6px 0; overflow-x: auto; font: 12px/1.5 var(--mono); background: var(--pre-bg); }
-.diff-body > span { display: block; padding: 0 10px; white-space: pre; min-width: max-content; }
+.diff-none { margin: 0; padding: 8px 10px; }
+.diff-body { padding: 4px 0; overflow-x: auto; font: 12px/1.55 var(--mono); background: var(--pre-bg); border-radius: 0 0 7px 7px; }
+/* The number columns are as wide as the diff's longest line number (set on each row, ui/views/ChangesPanel.tsx). */
+.dl { display: grid; min-width: max-content; }
+.dl code { font: inherit; white-space: pre; padding-right: 12px; }
+.d-num { text-align: right; padding-right: 6px; color: var(--faint); user-select: none; font-variant-numeric: tabular-nums; }
+.d-mark { text-align: center; color: var(--muted); user-select: none; }
 .dl-add { color: var(--ok); }
 .dl-del { color: var(--danger); }
-.diff-body .dl-add { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--text); }
-.diff-body .dl-del { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--text); }
-.diff-body .dl-hunk { color: var(--muted); background: var(--hover); }
+.diff-body .dl-add { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--text); }
+.diff-body .dl-del { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--text); }
+.diff-body .dl-add .d-mark { color: var(--ok); }
+.diff-body .dl-del .d-mark { color: var(--danger); }
+.diff-body .dl-hunk { color: var(--faint); margin: 4px 0; background: var(--hover); }
+.diff-body .dl-hunk:first-child { margin-top: 0; }
+.diff-body .dl-note { color: var(--faint); font-style: italic; }
 @media (max-width: 900px) {
   .issue-body { grid-template-columns: 1fr; }
   .issue-body.with-changes { grid-template-columns: 1fr; }

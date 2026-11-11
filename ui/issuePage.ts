@@ -39,6 +39,40 @@ export function treeProgress(nodes: TreeNode[], closed: (status: string) => bool
   return { done, total }
 }
 
+/** Every node of a (sub)tree, parents before their children. */
+export function flatten(nodes: TreeNode[]): IssueSummary[] {
+  const out: IssueSummary[] = []
+  const walk = (ns: TreeNode[]) => { for (const n of ns) { out.push(n.issue); walk(n.children) } }
+  walk(nodes)
+  return out
+}
+
+export interface StatusShare { status: string; count: number }
+
+/**
+ * Pure: how many of the issues sit in each status, in the order work moves through them backwards (`order`: the
+ * config's statuses, closed ones first), so a bar of the shares reads done → in progress → not started.
+ */
+export function statusMix(issues: readonly Pick<IssueSummary, 'status'>[], order: readonly string[]): StatusShare[] {
+  const counts = new Map<string, number>()
+  for (const i of issues) counts.set(i.status, (counts.get(i.status) ?? 0) + 1)
+  const rank = new Map(order.map((s, k) => [s, k]))
+  return [...counts].map(([status, count]) => ({ status, count })).sort((a, b) => (rank.get(a.status) ?? order.length) - (rank.get(b.status) ?? order.length))
+}
+
+/** The issue's blockers that are still open (known to `issues` and not `closed`). */
+export function openBlockers(i: Pick<IssueSummary, 'blockedBy'>, issues: ReadonlyMap<string, IssueSummary>, closed: (status: string) => boolean): IssueSummary[] {
+  return (i.blockedBy ?? []).map((b) => issues.get(b)).filter((b): b is IssueSummary => !!b && !closed(b.status))
+}
+
+/**
+ * The sub-issue to pick up next: the first, in the order given, that hasn't been started (`started` says which
+ * statuses have, closed ones included) and has no open blocker. Undefined when everything is started or blocked.
+ */
+export function nextUp(list: readonly IssueSummary[], issues: ReadonlyMap<string, IssueSummary>, started: (status: string) => boolean, closed: (status: string) => boolean): IssueSummary | undefined {
+  return list.find((i) => !started(i.status) && !closed(i.status) && openBlockers(i, issues, closed).length === 0)
+}
+
 // ---------- position among the parent's sub-issues ----------
 
 export interface Position {
