@@ -94,6 +94,9 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
   box for the group, ⌘A for all, or `j` `k` and `x` from the keyboard; a selected epic offers its sub-issues) and set
   their status, priority, labels, parent, milestone or project in one step.
   See [Changing several issues at once](site/src/content/docs/use/daily-use.md#changing-several-issues-at-once).
+- **A parent and its sub-issues close together.** Canceling an epic cancels its open sub-issues; marking it Done
+  asks to close them with it; closing the last open sub-issue closes the epic. Agents follow the same rule.
+  See [Closing a parent and its sub-issues](site/src/content/docs/use/daily-use.md#closing-a-parent-and-its-sub-issues).
 - **CI status.** Issues that link a GitHub PR show its state and checks (fetched in the background with your `gh`):
   a badge on the issue page, a dot on rows, and failing checks in Needs you. Without `gh` nothing shows.
 - **Themes.** Graphite (the default), Dark, Light, Match macOS, Midnight, Plum, Paper and High contrast, or your own theme file

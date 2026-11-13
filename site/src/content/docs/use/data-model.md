@@ -335,6 +335,9 @@ There are two ways. Pick one per import, and test it first on a scratch folder (
 - Every new issue needs at least one label and a status from `list_issue_statuses`; pass `project` (without it the
   issue goes to the project mapped to your repo). Creating or moving an issue in Done, Canceled, Duplicate or
   Waiting needs a `comment` (say it was imported).
+- A parent and its sub-issues [close together](/docs/use/daily-use/#closing-a-parent-and-its-sub-issues). Creating
+  issues already closed triggers nothing, so import each issue with the status it had. Later updates do: moving an
+  existing parent to Done is refused while it has open sub-issues, and canceling one cancels them.
 - An issue created or moved to In Progress also lands in the owner's Now slot; import open work as Todo when that
   isn't wanted.
 - Each result item carries its `ref`. Keep a map of old id → new id from the results. Relations that cross batches (a blocker created in an earlier

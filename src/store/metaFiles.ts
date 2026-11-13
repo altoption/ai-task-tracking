@@ -71,6 +71,7 @@ This is the user's issue tracker on this Mac. Your repo (or folder) and branch a
 - Need the user (decision, review, access): \`save_issue({ id, state: "Waiting", comment: "Needs: … (<date>)" })\`, or add the label "Needs decision" / "Needs review". These show in the user's "Needs you".
 - Done: \`save_issue({ id, state: "Done", comment: "Shipped in PR #123 (commit abc123): …" })\`. Moving to Done, Waiting, Canceled or Duplicate requires a \`comment\` (or a \`save_comment\` from you in the last 10 minutes).
 - Not doing it: \`state: "Canceled"\` with a reason. Never delete.
+- An epic closes with its steps: Done is refused while steps are open (close them first, or in the same \`save_issues\` call); canceling it cancels them; closing the last step closes it.
 
 ## Don't
 - Don't set Next/Later on the user's board (\`set_plan\` next/later is the user's); don't create views; don't re-post issues that already exist.

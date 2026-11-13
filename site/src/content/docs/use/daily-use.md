@@ -142,7 +142,8 @@ A bar over the foot of the list says how many are selected and changes them all 
 issue you search for, or **No parent**), **Milestone** (when they are all in one project that has milestones) and
 **Move to project**. Moving them to Done, Canceled or Duplicate asks for an optional reason, added as a comment on
 each. If any one can't be changed, none are, and the bar says why. The selection stays after a change, so you can
-make another; **Clear** or Esc clears it.
+make another; **Clear** or Esc clears it. Closing a selected parent takes its open sub-issues along, and the bar says
+how many before you confirm (see [Closing a parent and its sub-issues](#closing-a-parent-and-its-sub-issues)).
 
 The app adds four saved views to your data folder the first time the engine starts, on a new folder or an existing one:
 
@@ -193,6 +194,24 @@ An issue with sub-issues (an epic) shows them under a bar of how many sit in eac
 started. Each row has what you'd otherwise open the sub-issue for: the open issues blocking it ("blocked by
 WEBSI-3"), its PR's checks, and when it last changed. **Next** marks the first one that hasn't started and has
 nothing open blocking it.
+
+### Closing a parent and its sub-issues
+
+A parent and its sub-issues close together, whoever makes the change: you in the app, or an agent.
+
+| You do this | What happens |
+|---|---|
+| Move a parent to Canceled or Duplicate | Every open sub-issue under it, at any depth, becomes Canceled. Each gets a comment naming the parent and the status it had ("Canceled with its parent WEBSI-1 (was In Progress)."), so you can put it back. The app tells you how many first. |
+| Move a parent to Done while sub-issues are open | The app asks, lists them, and moves them to Done with it. An agent is refused until it closes the steps itself, first or in the same call. |
+| Close, delete or move away the last open sub-issue | The parent closes too: Done when any sub-issue was done, otherwise Canceled, with the comment "All 3 sub-issues are closed; closed automatically." Its own parent follows the same way. |
+
+A parent is left open when it is waiting on you (Waiting, In Review, or a Needs decision / Needs review label) or
+its description still has unticked checklist items. Close it yourself once that is settled; it isn't closed later
+without another change under it.
+
+Nothing reopens by itself: reopening a sub-issue leaves a closed parent closed. The rule acts on changes made through
+the app and the agent tools from now on. Issues that were already out of step stay as they are, and so do files you
+edit by hand.
 
 An issue page has the description (checklists included), sub-issues, its attempts ("3 attempts · 2 tools": one per
 agent session, which opens into each session's tool, repo, branch, writes and the status it left the issue in), the

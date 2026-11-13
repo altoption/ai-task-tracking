@@ -16,6 +16,7 @@ import { applyView, DEFAULT_DISPLAY, dropPatch, sameView, timeInStatus, viewFrom
 import { BoardView } from './BoardView'
 import { DisplayMenu } from './DisplayMenu'
 import { FilterBar, FilterMenu } from './FilterMenu'
+import { useFamilyClose } from './FamilyClose'
 import type { CellCtx } from './IssueCells'
 import { ListView } from './ListView'
 
@@ -77,6 +78,7 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
     now: Date.now(),
   }), [state.labels, projects, state.feed])
 
+  const family = useFamilyClose()
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const fail = (e: unknown) => {
@@ -109,7 +111,13 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
   }
   const onDrop = (issue: IssueSummary, group: string, row: string, fromRow: string) => {
     const patch = dropPatch(issue, current.display, group, row, fromRow)
-    if (patch) callTool('save_issue', patch).catch(fail)
+    if (!patch) return
+    const state = patch.state
+    if (typeof state !== 'string') { callTool('save_issue', patch).catch(fail); return }
+    family.ask([issue.id], state, (fam) => {
+      const call = fam?.kind === 'complete' ? callTool('save_issues', { issues: [...fam.kids.map((id) => ({ id, state })), patch] }) : callTool('save_issue', patch)
+      call.catch(fail)
+    })
   }
 
   return (
@@ -141,6 +149,7 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
         : current.display.layout === 'board'
           ? <BoardView groups={result.groups} hidden={result.hidden} display={current.display} ctx={ctx} config={state.config} cells={cells} onDrop={onDrop} />
           : <ListView groups={result.groups} display={current.display} byId={byId} config={state.config} cells={cells} />}
+      {family.dialog}
       {toast && <div className="toast" role="alert">{toast}<button className="icon-button" aria-label="Dismiss" onClick={() => setToast('')}>×</button></div>}
     </section>
   )

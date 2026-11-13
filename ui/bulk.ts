@@ -1,5 +1,5 @@
 /** Bulk edit in list views: which rows are selected, and the one save_issues call an action becomes. */
-import type { StatusDef } from '../src/model'
+import type { IssueSummary, StatusDef } from '../src/model'
 
 export type BulkPatch =
   | { state: string }
@@ -68,6 +68,55 @@ export const asksReason = (st: StatusDef | undefined) => !!st && (st.type === 'c
 export function bulkItems(ids: readonly string[], patch: BulkPatch, reason?: string): Record<string, unknown>[] {
   const comment = reason?.trim()
   return ids.map((id) => ({ id, ...patch, ...(comment ? { comment } : {}) }))
+}
+
+/**
+ * The open sub-issues (at any depth, not among `ids`) that moving `ids` to status `to` closes too. `complete`: the
+ * engine refuses to complete a parent unless the same call closes them. `cancel`: the engine cancels them with a
+ * canceled or duplicate parent. null when there are none, or `to` closes nothing.
+ */
+export interface FamilyClose { kind: 'complete' | 'cancel'; kids: string[] }
+export function familyClose(
+  ids: readonly string[], to: StatusDef | undefined, issues: Iterable<Pick<IssueSummary, 'id' | 'parent' | 'status'>>, statuses: readonly StatusDef[],
+): FamilyClose | null {
+  if (!to || !asksReason(to)) return null
+  const kind = to.type === 'completed' ? 'complete' : 'cancel'
+  const type = (name: string) => statuses.find((s) => s.name === name)?.type
+  const closed = (name: string) => asksReason(statuses.find((s) => s.name === name))
+  const status = new Map<string, string>()
+  const kidsOf = new Map<string, string[]>()
+  for (const i of issues) {
+    status.set(i.id, i.status)
+    if (!i.parent) continue
+    const l = kidsOf.get(i.parent)
+    if (l) l.push(i.id); else kidsOf.set(i.parent, [i.id])
+  }
+  const picked = new Set(ids)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of ids) {
+    const cur = status.get(id)
+    // A move that changes nothing triggers nothing (an issue already Done has been through this).
+    if (cur === undefined || cur === to.name || (kind === 'complete' && type(cur) === 'completed')) continue
+    for (let level = [id]; level.length;) {
+      const next: string[] = []
+      for (const p of level) {
+        for (const k of kidsOf.get(p) ?? []) {
+          if (seen.has(k)) continue
+          seen.add(k)
+          next.push(k)
+          if (!picked.has(k) && !closed(status.get(k)!)) out.push(k)
+        }
+      }
+      level = next
+    }
+  }
+  return out.length ? { kind, kids: out } : null
+}
+
+/** The save_issues items that move `ids` to `state`: the sub-issues a completed parent needs closed go first. */
+export function statusItems(ids: readonly string[], state: string, fam: FamilyClose | null, reason?: string): Record<string, unknown>[] {
+  return bulkItems([...(fam?.kind === 'complete' ? fam.kids : []), ...ids], { state }, reason)
 }
 
 /** What a key does in a list: move the cursor row, select it (`family`: with its sub-issues), or open it. */
