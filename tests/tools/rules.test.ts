@@ -435,6 +435,23 @@ describe('rule 8: a parent and its sub-issues close together', () => {
     expect(b.s.get('Q-2')!.status).toBe('In Progress')
   })
 
+  test('a step reopened under a closed one holds the issues above open until it closes', async () => {
+    const { s, call } = await setup()
+    const extra = await call('save_issue', { title: 'Second step', labels: ['Task'], parentId: 'Q-1', project: 'Acme App' })
+    await call('save_issue', { id: 'Q-3', state: 'Done' }, you) // closes Q-2; Q-1 waits for the second step
+    await call('save_issue', { id: 'Q-3', state: 'In Progress' }, you)
+    await call('save_issue', { id: extra.id, state: 'Done' }, you)
+    expect(['Q-1', 'Q-2'].map((id) => s.get(id)!.status)).toEqual(['In Progress', 'Done'])
+    const out = await call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    expect(out.alsoChanged).toEqual([{ id: 'Q-1', status: 'Done' }])
+  })
+
+  test('an issue named twice in a call goes by its last status', async () => {
+    const { s, call } = await setup()
+    await expect(call('save_issues', { issues: [{ id: 'Q-3', state: 'Done' }, { id: 'Q-3', state: 'Todo' }, { id: 'Q-2', state: 'Done' }] }, you)).rejects.toThrow(/Q-2 has 1 open sub-issue/)
+    expect(s.get('Q-3')!.status).toBe('Todo')
+  })
+
   test('nothing reopens, and a sub-issue created closed closes nothing', async () => {
     const { s, call } = await setup()
     await call('save_issue', { id: 'Q-3', state: 'Done' }, you)

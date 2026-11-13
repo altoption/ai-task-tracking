@@ -30,7 +30,9 @@ function cascadeFor(s: Store, items: BatchItemArgs[]): Cascade {
     const id = normId(a.id)
     explicit.add(id)
     const name = a.state.trim().toLowerCase()
+    // an id named twice goes by its last status
     if (isClosedType(s.config.statuses.find((x) => x.name.toLowerCase() === name)?.type)) closing.add(id)
+    else closing.delete(id)
   }
   return { explicit, closing, also: new Map() }
 }
@@ -62,19 +64,27 @@ async function cancelBelow(s: Store, parent: Issue, actor: Actor, c: Cascade): P
   }
 }
 
-/** Close `start` if all its sub-issues are closed (re-checked inside its own write), then its parent, and so on up. */
+/**
+ * Close `start` if nothing below it is open any more (re-checked inside its own write), then its parent, and so on
+ * up. A closed issue on the way is passed over: a step reopened under a closed one still holds the issues above open.
+ */
 async function settleParent(s: Store, start: string | null, actor: Actor, c: Cascade): Promise<void> {
+  const isOpen = isOpenIn(s)
   const seen = new Set<string>()
   let next = start
-  while (next && !seen.has(next) && !c.explicit.has(next) && s.get(next)) {
+  while (next && !seen.has(next)) {
     const id = next
+    const at = s.get(id)
+    if (!at) return
     seen.add(id)
+    if (!isOpen(at.status)) { next = at.parent; continue }
+    if (c.explicit.has(id)) return
     let kids = 0
     const out = await s.updateIssue(id, (cur) => {
       const children = s.children(id)
       const outcome = parentOutcome(cur, children, s.config)
       const status = outcome && s.config.statuses.find((x) => x.type === outcome)?.name
-      if (!status) return null
+      if (!status || openDescendants(id, (k) => s.children(k), isOpen).length) return null
       kids = children.length
       return { status }
     }, actor)
