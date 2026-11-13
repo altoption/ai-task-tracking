@@ -241,6 +241,12 @@ kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--borde
 .labels-input input { border: 0; height: 22px; padding: 0 2px; width: 120px; outline: none; }
 .parent-input { width: 170px; }
 .form-error { color: var(--danger); font-size: 12px; padding: 6px 0; white-space: pre-wrap; }
+.family-close { width: min(460px, calc(100vw - 32px)); gap: 8px; }
+.family-close-body { margin: 0; color: var(--muted); line-height: 1.5; }
+.family-close-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.family-close-list li { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.family-close-list .id { color: var(--id); font-variant-numeric: tabular-nums; }
+.family-close-list .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dialog-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
 .primary { background: var(--accent); color: var(--on-accent); border: 0; border-radius: var(--radius); padding: 5px 14px; font-weight: 500; }
 .primary:disabled { opacity: .6; cursor: default; }
@@ -1017,4 +1023,5 @@ span.tree-toggle { transform: none; }
 .bulk-reason { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .bulk-reason input { flex: 1; min-width: 160px; max-width: 420px; padding: 3px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
 .bulk-clear { margin-left: 6px; }
+.bulk-family { white-space: nowrap; }
 .bulk-error { flex-basis: 100%; white-space: pre-wrap; }

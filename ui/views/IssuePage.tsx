@@ -398,8 +398,11 @@ export function IssuePage({ id }: { id: string }) {
     : undefined
   const badge = scopes ? rollupBadge(own.data, kidChanges) : own.data?.files?.length ? { ...changeTotals(own.data), branches: 1 } : null
 
-  const save = useCallback(async (args: Record<string, unknown>, otherId?: string) => {
-    const out = await callTool<Partial<IssueDetail>>('save_issue', { id: otherId ?? id, ...args })
+  const save = useCallback(async (args: Record<string, unknown>, otherId?: string, alsoClose?: string[]) => {
+    const item = { id: otherId ?? id, ...args }
+    const out = alsoClose?.length
+      ? (await callTool<{ issues: Partial<IssueDetail>[] }>('save_issues', { issues: [...alsoClose.map((k) => ({ id: k, state: args.state })), item] })).issues.at(-1)!
+      : await callTool<Partial<IssueDetail>>('save_issue', item)
     if (!otherId) apply(out)
     reload()
   }, [id, apply, reload])

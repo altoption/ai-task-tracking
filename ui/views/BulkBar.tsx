@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { IssueSummary } from '../../src/model'
-import { asksReason, bulkItems, commonProject, type BulkPatch } from '../bulk'
+import { asksReason, bulkItems, commonProject, familyClose, statusItems, type BulkPatch } from '../bulk'
 import { callTool, listedProjects, useTracker } from '../client'
 import { PRIORITIES, PriorityIcon, StatusIcon } from '../components/icons'
 import { Picker, type PickOption } from '../components/Picker'
@@ -28,10 +28,16 @@ export function BulkBar({ ids, byId, onClear, kids, onAddKids }: {
   const [closing, setClosing] = useState<string | null>(null)
   const [reason, setReason] = useState('')
 
+  // Open sub-issues outside the selection that the closing status takes along.
+  const fam = useMemo(
+    () => (closing ? familyClose(ids, config?.statuses.find((s) => s.name === closing), state.issues.values(), config?.statuses ?? []) : null),
+    [closing, ids, state.issues, config],
+  )
+
   const run = async (patch: BulkPatch, why?: string) => {
     setBusy(true); setError('')
     try {
-      await callTool('save_issues', { issues: bulkItems(ids, patch, why) })
+      await callTool('save_issues', { issues: 'state' in patch ? statusItems(ids, patch.state, fam, why) : bulkItems(ids, patch, why) })
       setClosing(null); setReason('')
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
@@ -68,7 +74,8 @@ export function BulkBar({ ids, byId, onClear, kids, onAddKids }: {
         <form className="bulk-reason" onSubmit={(e) => { e.preventDefault(); void run({ state: closing }, reason) }}>
           <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional, added as a comment)" aria-label="Reason"
             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setClosing(null) } }} />
-          <button type="submit" className="primary small-btn" disabled={busy}>Move {n} to {closing}</button>
+          {fam && <span className="muted small bulk-family">{fam.kind === 'complete' ? 'with' : 'also cancels'} {fam.kids.length} open sub-issue{fam.kids.length === 1 ? '' : 's'}</span>}
+          <button type="submit" className="primary small-btn" disabled={busy}>Move {n + (fam?.kind === 'complete' ? fam.kids.length : 0)} to {closing}</button>
           <button type="button" className="ghost-btn" onClick={() => setClosing(null)}>Back</button>
         </form>
       ) : (

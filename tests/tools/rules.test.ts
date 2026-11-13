@@ -3,7 +3,7 @@ import type { Actor } from '../../src/model'
 import { Store } from '../../src/engine/store'
 import { readConfig } from '../../src/store/metaFiles'
 import { callTool, type ToolCtx } from '../../src/tools/handlers'
-import { extractLinks, noteExplanation } from '../../src/tools/rules'
+import { extractLinks, noteExplanation, openDescendants, parentOutcome } from '../../src/tools/rules'
 import { miniCopy } from '../engine/helpers'
 
 const agent = (session?: string, workspace = 'web-app'): ToolCtx => ({
@@ -80,57 +80,57 @@ describe('rule 2: labels', () => {
 describe('rule 3: explanation for Done/Canceled/Duplicate/Waiting', () => {
   test('Done without explanation is rejected; with comment arg accepted', async () => {
     const { s, call } = await setup()
-    await expect(call('save_issue', { id: 'Q-2', state: 'Done' })).rejects.toThrow(/comment/)
-    expect(s.get('Q-2')!.status).toBe('Todo')
-    const out = await call('save_issue', { id: 'Q-2', state: 'Done', comment: 'Shipped in PR #1414' })
+    await expect(call('save_issue', { id: 'Q-4', state: 'Done' })).rejects.toThrow(/comment/)
+    expect(s.get('Q-4')!.status).toBe('Backlog')
+    const out = await call('save_issue', { id: 'Q-4', state: 'Done', comment: 'Shipped in PR #1414' })
     expect(out.status).toBe('Done')
-    expect(s.get('Q-2')!.activity.at(-1)!.body).toBe('Shipped in PR #1414')
+    expect(s.get('Q-4')!.activity.at(-1)!.body).toBe('Shipped in PR #1414')
   })
 
   test('prior save_comment same session accepted', async () => {
     const { call } = await setup()
-    await call('save_comment', { issueId: 'Q-2', body: 'Shipped' }, agent('s1'))
-    const out = await call('save_issue', { id: 'Q-2', state: 'Canceled' }, agent('s1'))
+    await call('save_comment', { issueId: 'Q-4', body: 'Shipped' }, agent('s1'))
+    const out = await call('save_issue', { id: 'Q-4', state: 'Canceled' }, agent('s1'))
     expect(out.status).toBe('Canceled')
   })
 
   test('prior comment from another session rejected', async () => {
     const { call } = await setup()
-    await call('save_comment', { issueId: 'Q-2', body: 'Shipped' }, agent('s1'))
-    await expect(call('save_issue', { id: 'Q-2', state: 'Done' }, agent('s2'))).rejects.toThrow(/comment/)
+    await call('save_comment', { issueId: 'Q-4', body: 'Shipped' }, agent('s1'))
+    await expect(call('save_issue', { id: 'Q-4', state: 'Done' }, agent('s2'))).rejects.toThrow(/comment/)
   })
 
   test('sessionless prior comment does not count', async () => {
     const { call } = await setup()
-    await call('save_comment', { issueId: 'Q-2', body: 'Shipped' }, agent())
-    await expect(call('save_issue', { id: 'Q-2', state: 'Done' }, agent())).rejects.toThrow(/comment/)
+    await call('save_comment', { issueId: 'Q-4', body: 'Shipped' }, agent())
+    await expect(call('save_issue', { id: 'Q-4', state: 'Done' }, agent())).rejects.toThrow(/comment/)
   })
 
   test('comment older than 10 minutes does not count', async () => {
     const { s, call } = await setup()
-    noteExplanation(s, 'Q-2', 's1', Date.now() - 11 * 60_000)
-    await expect(call('save_issue', { id: 'Q-2', state: 'Done' })).rejects.toThrow(/comment/)
-    noteExplanation(s, 'Q-2', 's1', Date.now() - 9 * 60_000)
-    expect((await call('save_issue', { id: 'Q-2', state: 'Done' })).status).toBe('Done')
+    noteExplanation(s, 'Q-4', 's1', Date.now() - 11 * 60_000)
+    await expect(call('save_issue', { id: 'Q-4', state: 'Done' })).rejects.toThrow(/comment/)
+    noteExplanation(s, 'Q-4', 's1', Date.now() - 9 * 60_000)
+    expect((await call('save_issue', { id: 'Q-4', state: 'Done' })).status).toBe('Done')
   })
 
   test('Waiting needs it too; In Progress does not', async () => {
     const { call } = await setup()
-    await expect(call('save_issue', { id: 'Q-2', state: 'waiting' })).rejects.toThrow(/comment/)
-    expect((await call('save_issue', { id: 'Q-2', state: 'In Progress' })).status).toBe('In Progress')
+    await expect(call('save_issue', { id: 'Q-4', state: 'waiting' })).rejects.toThrow(/comment/)
+    expect((await call('save_issue', { id: 'Q-4', state: 'In Progress' })).status).toBe('In Progress')
   })
 
   test('comment in the same save_issues batch counts', async () => {
     const { s, call } = await setup()
-    await call('save_issues', { issues: [{ id: 'Q-2', state: 'Done' }, { id: 'Q-2', comment: 'Shipped in abc123' }] })
-    expect(s.get('Q-2')!.status).toBe('Done')
+    await call('save_issues', { issues: [{ id: 'Q-4', state: 'Done' }, { id: 'Q-4', comment: 'Shipped in abc123' }] })
+    expect(s.get('Q-4')!.status).toBe('Done')
     await expect(call('save_issues', { issues: [{ id: 'Q-3', state: 'Done' }, { id: 'Q-4', comment: 'unrelated' }] })).rejects.toThrow(/Q-3/)
     expect(s.get('Q-3')!.status).toBe('Todo')
   })
 
   test('the owner is not asked for an explanation', async () => {
     const { call } = await setup()
-    expect((await call('save_issue', { id: 'Q-2', state: 'Done' }, you)).status).toBe('Done')
+    expect((await call('save_issue', { id: 'Q-4', state: 'Done' }, you)).status).toBe('Done')
   })
 })
 
@@ -289,5 +289,161 @@ describe('rule 7: touchedBy', () => {
     expect(s.get('Q-2')!.touchedBy).toEqual(a)
     await call('save_comment', { issueId: 'Q-3', body: 'hi' }, you)
     expect(s.get('Q-3')!.touchedBy).toEqual({ actor: 'you' })
+  })
+})
+
+// Fixture: Q-1 (In Progress) > Q-2 (Todo) > Q-3 (Todo).
+describe('rule 8: a parent and its sub-issues close together', () => {
+  const cfg = {
+    statuses: [
+      { name: 'Todo', type: 'unstarted' as const, color: '' }, { name: 'Waiting', type: 'started' as const, color: '' },
+      { name: 'Done', type: 'completed' as const, color: '' }, { name: 'Canceled', type: 'canceled' as const, color: '' },
+      { name: 'Duplicate', type: 'duplicate' as const, color: '' },
+    ],
+    needsYou: { statuses: ['Waiting'], labels: ['Needs decision'] },
+  }
+  const parent = (over: Partial<{ status: string; labels: string[]; description: string }> = {}) => ({ status: 'Todo', labels: [], description: '', ...over })
+  const kids = (...statuses: string[]) => statuses.map((status) => ({ status }))
+
+  test('parentOutcome: done when any sub-issue is done, else canceled', () => {
+    expect(parentOutcome(parent(), kids('Done', 'Canceled'), cfg)).toBe('completed')
+    expect(parentOutcome(parent(), kids('Canceled', 'Duplicate'), cfg)).toBe('canceled')
+  })
+
+  test('parentOutcome: leaves a parent that is closed, childless, has an open sub-issue, waits on the owner or has open checklist items', () => {
+    expect(parentOutcome(parent({ status: 'Canceled' }), kids('Done'), cfg)).toBeNull()
+    expect(parentOutcome(parent(), [], cfg)).toBeNull()
+    expect(parentOutcome(parent(), kids('Done', 'Todo'), cfg)).toBeNull()
+    expect(parentOutcome(parent(), kids('Done', 'Unknown status'), cfg)).toBeNull()
+    expect(parentOutcome(parent({ status: 'Waiting' }), kids('Done'), cfg)).toBeNull()
+    expect(parentOutcome(parent({ labels: ['Bug', 'Needs decision'] }), kids('Done'), cfg)).toBeNull()
+    expect(parentOutcome(parent({ description: '- [x] one\n- [ ] two' }), kids('Done'), cfg)).toBeNull()
+    expect(parentOutcome(parent({ description: '- [x] one\n- [x] two' }), kids('Done'), cfg)).toBe('completed')
+  })
+
+  test('openDescendants: any depth, through closed steps, cycle-safe', () => {
+    const tree: Record<string, { id: string; status: string }[]> = {
+      A: [{ id: 'B', status: 'Done' }, { id: 'C', status: 'Todo' }], B: [{ id: 'D', status: 'Todo' }], D: [{ id: 'A', status: 'Todo' }],
+    }
+    expect(openDescendants('A', (k) => tree[k] ?? [], (st) => st !== 'Done')).toEqual(['C', 'D'])
+  })
+
+  test('canceling a parent cancels its open sub-issues at every depth, each with a comment', async () => {
+    const { s, call } = await setup()
+    await call('save_issue', { id: 'Q-3', state: 'In Progress' })
+    const out = await call('save_issue', { id: 'Q-1', state: 'Canceled', comment: 'Dropped.' }, agent('s2'))
+    expect(out.alsoChanged).toEqual([{ id: 'Q-2', status: 'Canceled' }, { id: 'Q-3', status: 'Canceled' }])
+    expect(s.get('Q-2')!.activity.at(-1)!.body).toBe('Canceled with its parent Q-1 (was Todo).')
+    expect(s.get('Q-3')!.activity.at(-1)!.body).toBe('Canceled with its parent Q-1 (was In Progress).')
+    // the cascade is the agent's write, but not a session of work on those issues
+    expect(s.get('Q-2')!.touchedBy).toEqual({ actor: 'agent', workspace: 'web-app', branch: 'main' })
+    expect(s.history('Q-2').some((h) => h.session === 's2')).toBe(false)
+    expect(s.history('Q-1').some((h) => h.session === 's2')).toBe(true)
+  })
+
+  test('marking a parent Duplicate cancels its sub-issues; closed ones are left alone', async () => {
+    const { s, call } = await setup()
+    await call('save_issues', { issues: [{ id: 'Q-3', state: 'Done', comment: 'Shipped.' }, { id: 'Q-2', state: 'In Progress' }] })
+    const out = await call('save_issue', { id: 'Q-1', state: 'Duplicate' }, you)
+    expect(out.alsoChanged).toEqual([{ id: 'Q-2', status: 'Canceled' }])
+    expect(s.get('Q-3')!.status).toBe('Done')
+  })
+
+  test('a parent cannot be completed over open sub-issues, by an agent or the owner', async () => {
+    const { s, call } = await setup()
+    const err = await call('save_issue', { id: 'Q-1', state: 'Done', comment: 'Shipped.' }).catch((e: Error) => e)
+    expect((err as Error).message).toContain('Q-1 has 2 open sub-issues: Q-2 (Todo), Q-3 (Todo).')
+    expect((err as Error).message).toContain('save_issues({ issues: [{ id: "Q-2", state: "Done"')
+    await expect(call('save_issue', { id: 'Q-1', state: 'Done' }, you)).rejects.toThrow(/open sub-issues/)
+    await expect(call('save_issues', { issues: [{ id: 'Q-2', state: 'Done' }, { id: 'Q-1', state: 'Done' }] }, you)).rejects.toThrow(/Q-1 has 1 open sub-issue: Q-3 \(Todo\)/)
+    expect(s.get('Q-1')!.status).toBe('In Progress')
+    expect(s.get('Q-2')!.status).toBe('Todo')
+  })
+
+  test('a parent is completed when the same call closes its sub-issues, in any order', async () => {
+    const { s, call } = await setup()
+    const out = await call('save_issues', { issues: [{ id: 'Q-1', state: 'Done' }, { id: 'Q-2', state: 'Done' }, { id: 'Q-3', state: 'Canceled' }] }, you)
+    expect(out.alsoChanged).toBeUndefined()
+    expect(['Q-1', 'Q-2', 'Q-3'].map((id) => s.get(id)!.status)).toEqual(['Done', 'Done', 'Canceled'])
+    expect(s.get('Q-1')!.activity.some((a) => a.body.includes('automatically'))).toBe(false)
+  })
+
+  test('closing the last open sub-issue closes the parent, and its parent in turn', async () => {
+    const { s, call } = await setup()
+    const out = await call('save_issue', { id: 'Q-3', state: 'Done', comment: 'Shipped.' })
+    expect(out.alsoChanged).toEqual([{ id: 'Q-2', status: 'Done' }, { id: 'Q-1', status: 'Done' }])
+    expect(s.get('Q-2')!.activity.at(-1)!.body).toBe('Its only sub-issue is closed; closed automatically.')
+    expect(s.history('Q-2').some((h) => h.session)).toBe(false)
+  })
+
+  test('a parent whose sub-issues were all canceled is canceled', async () => {
+    const { s, call } = await setup()
+    await call('save_issue', { id: 'Q-3', state: 'Canceled' }, you)
+    expect(['Q-1', 'Q-2'].map((id) => s.get(id)!.status)).toEqual(['Canceled', 'Canceled'])
+  })
+
+  test('a parent with other open sub-issues stays open until the last one closes', async () => {
+    const { s, call } = await setup()
+    const extra = await call('save_issue', { title: 'Second step', labels: ['Task'], parentId: 'Q-2', project: 'Acme App' })
+    await call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    expect(s.get('Q-2')!.status).toBe('Todo')
+    const out = await call('save_issue', { id: extra.id, state: 'Canceled' }, you)
+    expect(out.alsoChanged).toEqual([{ id: 'Q-2', status: 'Done' }, { id: 'Q-1', status: 'Done' }])
+    expect(s.get('Q-2')!.activity.at(-1)!.body).toBe('All 2 sub-issues are closed; closed automatically.')
+  })
+
+  test('a parent waiting on the owner or with open checklist items is not closed', async () => {
+    const { s, call } = await setup()
+    await call('save_issue', { id: 'Q-2', state: 'Waiting' }, you)
+    expect((await call('save_issue', { id: 'Q-3', state: 'Done' }, you)).alsoChanged).toBeUndefined()
+    expect(s.get('Q-2')!.status).toBe('Waiting')
+
+    const b = await setup()
+    await b.call('save_issue', { id: 'Q-2', addLabels: ['Needs review'] }, you)
+    await b.call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    expect(b.s.get('Q-2')!.status).toBe('Todo')
+
+    const c = await setup()
+    await c.call('save_issue', { id: 'Q-2', description: '- [x] write it\n- [ ] ship it' }, you)
+    await c.call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    expect(c.s.get('Q-2')!.status).toBe('Todo')
+  })
+
+  test('deleting or moving away the last open sub-issue closes the parent', async () => {
+    const { s, call } = await setup()
+    const extra = await call('save_issue', { title: 'Second step', labels: ['Task'], parentId: 'Q-2', project: 'Acme App' })
+    await call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    const out = await call('delete_issue', { id: extra.id }, you)
+    expect(out).toEqual({ deleted: extra.id, alsoChanged: [{ id: 'Q-2', status: 'Done' }, { id: 'Q-1', status: 'Done' }] })
+
+    const b = await setup()
+    const moved = await b.call('save_issue', { title: 'Second step', labels: ['Task'], parentId: 'Q-2', project: 'Acme App' })
+    await b.call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    const res = await b.call('save_issue', { id: moved.id, parentId: null }, you)
+    expect(res.alsoChanged).toEqual([{ id: 'Q-2', status: 'Done' }, { id: 'Q-1', status: 'Done' }])
+    expect(b.s.get(moved.id)!.status).toBe('Backlog')
+  })
+
+  test('a status the same call sets wins over the cascade', async () => {
+    const { s, call } = await setup()
+    await call('save_issues', { issues: [{ id: 'Q-1', state: 'Canceled' }, { id: 'Q-3', state: 'In Progress' }] }, you)
+    expect(['Q-1', 'Q-2', 'Q-3'].map((id) => s.get(id)!.status)).toEqual(['Canceled', 'Canceled', 'In Progress'])
+    expect(s.get('Q-3')!.activity.some((a) => a.body.includes('with its parent'))).toBe(false)
+    // the parent a call moves itself is not closed under it
+    const b = await setup()
+    await b.call('save_issues', { issues: [{ id: 'Q-3', state: 'Done' }, { id: 'Q-2', state: 'In Progress' }] }, you)
+    expect(b.s.get('Q-2')!.status).toBe('In Progress')
+  })
+
+  test('nothing reopens, and a sub-issue created closed closes nothing', async () => {
+    const { s, call } = await setup()
+    await call('save_issue', { id: 'Q-3', state: 'Done' }, you)
+    await call('save_issue', { id: 'Q-3', state: 'In Progress' }, you)
+    expect(['Q-1', 'Q-2'].map((id) => s.get(id)!.status)).toEqual(['Done', 'Done'])
+
+    const b = await setup()
+    const out = await b.call('save_issue', { title: 'Imported', labels: ['Task'], parentId: 'Q-4', project: 'Acme App', state: 'Done' }, you)
+    expect(out.alsoChanged).toBeUndefined()
+    expect(b.s.get('Q-4')!.status).toBe('Backlog')
   })
 })

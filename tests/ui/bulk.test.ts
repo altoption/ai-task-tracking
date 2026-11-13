@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { asksReason, bulkItems, clickSelect, commonProject, listKey, families, missingKids, setMany, visibleSelection } from '../../ui/bulk'
+import { asksReason, bulkItems, clickSelect, commonProject, familyClose, listKey, families, missingKids, setMany, statusItems, visibleSelection } from '../../ui/bulk'
 
 const ids = ['A-1', 'A-2', 'A-3', 'A-4', 'A-5']
 const set = (...x: string[]) => new Set(x)
@@ -79,4 +79,41 @@ test('commonProject: the project when every selected issue shares it', () => {
 test('bulkItems carries a parent or a milestone, and null to clear one', () => {
   expect(bulkItems(['A-1'], { parentId: 'E-1' })).toEqual([{ id: 'A-1', parentId: 'E-1' }])
   expect(bulkItems(['A-1'], { milestone: null })).toEqual([{ id: 'A-1', milestone: null }])
+})
+
+describe('familyClose: the open sub-issues a closing status takes along', () => {
+  const statuses = [
+    { name: 'Todo', type: 'unstarted' as const, color: '' }, { name: 'Done', type: 'completed' as const, color: '' },
+    { name: 'Shipped', type: 'completed' as const, color: '' }, { name: 'Canceled', type: 'canceled' as const, color: '' },
+  ]
+  const st = (name: string) => statuses.find((s) => s.name === name)
+  // E-1 > A-1 (Todo), A-2 (Done) > A-3 (Todo); B-1 alone
+  const issues = [
+    { id: 'E-1', parent: null, status: 'Todo' }, { id: 'A-1', parent: 'E-1', status: 'Todo' }, { id: 'A-2', parent: 'E-1', status: 'Done' },
+    { id: 'A-3', parent: 'A-2', status: 'Todo' }, { id: 'B-1', parent: null, status: 'Todo' },
+  ]
+  test('completing a parent needs its open sub-issues at every depth; canceling takes them along', () => {
+    expect(familyClose(['E-1'], st('Done'), issues, statuses)).toEqual({ kind: 'complete', kids: ['A-1', 'A-3'] })
+    expect(familyClose(['E-1'], st('Canceled'), issues, statuses)).toEqual({ kind: 'cancel', kids: ['A-1', 'A-3'] })
+  })
+  test('selected sub-issues are not counted twice; leaves and open statuses ask nothing', () => {
+    expect(familyClose(['E-1', 'A-1'], st('Done'), issues, statuses)).toEqual({ kind: 'complete', kids: ['A-3'] })
+    expect(familyClose(['E-1', 'A-1', 'A-3'], st('Done'), issues, statuses)).toBeNull()
+    expect(familyClose(['B-1', 'A-1'], st('Done'), issues, statuses)).toBeNull()
+    expect(familyClose(['E-1'], st('Todo'), issues, statuses)).toBeNull()
+    expect(familyClose(['E-1'], undefined, issues, statuses)).toBeNull()
+  })
+  test('a parent that is already completed, or already in that status, asks nothing', () => {
+    expect(familyClose(['A-2'], st('Shipped'), issues, statuses)).toBeNull()
+    expect(familyClose(['A-2'], st('Canceled'), issues, statuses)).toEqual({ kind: 'cancel', kids: ['A-3'] })
+    const canceled = issues.map((i) => (i.id === 'E-1' ? { ...i, status: 'Canceled' } : i))
+    expect(familyClose(['E-1'], st('Canceled'), canceled, statuses)).toBeNull()
+  })
+  test('statusItems sends the sub-issues of a completed parent first, and none for a canceled one', () => {
+    expect(statusItems(['E-1'], 'Done', { kind: 'complete', kids: ['A-1'] }, 'Shipped')).toEqual([
+      { id: 'A-1', state: 'Done', comment: 'Shipped' }, { id: 'E-1', state: 'Done', comment: 'Shipped' },
+    ])
+    expect(statusItems(['E-1'], 'Canceled', { kind: 'cancel', kids: ['A-1'] })).toEqual([{ id: 'E-1', state: 'Canceled' }])
+    expect(statusItems(['B-1'], 'Done', null)).toEqual([{ id: 'B-1', state: 'Done' }])
+  })
 })

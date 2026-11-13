@@ -7,8 +7,10 @@ import { CiBadgeLine } from '../components/Ci'
 import { filterOptions, labelOptions } from '../issuePage'
 import { isAllowedUrl } from '../markdown'
 import { href } from '../router'
+import { useFamilyClose } from './FamilyClose'
 
-export type SaveFn = (args: Record<string, unknown>, otherId?: string) => Promise<void>
+/** `alsoClose`: open sub-issues to move to the same status in the same call (a parent is completed with them). */
+export type SaveFn = (args: Record<string, unknown>, otherId?: string, alsoClose?: string[]) => Promise<void>
 
 const fmtDate = (iso: string) => {
   const t = Date.parse(iso)
@@ -78,9 +80,11 @@ export function IssueProperties({ issue, save }: { issue: IssueDetail; save: Sav
   const [linkDraft, setLinkDraft] = useState<{ url: string; title: string } | null>(null)
   const { options: issueOptions, onQuery } = useIssueOptions(issue.id, issue.project)
 
-  const run = async (section: string, args: Record<string, unknown>, otherId?: string) => {
+  const family = useFamilyClose()
+
+  const run = async (section: string, args: Record<string, unknown>, otherId?: string, alsoClose?: string[]) => {
     setErrors((e) => ({ ...e, [section]: '' }))
-    try { await save(args, otherId) } catch (err) { setErrors((e) => ({ ...e, [section]: err instanceof Error ? err.message : String(err) })) }
+    try { await save(args, otherId, alsoClose) } catch (err) { setErrors((e) => ({ ...e, [section]: err instanceof Error ? err.message : String(err) })) }
   }
 
   const statusOpts: PickOption[] = (config?.statuses ?? []).map((s) => ({ value: s.name, label: s.name, group: null, icon: <StatusIcon status={s.name} config={config} /> }))
@@ -96,8 +100,9 @@ export function IssueProperties({ issue, save }: { issue: IssueDetail; save: Sav
   return (
     <aside className="issue-props" aria-label="Properties">
       <Section title="Properties" error={errors.status || errors.priority}>
-        <Picker label="Status" options={statusOpts} selected={[issue.status]} onPick={(v) => void run('status', { state: v })}
+        <Picker label="Status" options={statusOpts} selected={[issue.status]} onPick={(v) => family.ask([issue.id], v, (fam) => void run('status', { state: v }, undefined, fam?.kind === 'complete' ? fam.kids : undefined))}
           trigger={<><StatusIcon status={issue.status} config={config} /><span>{issue.status}</span></>} />
+        {family.dialog}
         <Picker label="Priority" options={priorityOpts} selected={[String(issue.priority)]} onPick={(v) => void run('priority', { priority: Number(v) })}
           trigger={<><PriorityIcon priority={issue.priority} /><span className={issue.priority ? '' : 'muted'}>{issue.priority ? PRIORITIES[issue.priority] : 'Set priority'}</span></>} />
       </Section>

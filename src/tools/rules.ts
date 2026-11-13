@@ -1,5 +1,6 @@
-import type { Actor, LabelDef, Link, Project, StatusDef } from '../model'
+import type { Actor, Config, Issue, LabelDef, Link, Project, StatusDef } from '../model'
 import type { Store } from '../engine/store'
+import { taskLines } from '../shared/tasks'
 
 /**
  * Agent rules for the tool layer (spec §7.4). Pure helpers plus the in-memory "recent comment"
@@ -189,6 +190,56 @@ export function assertCanPlan(actor: Actor, id: string, plan: string | null): vo
   if (actor.actor !== 'you' && plan !== 'now') {
     throw new ToolError(`Only the owner moves issues between Next and Later. Agents may only set now, e.g. set_plan({ id: "${id}", plan: "now" }).`)
   }
+}
+
+// ---------- rule 8: a parent and its sub-issues close together ----------
+
+export const isClosedType = (t: StatusDef['type'] | undefined) => t === 'completed' || t === 'canceled' || t === 'duplicate'
+
+/** Every open issue below `id`, at any depth, nearest level first (an open step under a closed one counts). Cycle-safe. */
+export function openDescendants(id: string, childrenOf: (id: string) => readonly Pick<Issue, 'id' | 'status'>[], isOpen: (status: string) => boolean): string[] {
+  const out: string[] = []
+  const seen = new Set([id])
+  for (let level = [id]; level.length;) {
+    const next: string[] = []
+    for (const p of level) {
+      for (const k of childrenOf(p)) {
+        if (seen.has(k.id)) continue
+        seen.add(k.id)
+        next.push(k.id)
+        if (isOpen(k.status)) out.push(k.id)
+      }
+    }
+    level = next
+  }
+  return out
+}
+
+/**
+ * What an open parent becomes once all its sub-issues (`kids`) are closed: completed when any of them was completed,
+ * otherwise canceled. null leaves it alone: it is closed already, has no sub-issues or an open one, is waiting on the
+ * owner (a needs-you status or label), or still has unticked checklist items of its own.
+ */
+export function parentOutcome(
+  parent: Pick<Issue, 'status' | 'labels' | 'description'>, kids: readonly Pick<Issue, 'status'>[], cfg: Pick<Config, 'statuses' | 'needsYou'>,
+): 'completed' | 'canceled' | null {
+  const type = (name: string) => cfg.statuses.find((x) => x.name === name)?.type
+  if (isClosedType(type(parent.status)) || !kids.length) return null
+  if (kids.some((k) => !isClosedType(type(k.status)))) return null
+  if (cfg.needsYou.statuses.includes(parent.status) || parent.labels.some((l) => cfg.needsYou.labels.includes(l))) return null
+  if (taskLines(parent.description).some((t) => !t.checked)) return null
+  return kids.some((k) => type(k.status) === 'completed') ? 'completed' : 'canceled'
+}
+
+export function openSubIssuesError(id: string, state: string, open: readonly Pick<Issue, 'id' | 'status'>[]): ToolError {
+  const shown = open.slice(0, 8).map((k) => `${k.id} (${k.status})`)
+  const first = open[0]!.id
+  return new ToolError(
+    `${id} has ${open.length} open sub-issue${open.length === 1 ? '' : 's'}: ${list(shown)}${open.length > shown.length ? ', …' : ''}. ` +
+    `Close them first or in the same call, e.g. save_issues({ issues: [{ id: "${first}", state: "${state}", comment: "…" }, { id: "${id}", state: "${state}", comment: "…" }] }). ` +
+    `Canceling ${id} cancels them with it.`,
+    { openSubIssues: open.map((k) => k.id) },
+  )
 }
 
 // ---------- rule 6: GitHub links ----------

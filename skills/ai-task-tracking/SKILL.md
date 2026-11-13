@@ -44,6 +44,8 @@ instructions at session start. Where they differ from this skill, they win (labe
 7. **Finish.** `save_issue({ id, state: "Done", comment: "Shipped in PR #123: …" })`. Done, Waiting,
    Canceled and Duplicate all require a `comment`. Work you drop is `Canceled` with a reason; issues are
    never deleted.
+   An epic closes with its steps: Done is refused while steps are open (close them first, or in the same
+   `save_issues` call); canceling it cancels them; closing the last step closes it.
 
 **Milestones.** Use one only for a set of issues in ONE project that must ship together toward a dated
 or named outcome (a release "v0.2", a pilot, a demo or customer date). Create it with `save_milestone`

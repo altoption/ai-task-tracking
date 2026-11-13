@@ -8,7 +8,7 @@ import { attemptsBrief, attemptsOf } from '../engine/attempts'
 import { handoffOf } from '../engine/handoff'
 import { workingStatus } from '../engine/stalled'
 import { ciReasonOf } from '../engine/ci'
-import { saveIssue, saveIssues } from './issueWrites'
+import { saveIssue, saveIssues, settleAfterDelete } from './issueWrites'
 import { taskAt, taskLines, toggleTask } from '../shared/tasks'
 import {
   assertCanDelete, assertCanPlan, assertOwner, extractLinks, findProject, mergeLinks, mustProject, normId, noteExplanation,
@@ -52,6 +52,9 @@ export function issueBrief(s: Store, i: Issue) {
 const brief = (s: Store, i: Issue) => ({
   id: i.id, title: i.title, status: i.status, priority: i.priority, project: i.project, url: issueUrl(s, i.id), appUrl: issueAppUrl(i.id),
 })
+
+/** Issues a write closed besides the one asked for (a parent and its sub-issues close together). */
+const alsoChanged = (also: Issue[]) => (also.length ? { alsoChanged: also.map((i) => ({ id: i.id, status: i.status })) } : {})
 
 function mustIssue(s: Store, raw: string): Issue {
   const i = s.get(normId(raw))
@@ -114,12 +117,13 @@ function since(v: string): string {
 
 const handlers: Record<string, Handler> = {
   async save_issue(s, a: Args<'save_issue'>, { actor }) {
-    return issueOut(s, await saveIssue(s, a, actor))
+    const { issue, also } = await saveIssue(s, a, actor)
+    return { ...issueOut(s, issue), ...alsoChanged(also) }
   },
 
   async save_issues(s, a: Args<'save_issues'>, { actor }) {
-    const done = await saveIssues(s, a.issues, actor)
-    return { issues: done.map((d) => ({ ...issueOut(s, d.issue), ...(d.ref ? { ref: d.ref } : {}) })) }
+    const { done, also } = await saveIssues(s, a.issues, actor)
+    return { issues: done.map((d) => ({ ...issueOut(s, d.issue), ...(d.ref ? { ref: d.ref } : {}) })), ...alsoChanged(also) }
   },
 
   get_issue(s, a: Args<'get_issue'>, ctx: ToolCtx) {
@@ -382,7 +386,7 @@ const handlers: Record<string, Handler> = {
     assertCanDelete(actor, normId(a.id))
     const i = mustIssue(s, a.id)
     await s.deleteIssue(i.id, actor)
-    return { deleted: i.id }
+    return { deleted: i.id, ...alsoChanged(await settleAfterDelete(s, i.parent, actor)) }
   },
 
   async save_view(s, a: Args<'save_view'>, { actor }) {

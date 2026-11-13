@@ -2,16 +2,105 @@ import type { Actor, Issue, Link } from '../model'
 import type { IssuePatch, Store } from '../engine/store'
 import type { BatchItemArgs } from './schemas'
 import {
-  blockCycle, cycleError, explanationError, extractLinks, findProject, hasRecentExplanation, mergeLinks, mustProject,
-  needsExplanation, newLabel, noLabelsError, normId, noteExplanation, parentCycle, projectForCreate, resolveLabel,
-  resolveStatus, statusType, ToolError, unknownIdsError,
+  blockCycle, cycleError, explanationError, extractLinks, findProject, hasRecentExplanation, isClosedType, mergeLinks,
+  mustProject, needsExplanation, newLabel, noLabelsError, normId, noteExplanation, openDescendants, openSubIssuesError,
+  parentCycle, parentOutcome, projectForCreate, resolveLabel, resolveStatus, statusType, ToolError, unknownIdsError,
 } from './rules'
 
 /**
  * save_issue / save_issues. Two phases: `prepare` validates an item and resolves every name and
  * reference without writing; `apply` performs the writes. A batch prepares every item first
  * (all-or-nothing validation), then applies them in order.
+ *
+ * Rule 8 (a parent and its sub-issues close together) runs here and nowhere else, so files edited by hand are never
+ * cascaded. Canceling a parent (or marking it a duplicate) cancels its open sub-issues; a parent can't be completed
+ * over open sub-issues unless the same call closes them; a parent closes once its last open sub-issue closes, is
+ * deleted or moves away. Each issue is written in its own queue, with no transaction across them: a sub-issue reopened
+ * while its parent is closing can end up open under a closed parent.
  */
+
+/** One call's rule-8 state: the ids whose status the call sets itself (a cascade leaves those alone), and what it changed besides. */
+export interface Cascade { explicit: ReadonlySet<string>; closing: ReadonlySet<string>; also: Map<string, Issue> }
+
+function cascadeFor(s: Store, items: BatchItemArgs[]): Cascade {
+  const explicit = new Set<string>()
+  const closing = new Set<string>()
+  for (const a of items) {
+    if (!a.id || a.state === undefined) continue
+    const id = normId(a.id)
+    explicit.add(id)
+    const name = a.state.trim().toLowerCase()
+    if (isClosedType(s.config.statuses.find((x) => x.name.toLowerCase() === name)?.type)) closing.add(id)
+  }
+  return { explicit, closing, also: new Map() }
+}
+
+/** Cascaded writes are the triggering actor's, without its session: they aren't an agent's attempt at those issues. */
+function quiet(actor: Actor): Actor {
+  const { session: _session, ...rest } = actor
+  return rest
+}
+
+const isOpenIn = (s: Store) => (status: string) => !isClosedType(statusType(s, status))
+
+/** Cancel every open issue below `parent`, each with a comment naming the parent and the status it had. */
+async function cancelBelow(s: Store, parent: Issue, actor: Actor, c: Cascade): Promise<void> {
+  const canceled = s.config.statuses.find((x) => x.type === 'canceled')?.name
+  if (!canceled) return
+  const isOpen = isOpenIn(s)
+  for (const id of openDescendants(parent.id, (k) => s.children(k), isOpen)) {
+    if (c.explicit.has(id) || !s.get(id)) continue
+    let was: string | undefined
+    await s.updateIssue(id, (cur) => {
+      if (!isOpen(cur.status)) return null
+      was = cur.status
+      return { status: canceled }
+    }, actor)
+    if (was === undefined) continue
+    await s.addComment(id, `Canceled with its parent ${parent.id} (was ${was}).`, actor)
+    c.also.set(id, s.get(id)!)
+  }
+}
+
+/** Close `start` if all its sub-issues are closed (re-checked inside its own write), then its parent, and so on up. */
+async function settleParent(s: Store, start: string | null, actor: Actor, c: Cascade): Promise<void> {
+  const seen = new Set<string>()
+  let next = start
+  while (next && !seen.has(next) && !c.explicit.has(next) && s.get(next)) {
+    const id = next
+    seen.add(id)
+    let kids = 0
+    const out = await s.updateIssue(id, (cur) => {
+      const children = s.children(id)
+      const outcome = parentOutcome(cur, children, s.config)
+      const status = outcome && s.config.statuses.find((x) => x.type === outcome)?.name
+      if (!status) return null
+      kids = children.length
+      return { status }
+    }, actor)
+    if (!kids) return
+    await s.addComment(id, kids === 1 ? 'Its only sub-issue is closed; closed automatically.' : `All ${kids} sub-issues are closed; closed automatically.`, actor)
+    c.also.set(id, s.get(id) ?? out)
+    next = out.parent
+  }
+}
+
+/** Rule 8 after an update: `before` is the issue's status and parent as they were. */
+async function cascade(s: Store, before: Pick<Issue, 'status' | 'parent'>, issue: Issue, actor: Actor, c: Cascade): Promise<void> {
+  const who = quiet(actor)
+  const type = statusType(s, issue.status)
+  const moved = issue.status !== before.status
+  if (moved && (type === 'canceled' || type === 'duplicate')) await cancelBelow(s, issue, who, c)
+  if (before.parent && before.parent !== issue.parent) await settleParent(s, before.parent, who, c)
+  if (moved && isClosedType(type)) await settleParent(s, issue.parent, who, c)
+}
+
+/** Rule 8 after an issue under `parent` was deleted. Returns the issues it closed. */
+export async function settleAfterDelete(s: Store, parent: string | null, actor: Actor): Promise<Issue[]> {
+  const c: Cascade = { explicit: new Set(), closing: new Set(), also: new Map() }
+  await settleParent(s, parent, quiet(actor), c)
+  return [...c.also.values()]
+}
 
 /** Validated item. Graph fields hold keys: an existing id, or "ref:<ref>" for an item of this batch. */
 interface Prepared {
@@ -44,7 +133,7 @@ const isRef = (k: string) => k.startsWith('ref:')
 class Batch {
   readonly overlay: Overlay = { parent: new Map(), blockedBy: new Map() }
   readonly refs = new Map<string, string>() // ref -> graph key (the id for an update item)
-  constructor(readonly s: Store, readonly actor: Actor, readonly commented: Set<string>) {}
+  constructor(readonly s: Store, readonly actor: Actor, readonly commented: Set<string>, readonly cascade: Cascade) {}
 
   parentOf = (k: string): string | null => (this.overlay.parent.has(k) ? this.overlay.parent.get(k)! : this.s.get(k)?.parent ?? null)
   blockersOf = (k: string): string[] => this.overlay.blockedBy.get(k) ?? this.s.get(k)?.blockedBy ?? []
@@ -115,6 +204,12 @@ function prepare(b: Batch, args: BatchItemArgs, index: number): Prepared {
     if (changed && actor.actor !== 'you' && needsExplanation(st)) {
       const ok = !!args.comment?.trim() || b.commented.has(key) || (!!id && hasRecentExplanation(s, id, actor.session))
       if (!ok) throw explanationError(id, st.name)
+    }
+    // rule 8: a parent is completed only with its sub-issues (for the owner too: the app asks, then sends them along)
+    if (cur && changed && st.type === 'completed' && statusType(s, cur.status) !== 'completed') {
+      const isOpen = isOpenIn(s)
+      const open = openDescendants(cur.id, (k) => s.children(k), isOpen).filter((d) => !b.cascade.closing.has(d))
+      if (open.length) throw openSubIssuesError(cur.id, st.name, open.map((d) => s.get(d)!))
     }
   }
 
@@ -188,7 +283,7 @@ function commit(b: Batch, p: Prepared): void {
   else if (!p.id) b.overlay.blockedBy.set(p.key, [])
 }
 
-async function apply(s: Store, p: Prepared, actor: Actor, refIds: Map<string, string>): Promise<Issue> {
+async function apply(s: Store, p: Prepared, actor: Actor, refIds: Map<string, string>, c: Cascade): Promise<Issue> {
   const a = p.args
   const real = (k: string) => (isRef(k) ? refIds.get(k)! : k)
 
@@ -217,6 +312,7 @@ async function apply(s: Store, p: Prepared, actor: Actor, refIds: Map<string, st
   let issue: Issue
   let oldRelated: string[] = []
   let newRelated: string[] = []
+  let before: Pick<Issue, 'status' | 'parent'> | undefined
   if (!p.id) {
     const createBlocked = blockedTouched ? applyDelta(blockedBy ?? [], addBlockedBy, p.removeBlockedBy) : undefined
     newRelated = applyDelta(p.related ?? [], p.addRelated, p.removeRelated)
@@ -240,6 +336,7 @@ async function apply(s: Store, p: Prepared, actor: Actor, refIds: Map<string, st
     const build = (cur: Issue): IssuePatch | null => {
       oldRelated = cur.related
       newRelated = cur.related
+      before = { status: cur.status, parent: cur.parent }
       const patch: IssuePatch = {}
       if (a.title !== undefined) patch.title = a.title
       if (a.baseDescription !== undefined && a.baseDescription !== cur.description) {
@@ -303,17 +400,22 @@ async function apply(s: Store, p: Prepared, actor: Actor, refIds: Map<string, st
     await s.addComment(issue.id, a.comment, actor)
     noteExplanation(s, issue.id, actor.session)
   }
+  if (before) await cascade(s, before, issue, actor, c)
   return s.get(issue.id) ?? issue
 }
 
-export async function saveIssue(s: Store, args: BatchItemArgs, actor: Actor): Promise<Issue> {
-  const b = new Batch(s, actor, commentedKeys([args]))
-  return apply(s, prepare(b, args, 0), actor, new Map())
+/** `also`: the issues rule 8 changed besides the one saved. */
+export async function saveIssue(s: Store, args: BatchItemArgs, actor: Actor): Promise<{ issue: Issue; also: Issue[] }> {
+  const c = cascadeFor(s, [args])
+  const b = new Batch(s, actor, commentedKeys([args]), c)
+  const issue = await apply(s, prepare(b, args, 0), actor, new Map(), c)
+  return { issue, also: [...c.also.values()] }
 }
 
-/** Validate every item (resolving refs) before writing any; then write in order. */
-export async function saveIssues(s: Store, items: BatchItemArgs[], actor: Actor): Promise<{ issue: Issue; ref?: string }[]> {
-  const b = new Batch(s, actor, commentedKeys(items))
+/** Validate every item (resolving refs) before writing any; then write in order. `also`: what rule 8 changed besides. */
+export async function saveIssues(s: Store, items: BatchItemArgs[], actor: Actor): Promise<{ done: { issue: Issue; ref?: string }[]; also: Issue[] }> {
+  const c = cascadeFor(s, items)
+  const b = new Batch(s, actor, commentedKeys(items), c)
   const prepared: Prepared[] = []
   const errors: string[] = []
   items.forEach((a, i) => {
@@ -333,7 +435,7 @@ export async function saveIssues(s: Store, items: BatchItemArgs[], actor: Actor)
   const done: { issue: Issue; ref?: string }[] = []
   for (const p of prepared) {
     try {
-      const issue = await apply(s, p, actor, refIds)
+      const issue = await apply(s, p, actor, refIds, c)
       if (p.ref) refIds.set(`ref:${p.ref}`, issue.id)
       done.push({ issue, ...(p.ref ? { ref: p.ref } : {}) })
     } catch (e) {
@@ -347,5 +449,5 @@ export async function saveIssues(s: Store, items: BatchItemArgs[], actor: Actor)
       )
     }
   }
-  return done
+  return { done, also: [...c.also.values()] }
 }
