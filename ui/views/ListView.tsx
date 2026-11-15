@@ -96,7 +96,7 @@ export function ListView({ groups, display, byId, config, cells }: {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
       const t = e.target as HTMLElement | null
-      if (t?.closest('input:not([type="checkbox"]), textarea, select, button, [contenteditable="true"], [role="dialog"]') || document.querySelector('.overlay')) return
+      if (t?.closest('input:not([type="checkbox"]), textarea, select, button, [contenteditable="true"], dialog, [role="dialog"]') || document.querySelector('dialog[open]')) return
       const k = keys.current
       const act = listKey(e.key, e.shiftKey)
       if (!act || !k.rowIds.length) { if (e.key === 'Escape' && !k.sel.picked.length) setCursorId(null); return }

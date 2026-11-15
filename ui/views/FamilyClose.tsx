@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { familyClose, type FamilyClose } from '../bulk'
 import { getState, useTracker } from '../client'
 import { StatusIcon } from '../components/icons'
+import { Modal } from '../components/Modal'
 
 interface Pending { ids: readonly string[]; status: string; fam: FamilyClose; go: (fam: FamilyClose) => void }
 const SHOWN = 6
@@ -31,21 +32,15 @@ function FamilyCloseDialog({ pending, onClose }: { pending: Pending; onClose: ()
   const who = ids.length === 1 ? ids[0]! : `These ${ids.length} issues`
   const complete = fam.kind === 'complete'
   const primary = useRef<HTMLButtonElement>(null)
-  // The pick that opened this happens on mouse-down, and the browser moves focus after it: take focus a tick later,
-  // and listen for Esc on the window so it closes wherever focus ended up.
-  useEffect(() => {
-    const t = setTimeout(() => primary.current?.focus(), 0)
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose() } }
-    window.addEventListener('keydown', onKey, true)
-    return () => { clearTimeout(t); window.removeEventListener('keydown', onKey, true) }
-  }, [onClose])
+  // Enter confirms: start on the primary button, not on the close button the dialog would pick.
+  useEffect(() => { primary.current?.focus() }, [])
   const title = complete ? `${n === 1 ? '1 sub-issue is' : `${n} sub-issues are`} still open` : `This also cancels ${subs}`
   const body = complete
     ? `${who} can't be ${status} while ${n === 1 ? 'it is' : 'they are'} open. Move ${n === 1 ? 'it' : 'them'} to ${status} too?`
     : `Moving ${ids.length === 1 ? who : who.toLowerCase()} to ${status} cancels the open issues under ${ids.length === 1 ? 'it' : 'them'}. Each gets a comment with the status it had.`
   return (
-    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="dialog family-close" role="dialog" aria-modal="true" aria-label={title}
+    <Modal label={title} onClose={onClose}>
+      <form className="dialog family-close"
         onSubmit={(e) => { e.preventDefault(); onClose(); go(fam) }}>
         <div className="dialog-head"><strong>{title}</strong><button type="button" className="icon-button close" onClick={onClose} aria-label="Close">×</button></div>
         <p className="family-close-body">{body}</p>
@@ -61,6 +56,6 @@ function FamilyCloseDialog({ pending, onClose }: { pending: Pending; onClose: ()
           <button ref={primary} type="submit" className="primary">{complete ? `Move all ${ids.length + n} to ${status}` : `Move to ${status}`}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }

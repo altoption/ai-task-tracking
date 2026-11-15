@@ -3,6 +3,7 @@ import type { IssueSummary } from '../../src/model'
 import { listedProjects, searchIssues, setTheme, useTracker, type ThemesInfo } from '../client'
 import { navigate } from '../router'
 import { ConceptIcon, StatusIcon } from '../components/icons'
+import { Modal } from '../components/Modal'
 
 interface Item { key: string; group: string; label: string; hint?: string; icon: ReactNode; run: () => void }
 export type PaletteMode = 'root' | 'views'
@@ -133,14 +134,13 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
     if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n')) { e.preventDefault(); setActive((current + 1) % Math.max(1, items.length)) }
     else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p')) { e.preventDefault(); setActive((current - 1 + items.length) % Math.max(1, items.length)) }
     else if (e.key === 'Enter') { e.preventDefault(); items[current]?.run() }
-    else if (e.key === 'Escape') { e.preventDefault(); onClose() }
     else if (e.key === 'Backspace' && !q && mode !== 'root') { e.preventDefault(); setMode('root') }
   }
 
   let lastGroup = ''
   return (
-    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+    <Modal label="Command palette" onClose={onClose}>
+      <div className="palette">
         <div className="palette-input">
           {mode === 'views' && <span className="chip">Views</span>}
           <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setActive(0); setError('') }} onKeyDown={onKey}
@@ -166,6 +166,6 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
           })}
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

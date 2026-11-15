@@ -31,8 +31,8 @@ export function useSelection(ids: readonly string[], familyIds: readonly string[
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
-      if (t?.closest('input:not([type="checkbox"]), textarea, select, [contenteditable="true"], [role="dialog"]')) return
-      if (document.querySelector('.overlay')) return // a dialog or the palette owns the keyboard
+      if (t?.closest('input:not([type="checkbox"]), textarea, select, [contenteditable="true"], dialog, [role="dialog"]')) return
+      if (document.querySelector('dialog[open]')) return // a dialog or the palette owns the keyboard
       if (e.key === 'Escape' && picked.length) clear()
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && ids.length) { e.preventDefault(); setSelected(new Set(ids)) }
     }

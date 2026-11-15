@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { callTool, listedProjects, useScope, useTracker } from '../client'
 import { navigate } from '../router'
 import { PRIORITIES } from '../components/icons'
+import { Modal } from '../components/Modal'
 
 /** Pure: the save_issue args for the new-issue form (empty optional fields omitted). */
 export function newIssueArgs(f: { title: string; project: string; labels: string[]; status: string; priority: number; parent: string; description: string }) {
@@ -63,12 +64,11 @@ export function NewIssueDialog({ onClose, parent: parentId }: { onClose: () => v
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit() }
-    else if (e.key === 'Escape') { e.preventDefault(); onClose() }
   }
 
   return (
-    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <form className="dialog new-issue" role="dialog" aria-modal="true" aria-label="New issue" onKeyDown={onKey} onSubmit={(e) => { e.preventDefault(); void submit() }}>
+    <Modal label="New issue" onClose={onClose}>
+      <form className="dialog new-issue" onKeyDown={onKey} onSubmit={(e) => { e.preventDefault(); void submit() }}>
         <div className="dialog-head">
           <select className="ghost" value={project} onChange={(e) => setProject(e.target.value)} aria-label="Project">
             {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
@@ -105,6 +105,6 @@ export function NewIssueDialog({ onClose, parent: parentId }: { onClose: () => v
           <button type="submit" className="primary" disabled={busy}>{busy ? 'Creating…' : 'Create issue'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }
