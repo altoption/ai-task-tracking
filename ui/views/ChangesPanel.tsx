@@ -178,7 +178,7 @@ export function ChangesPanel({ data, error, activity, project, onBranch, onClose
       if (zoom) { setZoom(null); return }
       // Esc in the comment box or a picker belongs to that field.
       const t = e.target as HTMLElement | null
-      if (!t?.closest('input, textarea, select, [role="dialog"], [role="listbox"]')) onClose()
+      if (!t?.closest('input, textarea, select, dialog, [role="dialog"], [role="listbox"]')) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

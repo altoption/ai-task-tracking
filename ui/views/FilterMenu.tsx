@@ -71,9 +71,9 @@ export function FilterMenu({ filter, locked = [], state, onChange }: { filter: F
           </div>
           <div className="picker-list">
             {!cat && cats.filter((c) => c.label.toLowerCase().includes(q.toLowerCase())).map((c) => (
-              <div key={c.id} role="button" tabIndex={0} className="picker-item" onClick={() => { setCat(c.id); setQ('') }} onKeyDown={(e) => { if (e.key === 'Enter') { setCat(c.id); setQ('') } }}>
+              <button key={c.id} type="button" className="picker-item" onClick={() => { setCat(c.id); setQ('') }}>
                 <ConceptIcon concept={c.id} /><span className="label">{c.label}</span><span className="hint">›</span>
-              </div>
+              </button>
             ))}
             {cat && <CategoryPanel cat={cat} q={q} filter={filter} state={state} onChange={onChange} />}
           </div>

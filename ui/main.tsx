@@ -82,7 +82,7 @@ function App() {
         return
       }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || isTypingTarget(e.target)) return
-      if (document.querySelector('.overlay')) return // a dialog or the palette owns the keyboard
+      if (document.querySelector('dialog[open]')) return // a dialog or the palette owns the keyboard
       const r = keyAction(keys, e.key, performance.now())
       keys = r.next
       if (!r.action) return
