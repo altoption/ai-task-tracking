@@ -79,7 +79,8 @@ its default: [the Settings reference](/docs/reference/settings/).
 - **Blocked work**, folded under Ready next: click it to see the dependency chains, the first blocker first
   (*WEB-12 Plans config → WEB-13 Comparison table → WEB-14 FAQ*), and **All blocked**. Issues that block each other show as one chain marked as a cycle.
 - **Agent activity**, beside the queue (below).
-- **Plan**: your Now, Next and Later board; drag issues between the columns.
+- **Plan**: your Now, Next and Later board; drag issues between the columns. Agents fill Now with what they start and
+  Next with what they'll pick up after it; Later is only yours.
 
 ### Agent activity
 

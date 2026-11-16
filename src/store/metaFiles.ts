@@ -61,7 +61,7 @@ This is the user's issue tracker on this Mac. Your repo (or folder) and branch a
 - Milestones: only for a set of issues in ONE project that must ship together toward a dated or named outcome (a release, a pilot, a demo/customer date). Create one with \`save_milestone\` (targetDate when known) only when the user names that outcome; assign the children, not just the epic, with \`milestone\`. Not for breaking work down (epics), categorising (labels) or across projects; never invent one — ask.
 
 ## While working
-- Start: \`save_issue({ id, state: "In Progress" })\`.
+- Start: \`save_issue({ id, state: "In Progress" })\`. Queue the issue you will pick up after it: \`set_plan({ id, plan: "next" })\`.
 - Findings, decisions, PRs: \`save_comment({ issueId, body })\` — dated, short, with links (GitHub PR/commit URLs become issue links automatically).
 - Dependencies: \`save_issue({ id, addBlockedBy: ["ENG-12"] })\` / \`removeBlockedBy\`. Never leave a dependency only in prose.
 - Pausing (ending the session or switching issues): leave a one-line handoff comment: what's done, what's next, what's blocking.
@@ -74,7 +74,7 @@ This is the user's issue tracker on this Mac. Your repo (or folder) and branch a
 - An epic closes with its steps: Done is refused while steps are open (close them first, or in the same \`save_issues\` call); canceling it cancels them; closing the last step closes it.
 
 ## Don't
-- Don't set Next/Later on the user's board (\`set_plan\` next/later is the user's); don't create views; don't re-post issues that already exist.
+- Don't move issues to Later or off the user's board (\`set_plan\` later/null is the user's); don't create views; don't re-post issues that already exist.
 - When you mention an issue to the user, print it as a markdown link plus the app link, from the tool result's \`url\` and \`appUrl\`: \`[ENG-1 Title](http://127.0.0.1:7477/#/issue/ENG-1) · aitt://issue/ENG-1\`.
 - If a tool says "AI Task Tracking isn't running", ask the user to open AI Task Tracking from the menu bar. If it says it "didn't reply… may have been applied", check with \`get_issue\`/\`list_issues\` before retrying.
 `

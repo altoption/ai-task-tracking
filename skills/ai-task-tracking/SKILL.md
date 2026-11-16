@@ -70,7 +70,7 @@ work down (that's an epic), to categorise (labels) or across projects; never inv
 | Projects | `list_projects`, `get_project`, `save_project`, `list_milestones`, `save_milestone` |
 | Docs | `save_document`, `get_document` |
 | Vocabulary | `list_issue_statuses`, `list_issue_labels`, `save_issue_label`, `list_teams` |
-| Plan for today | `set_plan({ id, plan: "now" })` (Next/Later belong to the user) |
+| Plan board | `set_plan({ id, plan: "now" })`, or `"next"` for what you'll pick up after it (Later belongs to the user) |
 
 Each tool's own description carries its full arguments.
 

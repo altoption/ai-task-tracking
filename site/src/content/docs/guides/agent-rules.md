@@ -27,7 +27,7 @@ Two sources, which agree:
    what's blocking. The next session sees it first (see [Picking up where a session stopped](/docs/guides/agent-sessions/#picking-up-where-a-session-stopped)).
 5. Needing you → `Waiting` with a comment, or the label "Needs decision" / "Needs review" → it appears in
    **Home ▸ Needs you**.
-6. Moving to Done, Waiting, Canceled or Duplicate needs a comment. Agents never delete; Next/Later is yours.
+6. Moving to Done, Waiting, Canceled or Duplicate needs a comment. Agents never delete. They put work in Now and Next; Later is yours.
 7. Milestones only for issues in one project that ship together toward a named or dated outcome.
 
 ## Enforced by the tools
@@ -40,5 +40,5 @@ These are not just guidance; the tools refuse or correct:
 | A new issue without a project | the project mapped to its repo is used; an unmapped repo gets its own project (own id prefix) |
 | Done/Waiting/Canceled/Duplicate without an explanation | an error asking for `comment` |
 | Parent/blocker cycles, unknown ids | an error naming the cycle or the ids |
-| Delete, `save_view`, `set_plan` next/later | refused (yours, from the app) |
+| Delete, `save_view`, `set_plan` later or off the board | refused (yours, from the app) |
 | A stale description edit with `baseDescription` | refused; re-read and re-apply |

@@ -563,7 +563,7 @@ exports[`tool list snapshot: changes to the tool list are reviewed deliberately 
       "openWorldHint": false,
       "title": "Put issue in Now",
     },
-    "description": "Put an issue in the user's Now slot. Agents may only set "now" (moving to In Progress does it too); Next and Later belong to the user. Example: set_plan({ id: "ENG-27", plan: "now" })",
+    "description": "Put an issue on the user's Now / Next / Later board. Agents set "now" (moving to In Progress does it too) or "next" (what you will pick up after it); Later and null belong to the user. Example: set_plan({ id: "ENG-27", plan: "next" })",
     "inputSchema": {
       "properties": {
         "id": {
@@ -584,7 +584,7 @@ exports[`tool list snapshot: changes to the tool list are reviewed deliberately 
               "type": "null",
             },
           ],
-          "description": ""now". (next, later and null are for the user.)",
+          "description": ""now" or "next". (later and null are for the user.)",
         },
       },
       "required": [

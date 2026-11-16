@@ -175,12 +175,12 @@ Tick or untick one "- [ ]" checklist item in an issue description without rewrit
 
 **Put issue in Now** · write · hints: `destructiveHint: false`, `idempotentHint`, `openWorldHint: false`
 
-Put an issue in the user's Now slot. Agents may only set "now" (moving to In Progress does it too); Next and Later belong to the user. Example: set_plan({ id: "ENG-27", plan: "now" })
+Put an issue on the user's Now / Next / Later board. Agents set "now" (moving to In Progress does it too) or "next" (what you will pick up after it); Later and null belong to the user. Example: set_plan({ id: "ENG-27", plan: "next" })
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | Issue id, e.g. "ENG-27". |
-| `plan` | "now" \| "next" \| "later" \| null | yes | "now". (next, later and null are for the user.) |
+| `plan` | "now" \| "next" \| "later" \| null | yes | "now" or "next". (later and null are for the user.) |
 
 ## list_projects
 

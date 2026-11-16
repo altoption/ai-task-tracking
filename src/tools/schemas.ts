@@ -159,8 +159,8 @@ const defs = {
   },
   set_plan: {
     title: 'Put issue in Now', idempotent: true,
-    description: 'Put an issue in the user\'s Now slot. Agents may only set "now" (moving to In Progress does it too); Next and Later belong to the user. Example: set_plan({ id: "ENG-27", plan: "now" })',
-    input: z.object({ id: issueId, plan: z.enum(['now', 'next', 'later']).nullable().describe('"now". (next, later and null are for the user.)') }),
+    description: 'Put an issue on the user\'s Now / Next / Later board. Agents set "now" (moving to In Progress does it too) or "next" (what you will pick up after it); Later and null belong to the user. Example: set_plan({ id: "ENG-27", plan: "next" })',
+    input: z.object({ id: issueId, plan: z.enum(['now', 'next', 'later']).nullable().describe('"now" or "next". (later and null are for the user.)') }),
   },
 
   // ----- projects, milestones, documents -----
