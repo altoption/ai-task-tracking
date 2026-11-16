@@ -187,8 +187,8 @@ export function assertOwner(actor: Actor, what: string): void {
 }
 
 export function assertCanPlan(actor: Actor, id: string, plan: string | null): void {
-  if (actor.actor !== 'you' && plan !== 'now') {
-    throw new ToolError(`Only the owner moves issues between Next and Later. Agents may only set now, e.g. set_plan({ id: "${id}", plan: "now" }).`)
+  if (actor.actor !== 'you' && plan !== 'now' && plan !== 'next') {
+    throw new ToolError(`Only the owner moves an issue to Later or off the board. Agents set now or next, e.g. set_plan({ id: "${id}", plan: "next" }).`)
   }
 }
 

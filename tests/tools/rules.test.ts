@@ -245,9 +245,11 @@ describe('rule 5: owner-only actions', () => {
     expect(s.get('Q-6')).toBeDefined()
   })
 
-  test('set_plan: agents only now; owner anything', async () => {
+  test('set_plan: agents now or next; owner anything', async () => {
     const { s, call } = await setup()
-    await expect(call('set_plan', { id: 'Q-2', plan: 'later' })).rejects.toThrow(/now/)
+    await expect(call('set_plan', { id: 'Q-2', plan: 'later' })).rejects.toThrow(/Only the owner/)
+    await expect(call('set_plan', { id: 'Q-2', plan: null })).rejects.toThrow(/Only the owner/)
+    expect((await call('set_plan', { id: 'Q-2', plan: 'next' })).plan).toBe('next')
     expect((await call('set_plan', { id: 'Q-2', plan: 'now' })).plan).toBe('now')
     expect((await call('set_plan', { id: 'Q-2', plan: 'later' }, you)).plan).toBe('later')
     expect(s.get('Q-2')!.plan).toBe('later')
