@@ -18,6 +18,8 @@ describe('parseRoute', () => {
     expect(parseRoute('#/issues?v=1&layout=board')).toEqual({ name: 'issues', query: 'v=1&layout=board' })
     expect(parseRoute('#/view/acme-app?v=1')).toEqual({ name: 'view', slug: 'acme-app', query: 'v=1' })
     expect(parseRoute('#/project/support?v=1')).toEqual({ name: 'project', slug: 'support', query: 'v=1' })
+    expect(parseRoute('#/new?project=web&status=In%20Progress')).toEqual({ name: 'new', project: 'web', status: 'In Progress' })
+    expect(href({ name: 'new', parent: 'Q-1', project: 'web', status: 'In Progress' })).toBe('#/new?parent=Q-1&project=web&status=In+Progress')
     expect(parseRoute('#/project/support/view/support-backlog')).toEqual({ name: 'project', slug: 'support', view: 'support-backlog' })
     expect(parseRoute('#/project/support/view/a%20b?v=1')).toEqual({ name: 'project', slug: 'support', view: 'a b', query: 'v=1' })
     expect(href({ name: 'project', slug: 'support', view: 'a b', query: 'v=1' })).toBe('#/project/support/view/a%20b?v=1')

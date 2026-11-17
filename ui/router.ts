@@ -1,10 +1,10 @@
-/** Hash router: `#/`, `#/new` (`?parent=Q-269` prefills the parent), `#/issue/:id`, `#/issues`, `#/view/:slug`, `#/project/:slug` and `#/project/:slug/view/:view` (a project's own view; those four keep view state in `?…`), `#/search?q=`, `#/settings`, `#/settings/:tab`. */
+/** Hash router: `#/`, `#/new` (`?parent=Q-269` prefills the parent, `?project=` and `?status=` those fields), `#/issue/:id`, `#/issues`, `#/view/:slug`, `#/project/:slug` and `#/project/:slug/view/:view` (a project's own view; those four keep view state in `?…`), `#/search?q=`, `#/settings`, `#/settings/:tab`. */
 import { useSyncExternalStore } from 'react'
 import { isSettingsTab, type SettingsTab } from './settingsModel'
 
 export type Route =
   | { name: 'home' }
-  | { name: 'new'; parent?: string }
+  | { name: 'new'; parent?: string; project?: string; status?: string }
   | { name: 'issue'; id: string }
   | { name: 'issues'; query?: string }
   | { name: 'view'; slug: string; query?: string }
@@ -28,8 +28,9 @@ export function parseRoute(hash: string): Route {
   const [head, arg, ...rest] = parts
   if (rest.length === 0) {
     if (head === 'new' && arg === undefined) {
-      const parent = new URLSearchParams(query).get('parent')?.trim().toUpperCase()
-      return parent ? { name: 'new', parent } : { name: 'new' }
+      const p = new URLSearchParams(query)
+      const parent = p.get('parent')?.trim().toUpperCase(), project = p.get('project')?.trim(), status = p.get('status')?.trim()
+      return { name: 'new', ...(parent ? { parent } : {}), ...(project ? { project } : {}), ...(status ? { status } : {}) }
     }
     if (head === 'issues' && arg === undefined) return withQuery({ name: 'issues' }, query)
     if (head === 'search' && arg === undefined) return { name: 'search', q: new URLSearchParams(query).get('q') ?? '' }
@@ -49,7 +50,13 @@ export function parseRoute(hash: string): Route {
 export function href(r: Route): string {
   switch (r.name) {
     case 'home': return '#/'
-    case 'new': return r.parent ? `#/new?parent=${encodeURIComponent(r.parent)}` : '#/new'
+    case 'new': {
+      const p = new URLSearchParams()
+      if (r.parent) p.set('parent', r.parent)
+      if (r.project) p.set('project', r.project)
+      if (r.status) p.set('status', r.status)
+      return `#/new${q(p.toString())}`
+    }
     case 'issue': return `#/issue/${encodeURIComponent(r.id)}`
     case 'issues': return `#/issues${q(r.query)}`
     case 'view': return `#/view/${encodeURIComponent(r.slug)}${q(r.query)}`

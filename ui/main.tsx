@@ -111,7 +111,7 @@ function App() {
       <main className="main">
         <Page route={background.current} />
       </main>
-      {route.name === 'new' && <NewIssueDialog key={route.parent ?? ''} parent={route.parent} onClose={closeNew} />}
+      {route.name === 'new' && <NewIssueDialog key={`${route.parent ?? ''}|${route.project ?? ''}|${route.status ?? ''}`} parent={route.parent} project={route.project} status={route.status} onClose={closeNew} />}
       {palette && <Palette mode={palette} onClose={() => setPalette(null)} />}
     </div>
   )

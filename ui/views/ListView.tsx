@@ -28,12 +28,14 @@ export function GroupIcon({ by, group, config }: { by: string; group: { key: str
   return null
 }
 
-export function ListView({ groups, display, byId, config, cells }: {
+export function ListView({ groups, display, byId, config, cells, project }: {
   groups: ViewGroup[]
   display: ViewDisplay
   byId: ReadonlyMap<string, IssueSummary>
   config: Config | null
   cells: CellCtx
+  /** The one project this list is of, if any: "New issue" starts in it. */
+  project?: string
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const scroller = useRef<HTMLDivElement>(null)
@@ -139,7 +141,7 @@ export function ListView({ groups, display, byId, config, cells }: {
                 <GroupIcon by={display.groupBy} group={it.group} config={config} />
                 <span className="group-label">{it.group.label}</span>
                 <span className="count">{it.group.issues.length}</span>
-                {display.groupBy === 'status' && <a className="icon-button group-add" href={href({ name: 'new' })} aria-label={`New issue in ${it.group.label}`}><Icon name="plus" size={12} /></a>}
+                {display.groupBy === 'status' && <a className="ghost-btn group-add" href={href({ name: 'new', status: it.group.key, ...(project ? { project } : {}) })} aria-label={`New issue in ${it.group.label}`}><span className="plus">+</span> New issue</a>}
               </div>
             )
           }

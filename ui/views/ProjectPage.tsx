@@ -357,12 +357,13 @@ export function ProjectPage({ slug, view, query, routeQuery }: { slug: string; v
           <Documents project={project} ctx={ctx} />
         </div>
       )}
-      {views.length > 0 && (
+      {(
         <nav className="view-tabs" aria-label="Views of this project">
           <a href={href({ name: 'project', slug })} className={active ? '' : 'on'} aria-current={active ? undefined : 'page'}>All issues</a>
           {views.map((v) => (
             <a key={v.slug} href={href({ name: 'project', slug, view: v.slug })} className={v.slug === active?.slug ? 'on' : ''} aria-current={v.slug === active?.slug ? 'page' : undefined}>{v.name}</a>
           ))}
+          {views.length === 0 && <span className="view-tabs-hint">Save view adds a tab here</span>}
         </nav>
       )}
       <ViewScreen key={`project:${slug}:${active?.slug ?? ''}`} title={project.name} {...(active ? { saved: active } : { defaults: BASE })} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery} embedded saveProject={slug}

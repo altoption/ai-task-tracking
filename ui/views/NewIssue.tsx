@@ -13,19 +13,23 @@ export function newIssueArgs(f: { title: string; project: string; labels: string
   return args
 }
 
-/** `parent` (from `#/new?parent=Q-269`, the issue page's "Add sub-issue") prefills the parent and its project; creating then returns to the parent. */
-export function NewIssueDialog({ onClose, parent: parentId }: { onClose: () => void; parent?: string }) {
+/**
+ * `parent` (from `#/new?parent=Q-269`, the issue page's "Add sub-issue") prefills the parent and its project; creating
+ * then returns to the parent. `project` and `status` (a list's "New issue") prefill those fields.
+ */
+export function NewIssueDialog({ onClose, parent: parentId, project: fromProject, status: fromStatus }: { onClose: () => void; parent?: string; project?: string; status?: string }) {
   const state = useTracker()
   const scope = useScope()
   const parentProject = parentId ? state.issues.get(parentId)?.project : undefined
   const defaultProject = parentProject ? parentProject
+    : fromProject ? fromProject
     : scope.kind === 'project' ? scope.slug
     : scope.kind === 'workspace' ? (state.config?.workspaces[scope.name] ?? '') : ''
   const [title, setTitle] = useState('')
   const [project, setProject] = useState(defaultProject)
   const [labels, setLabels] = useState<string[]>([])
   const [labelDraft, setLabelDraft] = useState('')
-  const [status, setStatus] = useState('Todo')
+  const [status, setStatus] = useState(fromStatus ?? 'Todo')
   const [priority, setPriority] = useState(0)
   const [parent, setParent] = useState(parentId ?? '')
   const [description, setDescription] = useState('')

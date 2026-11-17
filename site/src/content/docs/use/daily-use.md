@@ -146,10 +146,18 @@ each. If any one can't be changed, none are, and the bar says why. The selection
 make another; **Clear** or Esc clears it. Closing a selected parent takes its open sub-issues along, and the bar says
 how many before you confirm (see [Closing a parent and its sub-issues](#closing-a-parent-and-its-sub-issues)).
 
+### Adding an issue from a list
+
+**+ New issue** is in the toolbar of every list and board, and on each status group of a list. From a project's page,
+or a view of one project, the new issue starts in that project; from a status group it starts in that status. **C**
+opens the same dialog from anywhere.
+
 ### Views of one project
 
-**Save view** on a project's page saves a view that belongs to that project. It shows as a tab above the project's
-list, next to **All issues**, and opens inside the project page, so the project's header and milestone chips stay.
+A project's page has a row of tabs above its list: **All issues**, then one per view of that project.
+**Save view** on the page saves a view that belongs to the project. It shows as a tab and opens inside the project
+page, so the project's header and milestone chips stay. A system-wide view that filters to this project alone is
+offered as a tab too, and stays in the sidebar.
 It is not added to the sidebar's **Views** list unless you star it; a starred one is listed there as
 "View · Project". The command bar (⌘K) finds it under the same name. **Save view** anywhere else (All issues, a
 filter you built) saves a system-wide view, listed in the sidebar.
