@@ -539,6 +539,23 @@ describe('project and meta tools', () => {
     expect(await readFile(yml, 'utf8')).not.toContain('Bug')
   })
 
+  test('save_view with a project: the view belongs to it, its file carries the project, an update keeps it', async () => {
+    const { root, s, call } = await setup()
+    const display = { layout: 'list', groupBy: 'status', orderBy: 'priority', showSubIssues: true, properties: ['id'] }
+    const p = [...s.projects.values()][0]!
+    const v = await call('save_view', { name: 'Backlog', project: p.name, filter: { project: [p.slug] }, display }, youCtx)
+    expect(v.slug).toBe(`${p.slug}-backlog`)
+    expect(v.project).toBe(p.slug)
+    expect(await readFile(join(root, `views/${p.slug}-backlog.yml`), 'utf8')).toContain(`project: ${p.slug}`)
+    // The same name system-wide is another view; the same name in the project is refused.
+    expect((await call('save_view', { name: 'Backlog', filter: {}, display }, youCtx)).slug).toBe('backlog')
+    await expect(call('save_view', { name: 'backlog', project: p.slug, filter: {}, display }, youCtx)).rejects.toThrow(/already exists in this project/)
+    await expect(call('save_view', { name: 'X', project: 'Nope', filter: {}, display }, youCtx)).rejects.toThrow(/^Unknown project "Nope"/)
+    const u = await call('save_view', { slug: v.slug, name: 'Backlog', filter: {}, display, favorite: true }, youCtx)
+    expect(u.project).toBe(p.slug)
+    expect(s.views.find((x) => x.slug === v.slug)?.project).toBe(p.slug)
+  })
+
   test('save_view keeps favorite, unknown keys and the file when updating by slug; new filter/display fields survive', async () => {
     const { root, s, call } = await setup()
     const display = { layout: 'board', groupBy: 'status', rowsBy: 'parent', orderBy: 'priority', showSubIssues: true, properties: ['id'] }

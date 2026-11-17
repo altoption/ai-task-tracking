@@ -391,14 +391,17 @@ const handlers: Record<string, Handler> = {
 
   async save_view(s, a: Args<'save_view'>, { actor }) {
     assertOwner(actor, 'Saving views')
-    const slug = a.slug ?? slugify(a.name)
+    const project = a.project !== undefined ? mustProject(s, a.project).slug : undefined
+    // A project's view carries the project in its file name, so two projects can each have a "Backlog".
+    const slug = a.slug ?? (project ? `${project}-${slugify(a.name)}` : slugify(a.name))
     // A new view never replaces another one; updating an existing view names it by slug.
     if (!a.slug && s.views.some((v) => v.slug === slug)) {
-      throw new ToolError(`A view named '${a.name}' already exists — choose another name, or open it and use Save changes.`)
+      throw new ToolError(`A view named '${a.name}' already exists${project ? ' in this project' : ''} — choose another name, or open it and use Save changes.`)
     }
     // Updating keeps keys this tool doesn't know (e.g. hand-added notes) and `favorite` unless it is given.
     const prev = s.views.find((v) => v.slug === slug) as (View & Record<string, unknown>) | undefined
     const view: View & { favorite?: boolean } = { ...prev, slug, name: a.name, filter: a.filter as View['filter'], display: a.display as View['display'] }
+    if (project) view.project = project
     if (a.favorite !== undefined) view.favorite = a.favorite
     if (view.favorite === false) delete view.favorite
     return s.saveView(view)

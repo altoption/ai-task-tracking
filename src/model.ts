@@ -59,7 +59,8 @@ export interface ViewDisplay {
   layout: 'list' | 'board'; groupBy: string; rowsBy?: string; orderBy: string; showSubIssues: boolean; properties: string[]
   showEmptyColumns?: boolean; showEmptyRows?: boolean; completed?: CompletedWindow
 }
-export interface View { slug: string; name: string; filter: Filter; display: ViewDisplay }
+/** `project`: the view belongs to that project (its slug) and is offered on the project's page; without it the view is system-wide. */
+export interface View { slug: string; name: string; filter: Filter; display: ViewDisplay; project?: string }
 /** CI status on linked GitHub PRs (src/engine/ci.ts): off, or how often open PRs are re-checked. */
 export interface CiRules { enabled: boolean; refreshMinutes: number }
 /** When open work counts as stalled (src/engine/stalled.ts). 0 turns a rule off. */
