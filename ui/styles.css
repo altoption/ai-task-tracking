@@ -114,6 +114,12 @@ kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--borde
   width: 20px; height: 20px; border-radius: 5px; flex: none; display: grid; place-items: center;
   background: var(--agent); color: var(--on-accent); font-size: 9px; font-weight: 700; letter-spacing: .02em;
 }
+/* Secondary buttons: mixed from the theme's own text and panel colors, so they stand off the page in every theme. */
+:root {
+  --btn: color-mix(in srgb, var(--text) 9%, var(--panel));
+  --btn-hover: color-mix(in srgb, var(--text) 16%, var(--panel));
+  --btn-border: color-mix(in srgb, var(--text) 26%, var(--panel));
+}
 .icon-button {
   display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none;
   background: none; border: 0; border-radius: var(--radius); color: var(--muted);
@@ -441,8 +447,8 @@ a.ov-event-main:hover { text-decoration: underline; }
 /* ---------- issue page ---------- */
 .small { font-size: 12px; }
 .plus { color: var(--muted); margin-right: 6px; }
-.ghost-btn { background: none; border: 1px solid transparent; border-radius: var(--radius); padding: 3px 8px; color: var(--muted); font-size: 12px; }
-.ghost-btn:hover { background: var(--hover); color: var(--text); }
+.ghost-btn { background: var(--btn); border: 1px solid var(--btn-border); border-radius: var(--radius); padding: 3px 8px; color: var(--text); font-size: 12px; }
+.ghost-btn:hover { background: var(--btn-hover); }
 .danger-btn { background: var(--danger); color: var(--on-danger); border: 0; border-radius: var(--radius); padding: 5px 14px; font-weight: 500; }
 .danger-btn:disabled { opacity: .6; }
 .row-buttons { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 6px; }
@@ -728,9 +734,13 @@ span.tree-toggle { transform: none; }
 .popover { position: relative; }
 .tool-button {
   position: relative; display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px;
-  border: 1px solid var(--border); border-radius: 15px; background: none; color: var(--muted);
+  border: 1px solid var(--btn-border); border-radius: 15px; background: var(--btn); color: var(--text);
 }
-.tool-button:hover, .tool-button.open { background: var(--hover); color: var(--text); }
+.tool-button:hover, .tool-button.open { background: var(--btn-hover); }
+/* Something to save: the one call to action in the toolbar. */
+.save-view.changed > .tool-button { background: var(--accent); border-color: transparent; }
+.save-view.changed > .tool-button:hover, .save-view.changed > .tool-button.open { background: var(--accent); filter: brightness(.93); }
+.save-view.changed .save-label { color: var(--on-accent); font-weight: 500; }
 .tool-dot { position: absolute; top: -1px; right: -1px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .save-label { font-size: 12px; color: var(--text); }
 .popover-panel { right: 0; left: auto; top: calc(100% + 6px); padding: 0; z-index: 20; }

@@ -136,7 +136,7 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
         <div className="view-tools">
           {changed && saved && <button className="ghost-btn" onClick={() => replaceRoute(routeFor(undefined))}>Reset</button>}
           {changed && saved && <button className="primary small-btn" onClick={() => void saveChanges()}>Save changes</button>}
-          {!saved && <SaveAs onSave={saveAs} />}
+          {!saved && <SaveAs onSave={saveAs} changed={changed} />}
           <FilterMenu filter={current.filter} locked={locked} state={state} onChange={(filter) => update({ ...current, filter })} />
           <DisplayMenu display={current.display} labels={state.labels} changed={!sameView({ filter: {}, display: current.display }, { filter: {}, display: baseState.display })}
             onChange={(display) => update({ ...current, display })} onReset={() => update({ ...current, display: baseState.display })} />
@@ -171,12 +171,12 @@ function HiddenFilterNote({ slugs, names }: { slugs: string[]; names: string[] }
   )
 }
 
-function SaveAs({ onSave }: { onSave: (name: string) => Promise<void> }) {
+function SaveAs({ onSave, changed }: { onSave: (name: string) => Promise<void>; changed: boolean }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   return (
-    <Popover label="Save view" button={<span className="save-label">Save view</span>} className="save-view">
+    <Popover label="Save view" button={<span className="save-label">Save view</span>} className={`save-view${changed ? ' changed' : ''}`}>
       {(close) => (
         <form className="fm-form" onSubmit={async (e) => {
           e.preventDefault()
