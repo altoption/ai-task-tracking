@@ -168,9 +168,10 @@ issue that is then finished counts from when it was finished. With no
 on another Mac, go by their last update unless they were [imported with a close date](/docs/use/data-model/#front-matter-keys). The **Completed issues** display
 option has no effect on a view with this filter, as on a view that names statuses.
 
-**Ordering ▸ Dependencies** (the display menu) lists issues by their blockers: issues nothing blocks come first, then
-the ones they unblock, one layer at a time, with the lowest id first inside a layer. It reads the "blocked by" links
-only, not numbers in titles, and a closed blocker still counts, so the order stays put as work finishes. Picking a
+**Ordering ▸ Dependencies** (the display menu) lists issues in a working order: every issue comes after the ones
+that block it. Where the "blocked by" links leave a choice, the title decides, with numbers read as numbers, so
+"Step 1.2" follows "Step 1.1" and "Step 3.4" comes before "Step 3.10". A closed blocker still counts, so the order
+stays put as work finishes. Picking a
 milestone chip on a project page switches the list to this order, unless you had chosen another one.
 
 **Docs** at the bottom of the sidebar, **Help ▸ AI Task Tracking Help** (⌘?) in the app's menu and **Help** in the

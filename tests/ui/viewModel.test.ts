@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { IssueSummary, StatusDef, View } from '../../src/model'
-import { applyView, dependencyDepth, ORDERINGS, dropPatch, listRows, swimlanes, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../../ui/viewModel'
+import { applyView, dependencyOrder, ORDERINGS, dropPatch, listRows, swimlanes, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../../ui/viewModel'
 
 const statuses: StatusDef[] = [
   { name: 'Backlog', type: 'backlog', color: '#bec2c8' }, { name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
@@ -92,16 +92,21 @@ describe('applyView', () => {
     expect(order('manual')).toEqual(['Q-2', 'Q-3', 'Q-10'])
   })
 
-  test('orderBy dependency: blockers above what they block, layer by layer; outside blockers count; cycles are safe', () => {
-    const b = (id: string, ...blockedBy: string[]) => ({ ...mk(id, 'Todo', 0, null), blockedBy })
-    // Q-9 is closed, so it is outside the list, but it still pushes Q-1 down a layer. Q-404 doesn't exist.
-    const all = [b('Q-1', 'Q-9'), b('Q-2'), b('Q-3', 'Q-1'), b('Q-4', 'Q-2'), b('Q-5', 'Q-3', 'Q-4'), b('Q-6', 'Q-404'), { ...b('Q-9'), status: 'Done' }]
-    const r = applyView(all, { ...board, filter: {}, display: { ...board.display, layout: 'list', groupBy: 'none', rowsBy: undefined, orderBy: 'dependency' } }, ctx)
-    expect(ids(r.groups[0]!.issues)).toEqual(['Q-2', 'Q-6', 'Q-1', 'Q-4', 'Q-3', 'Q-5'])
-    const depth = dependencyDepth(new Map(all.map((i) => [i.id, i])))
-    expect(['Q-2', 'Q-1', 'Q-3', 'Q-5', 'Q-6'].map(depth)).toEqual([0, 1, 2, 3, 0])
-    const loop = dependencyDepth(new Map([['Q-7', b('Q-7', 'Q-8')], ['Q-8', b('Q-8', 'Q-7')]]))
-    expect([loop('Q-7'), loop('Q-8')].sort()).toEqual([0, 1]) // ends, and one of the pair leads
+  test('orderBy dependency: blockers first, then step numbers in titles; links through outside issues count', () => {
+    const b = (id: string, title: string, ...blockedBy: string[]) => ({ ...mk(id, 'Todo', 0, null), title, blockedBy })
+    // Created out of step order, as an agent did: 1.1, 2.1, 1.2, 1.3, 2.2, 3.1, 3.10, 3.4, 4.0.
+    const all = [
+      b('Q-1', 'Speech 1.1', 'Q-90'), b('Q-2', 'Speech 2.1', 'Q-90'), b('Q-3', 'Speech 1.2', 'Q-1'), b('Q-4', 'Speech 1.3', 'Q-1'),
+      b('Q-5', 'Speech 2.2', 'Q-2', 'Q-1'), b('Q-6', 'Speech 3.1', 'Q-5'), b('Q-7', 'Speech 3.10', 'Q-6'), b('Q-8', 'Speech 3.4', 'Q-6'),
+      b('Q-9', 'Speech 4.0', 'Q-2'), { ...b('Q-90', 'Epic'), status: 'Done' },
+    ]
+    const order = (list: typeof all) => ids(applyView(list, { ...board, filter: {}, display: { ...board.display, layout: 'list', groupBy: 'none', rowsBy: undefined, orderBy: 'dependency' } }, ctx).groups[0]!.issues)
+    expect(order(all)).toEqual(['Q-1', 'Q-3', 'Q-4', 'Q-2', 'Q-5', 'Q-6', 'Q-8', 'Q-7', 'Q-9'])
+    // A blocker beats the title: "A last" waits on "Z first". Q-12 is closed, so outside the list, and still carries the link from Q-11 to Q-13.
+    const chain = [b('Q-10', 'A last', 'Q-11'), b('Q-11', 'Z first'), { ...b('Q-12', 'Middle', 'Q-11'), status: 'Done' }, b('Q-13', 'B after middle', 'Q-12'), b('Q-14', 'C free')]
+    expect(order(chain)).toEqual(['Q-14', 'Q-11', 'Q-10', 'Q-13'])
+    const loop = [b('Q-20', 'Loop a', 'Q-21'), b('Q-21', 'Loop b', 'Q-20'), b('Q-22', 'Free')]
+    expect(dependencyOrder(loop, new Map(loop.map((i) => [i.id, i]))).map((i) => i.id)).toEqual(['Q-22', 'Q-20', 'Q-21'])
   })
 
   test('completed window: closed issues updated within the window only (explicit status list wins)', () => {
