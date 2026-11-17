@@ -130,6 +130,7 @@ describe('git auto-commit', () => {
     expect(g.status().commitError).toContain('hook says no')
     await until(async () => (await count()) > before) // hook passes second time; re-armed timer retries
     expect(await git(root, 'log', '-1', '--format=%s')).toContain(`comment on ${id}`)
+    await until(async () => !g.status().commitError) // cleared just after the commit lands, so wait for it
     expect(g.status().commitError).toBeUndefined()
     await unlink(hook)
   })
