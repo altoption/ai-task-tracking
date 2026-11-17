@@ -87,10 +87,60 @@ export function dependencyDepth(byId: ReadonlyMap<string, Pick<IssueSummary, 'bl
   return depth
 }
 
+/** Numbers in titles compare as numbers, so "Step 3.4" comes before "Step 3.10". */
+const titles = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
+
+/**
+ * `list` in a working order: every issue comes after its blockers, also when the link runs through issues outside the
+ * list. Among issues free at the same point the title decides (numbers as numbers), then the id, so "Step 1.2" follows
+ * "Step 1.1" unless a blocker says otherwise. Issues caught in a cycle go last.
+ */
+export function dependencyOrder<T extends Pick<IssueSummary, 'id' | 'title' | 'blockedBy'>>(list: readonly T[], byId: ReadonlyMap<string, Pick<IssueSummary, 'blockedBy'>>): T[] {
+  const inList = new Map(list.map((i) => [i.id, i]))
+  const outside = new Map<string, string[]>()
+  /** The nearest blockers in the list behind an issue that isn't in it. */
+  const via = (id: string, walking: Set<string>): string[] => {
+    const known = outside.get(id)
+    if (known) return known
+    if (walking.has(id)) return []
+    walking.add(id)
+    const found = new Set<string>()
+    for (const b of byId.get(id)?.blockedBy ?? []) for (const x of inList.has(b) ? [b] : via(b, walking)) found.add(x)
+    walking.delete(id)
+    outside.set(id, [...found])
+    return [...found]
+  }
+  const waits = new Map<string, number>()
+  const unblocks = new Map<string, string[]>()
+  for (const i of list) {
+    const blockers = new Set<string>()
+    for (const b of i.blockedBy) for (const x of inList.has(b) ? [b] : via(b, new Set())) if (x !== i.id) blockers.add(x)
+    waits.set(i.id, blockers.size)
+    for (const b of blockers) unblocks.set(b, [...(unblocks.get(b) ?? []), i.id])
+  }
+  const later = (a: T, b: T) => titles.compare(b.title, a.title) || byIssueNumber(b, a) // the next one to take is last
+  const ready = list.filter((i) => !waits.get(i.id)).sort(later)
+  const out: T[] = []
+  for (let next = ready.pop(); next; next = ready.pop()) {
+    out.push(next)
+    for (const id of unblocks.get(next.id) ?? []) {
+      const left = waits.get(id)! - 1
+      waits.set(id, left)
+      if (left) continue
+      const freed = inList.get(id)!
+      let lo = 0, hi = ready.length
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (later(ready[mid]!, freed) < 0) lo = mid + 1; else hi = mid }
+      ready.splice(lo, 0, freed)
+    }
+  }
+  const done = new Set(out.map((i) => i.id))
+  return [...out, ...list.filter((i) => !done.has(i.id)).sort((a, b) => later(b, a))]
+}
+
 /** `byId` (every issue) is needed for the dependency order, where a blocker may be outside the list being sorted. */
 export function comparator(orderBy: string, byId?: ReadonlyMap<string, IssueSummary>): (a: IssueSummary, b: IssueSummary) => number {
   switch (orderBy) {
-    case 'dependency': { // blockers above what they block: issues nothing blocks first, then one layer at a time
+    case 'dependency': { // for group and lane headers; the issues themselves go through `dependencyOrder`
       const depth = dependencyDepth(byId ?? new Map())
       return (a, b) => depth(a.id) - depth(b.id) || byIssueNumber(a, b)
     }
@@ -201,7 +251,8 @@ export function applyView(issues: IssueSummary[], v: Pick<View, 'filter' | 'disp
     out = out.filter((i) => !(i.parent && i.parent !== i.id && shown.has(i.parent)))
   }
   const cmp = comparator(d.orderBy, byId)
-  out.sort(cmp)
+  if (d.orderBy === 'dependency') out = dependencyOrder(out, byId)
+  else out.sort(cmp)
   const full = { ...ctx, byId }
   const cols = bucket(out, dimension(d.groupBy, f, full, cmp, showDone || rolling), !!d.showEmptyColumns)
   const rowsBy = d.layout === 'board' && d.rowsBy && d.rowsBy !== NONE ? d.rowsBy : null
