@@ -11,7 +11,7 @@ import type { Filter, IssueSummary, Project } from '../../src/model'
 import { callTool, inScope, isHiddenProject, projectName, setProjectHidden, setScope, useScope, useTracker, type ViewDef } from '../client'
 import { ConceptIcon } from '../components/icons'
 import { Popover } from '../components/Popover'
-import { navigate, replaceRoute, type Route } from '../router'
+import { href, navigate, replaceRoute, type Route } from '../router'
 import { applyView, DEFAULT_DISPLAY, dropPatch, sameView, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../viewModel'
 import { BoardView } from './BoardView'
 import { DisplayMenu } from './DisplayMenu'
@@ -69,6 +69,8 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
   const ctx = useMemo(() => ({ statuses: state.config?.statuses ?? [], labels: state.labels, projects, byId }), [state.config, state.labels, projects, byId])
   const effective = useMemo(() => ({ filter: { ...current.filter, ...base }, display: current.display }), [current, base])
   const result = useMemo(() => applyView(pool, effective, ctx), [pool, effective, ctx])
+  /** A list of one project: "New issue" starts in it. */
+  const newProject = effective.filter.project?.length === 1 ? effective.filter.project[0] : undefined
   // When the switcher hides everything, say so (otherwise an empty view looks broken).
   const outOfScope = useMemo(() => (result.total || scope.kind === 'all' || issues ? 0 : applyView([...state.issues.values()], effective, ctx).total), [result.total, scope, issues, state.issues, effective, ctx])
   // A filter naming a hidden project (a saved view, an old link): say so, rather than look empty or incomplete.
@@ -136,6 +138,7 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
           <span className="muted count-label">{result.total} {result.total === 1 ? 'issue' : 'issues'}</span>
         </div>
         <div className="view-tools">
+          <a className="ghost-btn new-issue" href={href({ name: 'new', ...(newProject ? { project: newProject } : {}) })}><span className="plus">+</span> New issue</a>
           {changed && saved && <button className="ghost-btn" onClick={() => replaceRoute(routeFor(undefined))}>Reset</button>}
           {changed && saved && <button className="primary small-btn" onClick={() => void saveChanges()}>Save changes</button>}
           {!saved && <SaveAs onSave={saveAs} changed={changed} />}
@@ -150,7 +153,7 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
         : outOfScope > 0 ? <div className="view-empty muted">No issues here in the current workspace — {outOfScope} {outOfScope === 1 ? 'issue matches' : 'issues match'} in all workspaces. <button className="ghost-btn inline" onClick={() => setScope({ kind: 'all' })}>Show all workspaces</button></div>
         : current.display.layout === 'board'
           ? <BoardView groups={result.groups} hidden={result.hidden} display={current.display} ctx={ctx} config={state.config} cells={cells} onDrop={onDrop} />
-          : <ListView groups={result.groups} display={current.display} byId={byId} config={state.config} cells={cells} />}
+          : <ListView groups={result.groups} display={current.display} byId={byId} config={state.config} cells={cells} {...(newProject ? { project: newProject } : {})} />}
       {family.dialog}
       {toast && <div className="toast" role="alert">{toast}<button className="icon-button" aria-label="Dismiss" onClick={() => setToast('')}>×</button></div>}
     </section>

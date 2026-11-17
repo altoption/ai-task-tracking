@@ -71,10 +71,11 @@ describe('views that belong to a project', () => {
   const views = [
     { slug: 'web-zeta', name: 'Zeta', project: 'web' }, { slug: 'web-alpha', name: 'Alpha', project: 'web', favorite: true },
     { slug: 'all-bugs', name: 'All bugs' }, { slug: 'gone-x', name: 'Orphan', project: 'gone' }, { slug: 'app-a', name: 'App a', project: 'app' },
+    { slug: 'web-board', name: 'Web board', filter: { project: ['web'] } }, { slug: 'two', name: 'Two projects', filter: { project: ['web', 'app'] } },
   ]
   const has = (slug: string) => slug === 'web' || slug === 'app'
-  test('projectViews: only that project\'s, by name', () => {
-    expect(projectViews(views, 'web').map((v) => v.slug)).toEqual(['web-alpha', 'web-zeta'])
+  test('projectViews: its own and system-wide ones filtered to it alone, by name', () => {
+    expect(projectViews(views, 'web').map((v) => v.slug)).toEqual(['web-alpha', 'web-board', 'web-zeta'])
     expect(projectViews(views, 'none')).toEqual([])
   })
   test('viewRoute: inside its project, or on its own when system-wide or the project is gone', () => {
@@ -83,6 +84,6 @@ describe('views that belong to a project', () => {
     expect(viewRoute(views[3]!, has)).toEqual({ name: 'view', slug: 'gone-x' })
   })
   test('sidebarViews: system-wide ones, starred project views and orphans; starred first', () => {
-    expect(sidebarViews(views, has).map((v) => v.slug)).toEqual(['web-alpha', 'all-bugs', 'gone-x'])
+    expect(sidebarViews(views, has).map((v) => v.slug)).toEqual(['web-alpha', 'all-bugs', 'gone-x', 'two', 'web-board'])
   })
 })

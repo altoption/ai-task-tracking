@@ -735,6 +735,7 @@ span.tree-toggle { transform: none; }
 .view-tabs a { padding: 5px 10px; border-radius: var(--radius) var(--radius) 0 0; border-bottom: 2px solid transparent; color: var(--muted); font-size: 12px; white-space: nowrap; text-decoration: none; }
 .view-tabs a:hover { color: var(--text); background: var(--hover); }
 .view-tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+.view-tabs-hint { align-self: center; margin-left: 8px; color: var(--faint); font-size: 12px; }
 .small-btn { padding: 3px 10px; font-size: 12px; }
 .popover { position: relative; }
 .tool-button {

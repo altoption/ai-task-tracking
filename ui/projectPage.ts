@@ -54,11 +54,15 @@ export function milestoneOrder(orderBy: string, usual: string, picking: boolean)
 
 // ---------- views that belong to a project ----------
 
-interface OwnedView { slug: string; name: string; project?: string; favorite?: boolean }
+interface OwnedView { slug: string; name: string; project?: string; favorite?: boolean; filter?: { project?: string[] } }
 
-/** A project's own views, by name. */
+/**
+ * The views offered on a project's page, by name: its own, and system-wide ones filtered to this project alone
+ * (those stay in the sidebar too).
+ */
 export function projectViews<V extends OwnedView>(views: readonly V[], project: string): V[] {
-  return views.filter((v) => v.project === project).sort((a, b) => a.name.localeCompare(b.name))
+  const about = (v: V) => (v.project ? v.project === project : v.filter?.project?.length === 1 && v.filter.project[0] === project)
+  return views.filter(about).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /** Where a view opens: inside its project's page, or on its own when it is system-wide or its project is gone. */
