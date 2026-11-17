@@ -18,6 +18,10 @@ describe('parseRoute', () => {
     expect(parseRoute('#/issues?v=1&layout=board')).toEqual({ name: 'issues', query: 'v=1&layout=board' })
     expect(parseRoute('#/view/acme-app?v=1')).toEqual({ name: 'view', slug: 'acme-app', query: 'v=1' })
     expect(parseRoute('#/project/support?v=1')).toEqual({ name: 'project', slug: 'support', query: 'v=1' })
+    expect(parseRoute('#/project/support/view/support-backlog')).toEqual({ name: 'project', slug: 'support', view: 'support-backlog' })
+    expect(parseRoute('#/project/support/view/a%20b?v=1')).toEqual({ name: 'project', slug: 'support', view: 'a b', query: 'v=1' })
+    expect(href({ name: 'project', slug: 'support', view: 'a b', query: 'v=1' })).toBe('#/project/support/view/a%20b?v=1')
+    expect(parseRoute('#/project/support/other/x')).toEqual({ name: 'notFound', path: '/project/support/other/x' })
   })
   test('href round-trips', () => {
     for (const h of ['#/', '#/new', '#/new?parent=Q-269', '#/issue/Q-1', '#/issues', '#/view/a%20b', '#/project/cdp', '#/search?q=a%20b', '#/issues?v=1&layout=board', '#/view/x?v=1&group=priority']) {

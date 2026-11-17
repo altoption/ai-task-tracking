@@ -24,7 +24,7 @@ export function savedState(v: ViewDef): ViewState {
   return { filter: v.filter ?? {}, display: { ...DEFAULT_DISPLAY, ...v.display } }
 }
 
-export function ViewScreen({ title, icon, saved, defaults, base, locked, query, routeFor, issues, extraProjects, embedded }: {
+export function ViewScreen({ title, icon, saved, defaults, base, locked, query, routeFor, issues, extraProjects, embedded, saveProject }: {
   title: string
   icon?: ReactNode
   saved?: ViewDef
@@ -43,6 +43,8 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
   extraProjects?: Project[]
   /** Inside a page that already names what this lists (the project page): the head keeps the count and the tools only. */
   embedded?: boolean
+  /** "Save view" here makes a view of this project, opened inside the project's page. */
+  saveProject?: string
 }) {
   const state = useTracker()
   const scope = useScope()
@@ -102,8 +104,8 @@ export function ViewScreen({ title, icon, saved, defaults, base, locked, query, 
     } catch (e) { fail(e) }
   }
   const saveAs = async (name: string) => {
-    const v = await callTool<{ slug: string }>('save_view', { name, filter: { ...current.filter, ...base }, display: current.display })
-    navigate({ name: 'view', slug: v.slug })
+    const v = await callTool<{ slug: string }>('save_view', { name, filter: { ...current.filter, ...base }, display: current.display, ...(saveProject ? { project: saveProject } : {}) })
+    navigate(saveProject ? { name: 'project', slug: saveProject, view: v.slug } : { name: 'view', slug: v.slug })
   }
   const toggleFavorite = () => {
     if (!saved) return

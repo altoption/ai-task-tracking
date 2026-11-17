@@ -1,4 +1,4 @@
-/** Hash router: `#/`, `#/new` (`?parent=Q-269` prefills the parent), `#/issue/:id`, `#/issues`, `#/view/:slug`, `#/project/:slug` (those three keep view state in `?…`), `#/search?q=`, `#/settings`, `#/settings/:tab`. */
+/** Hash router: `#/`, `#/new` (`?parent=Q-269` prefills the parent), `#/issue/:id`, `#/issues`, `#/view/:slug`, `#/project/:slug` and `#/project/:slug/view/:view` (a project's own view; those four keep view state in `?…`), `#/search?q=`, `#/settings`, `#/settings/:tab`. */
 import { useSyncExternalStore } from 'react'
 import { isSettingsTab, type SettingsTab } from './settingsModel'
 
@@ -8,7 +8,7 @@ export type Route =
   | { name: 'issue'; id: string }
   | { name: 'issues'; query?: string }
   | { name: 'view'; slug: string; query?: string }
-  | { name: 'project'; slug: string; query?: string }
+  | { name: 'project'; slug: string; view?: string; query?: string }
   | { name: 'search'; q: string }
   /** No tab: General. */
   | { name: 'settings'; tab?: SettingsTab }
@@ -41,6 +41,7 @@ export function parseRoute(hash: string): Route {
       if (head === 'project') return withQuery({ name: 'project', slug: dec(arg) }, query)
     }
   }
+  if (head === 'project' && arg !== undefined && rest.length === 2 && rest[0] === 'view') return withQuery({ name: 'project', slug: dec(arg), view: dec(rest[1]!) }, query)
   return { name: 'notFound', path }
 }
 
@@ -52,7 +53,7 @@ export function href(r: Route): string {
     case 'issue': return `#/issue/${encodeURIComponent(r.id)}`
     case 'issues': return `#/issues${q(r.query)}`
     case 'view': return `#/view/${encodeURIComponent(r.slug)}${q(r.query)}`
-    case 'project': return `#/project/${encodeURIComponent(r.slug)}${q(r.query)}`
+    case 'project': return `#/project/${encodeURIComponent(r.slug)}${r.view ? `/view/${encodeURIComponent(r.view)}` : ''}${q(r.query)}`
     case 'search': return `#/search?q=${encodeURIComponent(r.q)}`
     case 'settings': return r.tab ? `#/settings/${r.tab}` : '#/settings'
     case 'notFound': return `#${r.path}`

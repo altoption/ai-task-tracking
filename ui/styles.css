@@ -730,6 +730,11 @@ span.tree-toggle { transform: none; }
 .star.on { color: var(--star); }
 .star.on svg path { fill: var(--star); }
 .view-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+/* A project's own views, above its list. */
+.view-tabs { display: flex; gap: 2px; padding: 6px 16px 0; border-top: 1px solid var(--border); overflow-x: auto; flex: none; }
+.view-tabs a { padding: 5px 10px; border-radius: var(--radius) var(--radius) 0 0; border-bottom: 2px solid transparent; color: var(--muted); font-size: 12px; white-space: nowrap; text-decoration: none; }
+.view-tabs a:hover { color: var(--text); background: var(--hover); }
+.view-tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
 .small-btn { padding: 3px 10px; font-size: 12px; }
 .popover { position: relative; }
 .tool-button {

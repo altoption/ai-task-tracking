@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listedProjects, setScope, setTheme, useScope, useTracker, type Scope, type TrackerState } from '../client'
+import { isHiddenProject, listedProjects, projectName, setScope, setTheme, useScope, useTracker, type Scope, type TrackerState } from '../client'
+import { sidebarViews, viewRoute } from '../projectPage'
 import { appHref, href, inTrackerApp, navigate, useHistoryPosition, type Route } from '../router'
 import { TOGGLE_SHORTCUT } from '../sidebarState'
 import { ConceptIcon, Icon, type Concept } from '../components/icons'
@@ -202,10 +203,11 @@ export function SettingsGear({ active }: { active: boolean }) {
 export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route; onSearch: () => void; collapsed: boolean; onToggle: () => void }) {
   const state = useTracker()
   const projects = useMemo(() => listedProjects(state.projects), [state.projects])
-  const views = useMemo(
-    () => [...state.views].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name)),
-    [state.views],
-  )
+  const hasProject = useMemo(() => {
+    const known = new Set(state.projects.map((p) => p.slug))
+    return (slug: string) => known.has(slug) || isHiddenProject(state, slug)
+  }, [state])
+  const views = useMemo(() => sidebarViews(state.views, hasProject), [state.views, hasProject])
   const openByProject = useMemo(() => {
     const m = new Map<string, number>()
     let all = 0
@@ -234,8 +236,8 @@ export function Sidebar({ route, onSearch, collapsed, onToggle }: { route: Route
       <div className="nav-section">Views</div>
       <div className="nav-group">
         {views.map((v) => (
-          <NavItem key={v.slug} to={href({ name: 'view', slug: v.slug })} active={route.name === 'view' && route.slug === v.slug}
-            icon={v.favorite ? 'favorite' : 'views'} label={v.name} collapsed={collapsed} />
+          <NavItem key={v.slug} to={href(viewRoute(v, hasProject))} active={(route.name === 'view' && route.slug === v.slug) || (route.name === 'project' && route.view === v.slug)}
+            icon={v.favorite ? 'favorite' : 'views'} label={v.project && hasProject(v.project) ? `${v.name} · ${projectName(state, v.project)}` : v.name} collapsed={collapsed} />
         ))}
         {state.ready && views.length === 0 && !collapsed && <div className="nav-empty">No saved views</div>}
       </div>

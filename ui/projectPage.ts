@@ -1,5 +1,6 @@
 /** Pure helpers behind the project page (tested without a DOM). */
 import type { IssueSummary } from '../src/model'
+import type { Route } from './router'
 
 export interface Progress { done: number; total: number }
 
@@ -49,4 +50,24 @@ export function shortTarget(target: string | undefined, now = new Date()): strin
 export function milestoneOrder(orderBy: string, usual: string, picking: boolean): string {
   const [from, to] = picking ? [usual, 'dependency'] : ['dependency', usual]
   return orderBy === from ? to : orderBy
+}
+
+// ---------- views that belong to a project ----------
+
+interface OwnedView { slug: string; name: string; project?: string; favorite?: boolean }
+
+/** A project's own views, by name. */
+export function projectViews<V extends OwnedView>(views: readonly V[], project: string): V[] {
+  return views.filter((v) => v.project === project).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Where a view opens: inside its project's page, or on its own when it is system-wide or its project is gone. */
+export function viewRoute(v: OwnedView, hasProject: (slug: string) => boolean): Route {
+  return v.project && hasProject(v.project) ? { name: 'project', slug: v.project, view: v.slug } : { name: 'view', slug: v.slug }
+}
+
+/** The sidebar's views: the system-wide ones, a project's view only when starred, and any view whose project is gone. Starred first, then by name. */
+export function sidebarViews<V extends OwnedView>(views: readonly V[], hasProject: (slug: string) => boolean): V[] {
+  return views.filter((v) => !v.project || !hasProject(v.project) || v.favorite)
+    .sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name))
 }

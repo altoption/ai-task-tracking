@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { appBridge, notifyAppOfTheme } from './appSettings'
-import { startLive, useTracker } from './client'
+import { isHiddenProject, startLive, useTracker } from './client'
 import { isTypingTarget, keyAction, type KeyState } from './keys'
 import { href, navigate, parseRoute, trackHistory, useHash, type Route } from './router'
 import { isSidebarShortcut, TOGGLE_EVENT, useSidebar } from './sidebarState'
@@ -39,9 +39,14 @@ function Page({ route }: { route: Route }): ReactNode {
     case 'view': {
       const v = state.views.find((x) => x.slug === route.slug)
       if (!v) return <Placeholder title={route.slug} note={state.ready ? `View "${route.slug}" not found.` : 'Loading…'} />
+      // A project's view opens inside its project's page; edits then write the project address.
+      if (v.project && (state.projects.some((p) => p.slug === v.project) || isHiddenProject(state, v.project))) {
+        const slug = v.project
+        return <ProjectPage slug={slug} view={v.slug} query={route.query} routeQuery={(query) => ({ name: 'project', slug, view: v.slug, query })} />
+      }
       return <ViewScreen key={`view:${v.slug}`} title={v.name} saved={v} query={route.query} routeFor={(query) => ({ name: 'view', slug: v.slug, query })} />
     }
-    case 'project': return <ProjectPage slug={route.slug} query={route.query} routeQuery={(query) => ({ name: 'project', slug: route.slug, query })} />
+    case 'project': return <ProjectPage slug={route.slug} view={route.view} query={route.query} routeQuery={(query) => ({ name: 'project', slug: route.slug, view: route.view, query })} />
     case 'search': return <SearchResults q={route.q} />
     case 'settings': return <SettingsPage tab={route.tab} />
     case 'new': return null
