@@ -551,6 +551,13 @@ describe('project and meta tools', () => {
     expect((await call('save_view', { name: 'Backlog', filter: {}, display }, youCtx)).slug).toBe('backlog')
     await expect(call('save_view', { name: 'backlog', project: p.slug, filter: {}, display }, youCtx)).rejects.toThrow(/already exists in this project/)
     await expect(call('save_view', { name: 'X', project: 'Nope', filter: {}, display }, youCtx)).rejects.toThrow(/^Unknown project "Nope"/)
+    // `support-backlog` as a system-wide name is the file of Support's "Backlog": refused, and said as it is.
+    const other = [...s.projects.values()].find((x) => x.slug !== p.slug)!
+    await call('save_view', { name: 'Backlog', project: other.slug, filter: {}, display }, youCtx)
+    await expect(call('save_view', { name: `${other.name} Backlog`, filter: {}, display }, youCtx)).rejects.toThrow(`The view 'Backlog' already uses the file name '${other.slug}-backlog' — choose another name.`)
+    // An update can't move a view to another project.
+    await expect(call('save_view', { slug: v.slug, name: 'Backlog', project: other.slug, filter: {}, display }, youCtx)).rejects.toThrow(/can't move it to another project/)
+    await expect(call('save_view', { slug: 'backlog', name: 'Backlog', project: p.slug, filter: {}, display }, youCtx)).rejects.toThrow(/is system-wide/)
     const u = await call('save_view', { slug: v.slug, name: 'Backlog', filter: {}, display, favorite: true }, youCtx)
     expect(u.project).toBe(p.slug)
     expect(s.views.find((x) => x.slug === v.slug)?.project).toBe(p.slug)

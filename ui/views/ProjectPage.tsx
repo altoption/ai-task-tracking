@@ -261,6 +261,9 @@ export function ProjectPage({ slug, view, query, routeQuery }: { slug: string; v
   const active = views.find((v) => v.slug === view)
   /** What the list shows with no edits: the open view of this project, or all its issues. */
   const base = useMemo<ViewState>(() => (active ? savedState(active) : BASE), [active])
+  // An address naming a view this project doesn't have (deleted, or another project's) becomes the project's own.
+  const stray = !!view && state.ready && !active
+  useEffect(() => { if (stray) replaceRoute({ name: 'project', slug, ...(query ? { query } : {}) }) }, [stray, slug, query])
   const scope = useScope()
   const live = state.projects.find((p) => p.slug === slug)
   const hidden = isHiddenProject(state, slug)
