@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { IssueSummary, StatusDef, View } from '../../src/model'
-import { applyView, ORDERINGS, dropPatch, listRows, swimlanes, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../../ui/viewModel'
+import { applyView, dependencyDepth, ORDERINGS, dropPatch, listRows, swimlanes, timeInStatus, viewFromQuery, viewToQuery, type ViewState } from '../../ui/viewModel'
 
 const statuses: StatusDef[] = [
   { name: 'Backlog', type: 'backlog', color: '#bec2c8' }, { name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
@@ -90,6 +90,18 @@ describe('applyView', () => {
     expect(order('updated')).toEqual(['Q-3', 'Q-10', 'Q-2'])
     expect(order('created')).toEqual(['Q-3', 'Q-2', 'Q-10'])
     expect(order('manual')).toEqual(['Q-2', 'Q-3', 'Q-10'])
+  })
+
+  test('orderBy dependency: blockers above what they block, layer by layer; outside blockers count; cycles are safe', () => {
+    const b = (id: string, ...blockedBy: string[]) => ({ ...mk(id, 'Todo', 0, null), blockedBy })
+    // Q-9 is closed, so it is outside the list, but it still pushes Q-1 down a layer. Q-404 doesn't exist.
+    const all = [b('Q-1', 'Q-9'), b('Q-2'), b('Q-3', 'Q-1'), b('Q-4', 'Q-2'), b('Q-5', 'Q-3', 'Q-4'), b('Q-6', 'Q-404'), { ...b('Q-9'), status: 'Done' }]
+    const r = applyView(all, { ...board, filter: {}, display: { ...board.display, layout: 'list', groupBy: 'none', rowsBy: undefined, orderBy: 'dependency' } }, ctx)
+    expect(ids(r.groups[0]!.issues)).toEqual(['Q-2', 'Q-6', 'Q-1', 'Q-4', 'Q-3', 'Q-5'])
+    const depth = dependencyDepth(new Map(all.map((i) => [i.id, i])))
+    expect(['Q-2', 'Q-1', 'Q-3', 'Q-5', 'Q-6'].map(depth)).toEqual([0, 1, 2, 3, 0])
+    const loop = dependencyDepth(new Map([['Q-7', b('Q-7', 'Q-8')], ['Q-8', b('Q-8', 'Q-7')]]))
+    expect([loop('Q-7'), loop('Q-8')].sort()).toEqual([0, 1]) // ends, and one of the pair leads
   })
 
   test('completed window: closed issues updated within the window only (explicit status list wins)', () => {

@@ -48,7 +48,7 @@ export const PROPERTIES: { key: string; label: string }[] = [
 ]
 export const ORDERINGS = [
   { value: 'priority', label: 'Priority' }, { value: 'updated', label: 'Last updated' },
-  { value: 'created', label: 'Created' }, { value: 'closed', label: 'Closed' }, { value: 'manual', label: 'Manual (ID)' },
+  { value: 'created', label: 'Created' }, { value: 'closed', label: 'Closed' }, { value: 'dependency', label: 'Dependencies' }, { value: 'manual', label: 'Manual (ID)' },
 ]
 /** Grouping choices: fixed ones plus one per label group. */
 export function groupingOptions(labels: Pick<LabelDef, 'group'>[]): { value: string; label: string }[] {
@@ -65,8 +65,35 @@ export const ROW_OPTIONS = [{ value: 'parent', label: 'Parent issue' }, { value:
 
 const prioRank = (p: number) => (p === 0 ? 5 : p)
 const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0)
-export function comparator(orderBy: string): (a: IssueSummary, b: IssueSummary) => number {
+/**
+ * How many blockers deep an issue sits: 0 with none, otherwise one more than its deepest blocker (closed blockers
+ * count, so the order doesn't shift as work finishes). Blockers that aren't in `byId`, and cycles, add nothing.
+ */
+export function dependencyDepth(byId: ReadonlyMap<string, Pick<IssueSummary, 'blockedBy'>>): (id: string) => number {
+  const memo = new Map<string, number>()
+  const walking = new Set<string>()
+  const depth = (id: string): number => {
+    const known = memo.get(id)
+    if (known !== undefined) return known
+    const issue = byId.get(id)
+    if (!issue || walking.has(id)) return -1
+    walking.add(id)
+    let d = 0
+    for (const b of issue.blockedBy) d = Math.max(d, depth(b) + 1)
+    walking.delete(id)
+    memo.set(id, d)
+    return d
+  }
+  return depth
+}
+
+/** `byId` (every issue) is needed for the dependency order, where a blocker may be outside the list being sorted. */
+export function comparator(orderBy: string, byId?: ReadonlyMap<string, IssueSummary>): (a: IssueSummary, b: IssueSummary) => number {
   switch (orderBy) {
+    case 'dependency': { // blockers above what they block: issues nothing blocks first, then one layer at a time
+      const depth = dependencyDepth(byId ?? new Map())
+      return (a, b) => depth(a.id) - depth(b.id) || byIssueNumber(a, b)
+    }
     case 'updated': return (a, b) => desc(a.updated, b.updated) || byIssueNumber(a, b)
     case 'created': return (a, b) => desc(a.created, b.created) || byIssueNumber(a, b)
     case 'closed': { // newest close first; by date, since imported close dates may be written differently
@@ -173,7 +200,7 @@ export function applyView(issues: IssueSummary[], v: Pick<View, 'filter' | 'disp
     const shown = new Set(out.map((i) => i.id))
     out = out.filter((i) => !(i.parent && i.parent !== i.id && shown.has(i.parent)))
   }
-  const cmp = comparator(d.orderBy)
+  const cmp = comparator(d.orderBy, byId)
   out.sort(cmp)
   const full = { ...ctx, byId }
   const cols = bucket(out, dimension(d.groupBy, f, full, cmp, showDone || rolling), !!d.showEmptyColumns)
@@ -191,7 +218,7 @@ export function swimlanes(groups: ViewGroup[], rowsBy: string, ctx: ViewCtx & { 
     if (c) c.count += r.issues.length
     else counts.set(r.key, { label: r.label, count: r.issues.length })
   }
-  const dim = dimension(rowsBy, {}, { ...ctx }, comparator(orderBy), true)
+  const dim = dimension(rowsBy, {}, { ...ctx }, comparator(orderBy, ctx.byId), true)
   const cand = dim.candidates.filter((k) => keepEmpty || counts.has(k))
   const known = new Set(dim.candidates)
   const keys = [...cand, ...[...counts.keys()].filter((k) => !known.has(k)).sort(dim.rest)]
