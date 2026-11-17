@@ -10,9 +10,18 @@ Bringing issues over from another tool (Jira, GitHub Issues, Trello, a spreadshe
 file format and `config.yml`, and the safe way to import (`save_issues` in batches, or files written with the app
 stopped).
 
+## Who decides
+The agent working here is the product owner: it finds gaps, checks the need, sets priority, builds and ships, within
+the rules in this file. The repo owner directs and is kept informed: say what you decided and why, and ask only
+when the answer changes scope or is hard to undo.
+
 ## Gates
-- `bun run check`: typecheck, UI build, `bun test`, `bash -n` + shellcheck. Green before every commit.
-- `bun run check:app`: Swift build + tests. Green before every commit that touches `app/`.
+Run what the change can break, once, before the commit. CI runs everything on every PR, and `main` only takes a PR
+with `check` and `check-app` green.
+- Styles (`ui/styles.css`) or docs only: `bun run typecheck && bun run build:ui`.
+- Other `ui/` changes: the above, plus `bun test tests/ui`.
+- Anything in `src/`, `scripts/` or `tests/`: `bun run check` (typecheck, UI build, `bun test`, `bash -n` + shellcheck).
+- Anything in `app/`: `bun run check:app` (Swift build + tests).
 - One suite: `bun test tests/<path>.test.ts`. Accepting a deliberate MCP surface change:
   `bun test tests/mcp/surface.test.ts -u`, then review the snapshot diff.
 
@@ -22,9 +31,10 @@ stopped).
 - Stop only processes you started, by the PID you captured (`cmd & pid=$!` … `kill "$pid"`).
 - These change the real install and agent configs: `scripts/install.sh` and `./install.sh` (without `--dry-run`)
   into `~/Applications`, `aitt setup`, `aitt uninstall`, `app/build.sh` without `--no-register`, and launching a
-  dev app build (it saves its `AITT_HOME` as the app's data folder). Run them only when the task is to test them,
-  with the owner's go-ahead, and then with a scratch `AITT_APP_DIR` and `AITT_HOME`. Learn their flags from the
-  source (`usage()` in each script, `SETUP_USAGE`/`UNINSTALL_USAGE` in `src/setup/`).
+  dev app build (it saves its `AITT_HOME` as the app's data folder). One use is routine: after a merge to `main`,
+  update the owner's app from `main` with `SKIP_MCP=1 SKIP_LOGIN_ITEM=1 scripts/install.sh`, then confirm
+  `/api/health` answers. Any other run is for testing them, with a scratch `AITT_APP_DIR` and `AITT_HOME`. Learn
+  their flags from the source (`usage()` in each script, `SETUP_USAGE`/`UNINSTALL_USAGE` in `src/setup/`).
 
 ## Docs ship with every change
 Docs are part of the build, not a follow-up. In the same branch as the change:
@@ -32,7 +42,8 @@ Docs are part of the build, not a follow-up. In the same branch as the change:
   `site/src/content/docs/` and `README.md`.
 - CLI usage, MCP tools, Settings or `config.yml` changed: `bun run docs:gen` (the drift test in `bun run check`
   fails otherwise).
-- UI changed: `bun run docs:shots` to retake the screenshots.
+- A screenshot's subject changed: `bun run docs:shots`, then restore the shots of pages you didn't change (it
+  rewrites all of them).
 - `bun run docs:build` must pass (link check, `llms.txt`) before the PR.
 
 ## Conventions
@@ -40,7 +51,8 @@ Docs are part of the build, not a follow-up. In the same branch as the change:
   co-author lines.
 - Linear history (no merge commits): feature branch from `main`, PR, squash or rebase merge. Commit only your own paths
   (`git commit -m … -- <paths>`); others may share this checkout.
-- An agent opens PRs and never merges its own.
+- An agent merges its own PR once CI is green. Changes to the engine, the tool rules or the data format get a
+  review from a fresh context first.
 - Product code stays portable (`tests/portability.test.ts`): no absolute user paths or owner names.
 - Agent-facing text has one source: the skill's workflow section (`skills/ai-task-tracking/SKILL.md`) feeds every
   tool's guidance; tool descriptions live in `src/tools/schemas.ts`.
