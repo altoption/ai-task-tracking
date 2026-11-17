@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { IssueSummary } from '../../src/model'
-import { firstLine, milestoneProgress, shortTarget, targetLabel } from '../../ui/projectPage'
+import { firstLine, milestoneOrder, milestoneProgress, shortTarget, targetLabel } from '../../ui/projectPage'
 
 const iss = (id: string, project: string, status: string, milestone: string | null): IssueSummary => ({ id, project, status, milestone }) as IssueSummary
 const closed = (s: string) => s === 'Done' || s === 'Canceled'
@@ -55,5 +55,14 @@ describe('final fix: embedded view has a bounded scroll container', () => {
     expect(decl(page, 'flex-direction')).toBe('column')
     const view = /\.project-page\s*>\s*\.view-screen\s*\{([^}]*)\}/.exec(css)
     expect(decl(view, 'flex')).toBe('1 1 0') // takes what the header leaves; a zero basis keeps it from growing with its rows
+  })
+})
+
+describe('milestoneOrder', () => {
+  test('picking a milestone lists by dependencies, clearing goes back; a chosen ordering stays', () => {
+    expect(milestoneOrder('priority', 'priority', true)).toBe('dependency')
+    expect(milestoneOrder('dependency', 'priority', false)).toBe('priority')
+    expect(milestoneOrder('updated', 'priority', true)).toBe('updated')
+    expect(milestoneOrder('updated', 'priority', false)).toBe('updated')
   })
 })

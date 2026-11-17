@@ -41,3 +41,12 @@ export function shortTarget(target: string | undefined, now = new Date()): strin
   if (Number.isNaN(d.getTime())) return target
   return d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+/**
+ * The ordering after a milestone chip is picked or cleared. A milestone is a set of steps, so picking one lists it by
+ * dependencies and clearing it goes back to the page's usual order; an ordering the viewer chose is left alone.
+ */
+export function milestoneOrder(orderBy: string, usual: string, picking: boolean): string {
+  const [from, to] = picking ? [usual, 'dependency'] : ['dependency', usual]
+  return orderBy === from ? to : orderBy
+}
