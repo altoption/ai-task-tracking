@@ -21,7 +21,7 @@ app uses. It is plain text and a git repo.
 ├── labels.yml                  label names and colors
 ├── AGENTS.md                   the rules agents get as the MCP server's instructions
 ├── .gitignore                  written by the app
-├── views/<slug>.yml            saved views (the app writes these)
+├── views/<slug>.yml            saved views (the app writes these); `project: <slug>` makes one a project's own view
 ├── themes/<name>.yml           your own themes (optional; see the Themes guide)
 ├── projects/
 │   └── <project-slug>/

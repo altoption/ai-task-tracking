@@ -15,10 +15,10 @@ import { callTool, getProject, hiddenRevOf, inScope, isHiddenProject, NO_PROJECT
 import { ConceptIcon, Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
-import { firstLine, milestoneOrder, milestoneProgress, shortTarget, targetLabel } from '../projectPage'
-import { replaceRoute } from '../router'
+import { firstLine, milestoneOrder, milestoneProgress, projectViews, shortTarget, targetLabel } from '../projectPage'
+import { href, replaceRoute } from '../router'
 import { HiddenNotice } from './HiddenNotice'
-import { ViewScreen } from './ViewScreen'
+import { savedState, ViewScreen } from './ViewScreen'
 import { DEFAULT_DISPLAY, viewFromQuery, viewToQuery, type ViewState } from '../viewModel'
 
 const STALE_RE = /changed since you started editing/
@@ -255,8 +255,12 @@ function HideButton({ slug }: { slug: string }) {
   )
 }
 
-export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?: string; routeQuery: (q?: string) => import('../router').Route }) {
+export function ProjectPage({ slug, view, query, routeQuery }: { slug: string; view?: string; query?: string; routeQuery: (q?: string) => import('../router').Route }) {
   const state = useTracker()
+  const views = useMemo(() => projectViews(state.views, slug), [state.views, slug])
+  const active = views.find((v) => v.slug === view)
+  /** What the list shows with no edits: the open view of this project, or all its issues. */
+  const base = useMemo<ViewState>(() => (active ? savedState(active) : BASE), [active])
   const scope = useScope()
   const live = state.projects.find((p) => p.slug === slug)
   const hidden = isHiddenProject(state, slug)
@@ -290,15 +294,15 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
     )
   }
   const statuses = STATUSES.includes(project.status) ? STATUSES : [project.status, ...STATUSES]
-  const current = viewFromQuery(query ?? '', BASE)
+  const current = viewFromQuery(query ?? '', base)
   const picked = new Set(current.filter.milestone ?? [])
   /** A milestone chip filters the list to that milestone; again clears it. */
   const pickMilestone = (name: string) => {
     const { milestone: _drop, ...rest } = current.filter
     const clearing = picked.has(name) && picked.size === 1
     const filter = clearing ? rest : { ...rest, milestone: [name] }
-    const display = { ...current.display, orderBy: milestoneOrder(current.display.orderBy, BASE.display.orderBy, !clearing) }
-    replaceRoute(routeQuery(viewToQuery({ ...current, filter, display }, BASE) || undefined))
+    const display = { ...current.display, orderBy: milestoneOrder(current.display.orderBy, base.display.orderBy, !clearing) }
+    replaceRoute(routeQuery(viewToQuery({ ...current, filter, display }, base) || undefined))
   }
   const summary = firstLine(project.description)
   const empty = !summary && !project.milestones.length && !project.docs.length
@@ -350,7 +354,15 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
           <Documents project={project} ctx={ctx} />
         </div>
       )}
-      <ViewScreen key={`project:${slug}`} title={project.name} defaults={BASE} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery} embedded
+      {views.length > 0 && (
+        <nav className="view-tabs" aria-label="Views of this project">
+          <a href={href({ name: 'project', slug })} className={active ? '' : 'on'} aria-current={active ? undefined : 'page'}>All issues</a>
+          {views.map((v) => (
+            <a key={v.slug} href={href({ name: 'project', slug, view: v.slug })} className={v.slug === active?.slug ? 'on' : ''} aria-current={v.slug === active?.slug ? 'page' : undefined}>{v.name}</a>
+          ))}
+        </nav>
+      )}
+      <ViewScreen key={`project:${slug}:${active?.slug ?? ''}`} title={project.name} {...(active ? { saved: active } : { defaults: BASE })} base={{ project: [slug] }} locked={['project']} query={query} routeFor={routeQuery} embedded saveProject={slug}
         {...(directIssues ? { issues: directIssues, extraProjects: [project] } : {})} />
     </div>
   )

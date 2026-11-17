@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { IssueSummary } from '../../src/model'
-import { firstLine, milestoneOrder, milestoneProgress, shortTarget, targetLabel } from '../../ui/projectPage'
+import { firstLine, milestoneOrder, milestoneProgress, projectViews, sidebarViews, viewRoute, shortTarget, targetLabel } from '../../ui/projectPage'
 
 const iss = (id: string, project: string, status: string, milestone: string | null): IssueSummary => ({ id, project, status, milestone }) as IssueSummary
 const closed = (s: string) => s === 'Done' || s === 'Canceled'
@@ -64,5 +64,25 @@ describe('milestoneOrder', () => {
     expect(milestoneOrder('dependency', 'priority', false)).toBe('priority')
     expect(milestoneOrder('updated', 'priority', true)).toBe('updated')
     expect(milestoneOrder('updated', 'priority', false)).toBe('updated')
+  })
+})
+
+describe('views that belong to a project', () => {
+  const views = [
+    { slug: 'web-zeta', name: 'Zeta', project: 'web' }, { slug: 'web-alpha', name: 'Alpha', project: 'web', favorite: true },
+    { slug: 'all-bugs', name: 'All bugs' }, { slug: 'gone-x', name: 'Orphan', project: 'gone' }, { slug: 'app-a', name: 'App a', project: 'app' },
+  ]
+  const has = (slug: string) => slug === 'web' || slug === 'app'
+  test('projectViews: only that project\'s, by name', () => {
+    expect(projectViews(views, 'web').map((v) => v.slug)).toEqual(['web-alpha', 'web-zeta'])
+    expect(projectViews(views, 'none')).toEqual([])
+  })
+  test('viewRoute: inside its project, or on its own when system-wide or the project is gone', () => {
+    expect(viewRoute(views[0]!, has)).toEqual({ name: 'project', slug: 'web', view: 'web-zeta' })
+    expect(viewRoute(views[2]!, has)).toEqual({ name: 'view', slug: 'all-bugs' })
+    expect(viewRoute(views[3]!, has)).toEqual({ name: 'view', slug: 'gone-x' })
+  })
+  test('sidebarViews: system-wide ones, starred project views and orphans; starred first', () => {
+    expect(sidebarViews(views, has).map((v) => v.slug)).toEqual(['web-alpha', 'all-bugs', 'gone-x'])
   })
 })

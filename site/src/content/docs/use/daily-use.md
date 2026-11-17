@@ -146,6 +146,17 @@ each. If any one can't be changed, none are, and the bar says why. The selection
 make another; **Clear** or Esc clears it. Closing a selected parent takes its open sub-issues along, and the bar says
 how many before you confirm (see [Closing a parent and its sub-issues](#closing-a-parent-and-its-sub-issues)).
 
+### Views of one project
+
+**Save view** on a project's page saves a view that belongs to that project. It shows as a tab above the project's
+list, next to **All issues**, and opens inside the project page, so the project's header and milestone chips stay.
+It is not added to the sidebar's **Views** list unless you star it; a starred one is listed there as
+"View · Project". The command bar (⌘K) finds it under the same name. **Save view** anywhere else (All issues, a
+filter you built) saves a system-wide view, listed in the sidebar.
+
+In the file, a project's view is an ordinary `views/<slug>.yml` with a `project: <project slug>` line. Remove the
+line and the view is system-wide; a view whose project no longer exists is listed as system-wide too.
+
 The app adds four saved views to your data folder the first time the engine starts, on a new folder or an existing one:
 
 | View | Shows | Laid out as |

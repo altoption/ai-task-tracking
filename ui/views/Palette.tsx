@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { IssueSummary } from '../../src/model'
-import { listedProjects, searchIssues, setTheme, useTracker, type ThemesInfo } from '../client'
+import { isHiddenProject, listedProjects, projectName, searchIssues, setTheme, useTracker, type ThemesInfo } from '../client'
+import { viewRoute } from '../projectPage'
 import { navigate } from '../router'
 import { ConceptIcon, StatusIcon } from '../components/icons'
 import { Modal } from '../components/Modal'
@@ -94,9 +95,11 @@ export function Palette({ mode: initialMode, onClose }: { mode: PaletteMode; onC
   const items = useMemo<Item[]>(() => {
     const needle = q.trim().toLowerCase()
     const has = (s: string) => !needle || s.toLowerCase().includes(needle)
-    const views = state.views.filter((v) => has(v.name)).map<Item>((v) => ({
-      key: `view:${v.slug}`, group: 'Views', label: v.name, icon: <ConceptIcon concept={v.favorite ? 'favorite' : 'views'} />, run: go(() => navigate({ name: 'view', slug: v.slug })),
-    }))
+    const hasProject = (slug: string) => state.projects.some((p) => p.slug === slug) || isHiddenProject(state, slug)
+    const views = state.views.map((v) => ({ v, label: v.project && hasProject(v.project) ? `${v.name} · ${projectName(state, v.project)}` : v.name }))
+      .filter((x) => has(x.label)).map<Item>(({ v, label }) => ({
+        key: `view:${v.slug}`, group: 'Views', label, icon: <ConceptIcon concept={v.favorite ? 'favorite' : 'views'} />, run: go(() => navigate(viewRoute(v, hasProject))),
+      }))
     if (mode === 'views') return views
 
     const out: Item[] = []
