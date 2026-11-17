@@ -44,8 +44,8 @@ Small, fast, and the same result every run. CI runs all of them on every PR, and
 | You changed | Run locally |
 |---|---|
 | Styles (`ui/styles.css`) or docs only | `bun run typecheck && bun run build:ui` |
-| Other files in `ui/` | the above, plus `bun test tests/ui` |
-| `src/`, `scripts/` or `tests/` | `bun run check` (typecheck, UI build, tests, `bash -n` + shellcheck) |
+| Other files in `ui/`, and their tests in `tests/ui/` | the above, plus `bun test tests/ui` |
+| `src/` or `scripts/`, or tests outside `tests/ui/` | `bun run check` (typecheck, UI build, tests, `bash -n` + shellcheck) |
 | `app/` | `bun run check:app` (Swift release build + tests) |
 
 Approvals are not required while the project has one maintainer (`required_approving_review_count` is 0 in
