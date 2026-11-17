@@ -19,8 +19,9 @@ when the answer changes scope or is hard to undo.
 Run what the change can break, once, before the commit. CI runs everything on every PR, and `main` only takes a PR
 with `check` and `check-app` green.
 - Styles (`ui/styles.css`) or docs only: `bun run typecheck && bun run build:ui`.
-- Other `ui/` changes: the above, plus `bun test tests/ui`.
-- Anything in `src/`, `scripts/` or `tests/`: `bun run check` (typecheck, UI build, `bun test`, `bash -n` + shellcheck).
+- Other `ui/` changes, with their tests in `tests/ui/`: the above, plus `bun test tests/ui`.
+- Anything in `src/` or `scripts/`, or tests outside `tests/ui/`: `bun run check` (typecheck, UI build, `bun test`,
+  `bash -n` + shellcheck).
 - Anything in `app/`: `bun run check:app` (Swift build + tests).
 - One suite: `bun test tests/<path>.test.ts`. Accepting a deliberate MCP surface change:
   `bun test tests/mcp/surface.test.ts -u`, then review the snapshot diff.
