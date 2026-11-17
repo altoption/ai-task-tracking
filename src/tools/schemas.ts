@@ -256,6 +256,7 @@ const defs = {
       name: z.string().min(1), filter, display,
       slug: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional().describe('Update this existing view file. Without it a new view is created (refused if the name\'s slug is taken).'),
       favorite: z.boolean().optional().describe('Pin the view in the sidebar. Omitted on update: kept.'),
+      project: project.optional().describe('The project the view belongs to (name or slug); it is then offered on that project\'s page. Omitted: a system-wide view, or on update, kept.'),
     }),
   },
 } satisfies Record<string, ToolSchema>
