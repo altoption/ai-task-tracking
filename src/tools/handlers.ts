@@ -395,8 +395,14 @@ const handlers: Record<string, Handler> = {
     // A project's view carries the project in its file name, so two projects can each have a "Backlog".
     const slug = a.slug ?? (project ? `${project}-${slugify(a.name)}` : slugify(a.name))
     // A new view never replaces another one; updating an existing view names it by slug.
-    if (!a.slug && s.views.some((v) => v.slug === slug)) {
+    const taken = s.views.find((v) => v.slug === slug)
+    if (!a.slug && taken) {
+      // `<project>-<name>` can also be another project's or a system-wide view's file name.
+      if ((taken.project ?? undefined) !== project) throw new ToolError(`The view '${taken.name}' already uses the file name '${slug}' — choose another name.`)
       throw new ToolError(`A view named '${a.name}' already exists${project ? ' in this project' : ''} — choose another name, or open it and use Save changes.`)
+    }
+    if (a.slug && taken && project !== undefined && taken.project !== project) {
+      throw new ToolError(`The view '${taken.name}' ${taken.project ? `belongs to the project '${taken.project}'` : 'is system-wide'}; saving it can't move it to another project. Leave out project to update it.`)
     }
     // Updating keeps keys this tool doesn't know (e.g. hand-added notes) and `favorite` unless it is given.
     const prev = s.views.find((v) => v.slug === slug) as (View & Record<string, unknown>) | undefined
