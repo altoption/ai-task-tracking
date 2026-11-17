@@ -170,7 +170,8 @@ option has no effect on a view with this filter, as on a view that names statuse
 
 **Ordering ▸ Dependencies** (the display menu) lists issues by their blockers: issues nothing blocks come first, then
 the ones they unblock, one layer at a time, with the lowest id first inside a layer. It reads the "blocked by" links
-only, not numbers in titles, and a closed blocker still counts, so the order stays put as work finishes.
+only, not numbers in titles, and a closed blocker still counts, so the order stays put as work finishes. Picking a
+milestone chip on a project page switches the list to this order, unless you had chosen another one.
 
 **Docs** at the bottom of the sidebar, **Help ▸ AI Task Tracking Help** (⌘?) in the app's menu and **Help** in the
 menu-bar menu open these docs, which the app serves at `http://127.0.0.1:7477/docs/`; from a terminal, `aitt docs`

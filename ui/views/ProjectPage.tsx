@@ -15,7 +15,7 @@ import { callTool, getProject, hiddenRevOf, inScope, isHiddenProject, NO_PROJECT
 import { ConceptIcon, Icon, ProgressRing } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import type { MdContext } from '../markdown'
-import { firstLine, milestoneProgress, shortTarget, targetLabel } from '../projectPage'
+import { firstLine, milestoneOrder, milestoneProgress, shortTarget, targetLabel } from '../projectPage'
 import { replaceRoute } from '../router'
 import { HiddenNotice } from './HiddenNotice'
 import { ViewScreen } from './ViewScreen'
@@ -295,8 +295,10 @@ export function ProjectPage({ slug, query, routeQuery }: { slug: string; query?:
   /** A milestone chip filters the list to that milestone; again clears it. */
   const pickMilestone = (name: string) => {
     const { milestone: _drop, ...rest } = current.filter
-    const filter = picked.has(name) && picked.size === 1 ? rest : { ...rest, milestone: [name] }
-    replaceRoute(routeQuery(viewToQuery({ ...current, filter }, BASE) || undefined))
+    const clearing = picked.has(name) && picked.size === 1
+    const filter = clearing ? rest : { ...rest, milestone: [name] }
+    const display = { ...current.display, orderBy: milestoneOrder(current.display.orderBy, BASE.display.orderBy, !clearing) }
+    replaceRoute(routeQuery(viewToQuery({ ...current, filter, display }, BASE) || undefined))
   }
   const summary = firstLine(project.description)
   const empty = !summary && !project.milestones.length && !project.docs.length
