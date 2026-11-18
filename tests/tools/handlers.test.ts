@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, setSystemTime, test } from 'bun:test'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Actor } from '../../src/model'
@@ -331,6 +331,25 @@ describe('issue tools', () => {
     expect(out.blocked).toEqual([expect.objectContaining({ id: 'Q-4', blockers: ['Q-3'] })])
     const q3 = out.readyNext.find((i: Out) => i.id === 'Q-3')
     expect(q3).toEqual(expect.objectContaining({ title: expect.any(String), unblocks: 1 }))
+  })
+
+  test('whats_next: an issue the owner answered comes first under answered, with the reply, until an agent writes', async () => {
+    // Comment times are whole seconds, and "since the reply" starts a second later: step the clock.
+    const t0 = Date.parse('2026-11-01T12:00:00Z')
+    try {
+      setSystemTime(new Date(t0))
+      const { call } = await setup()
+      await call('save_comment', { issueId: 'Q-5', body: 'Which provider?' })
+      setSystemTime(new Date(t0 + 5_000))
+      await call('save_comment', { issueId: 'Q-5', body: 'Use Stripe' }, { actor: { actor: 'you' } })
+      setSystemTime(new Date(t0 + 10_000))
+      const out = await call('whats_next')
+      expect(Object.keys(out)[0]).toBe('answered')
+      expect(out.answered).toEqual([expect.objectContaining({ id: 'Q-5', status: 'Waiting', reply: 'Use Stripe' })])
+      expect(out.needsYou).toEqual([])
+      await call('save_issue', { id: 'Q-5', state: 'In Progress' })
+      expect((await call('whats_next')).answered).toBeUndefined()
+    } finally { setSystemTime() }
   })
 
   test('whats_next: a short stalled list (with why) of the stalled issues the caller\'s workspace touched', async () => {

@@ -176,6 +176,10 @@ describe('Daily overview', () => {
 
   test('a review label: Review, and quiet time when there is no waitingSince', () => {
     expect(needsYouCard(item({ labels: ['Needs review'] }), ny, now)).toEqual({ status: 'Needs review', age: 'No activity for 7 days', action: 'Review' })
+    // Answered by the owner and here because it stalled: the stall is the reason, not the label it still carries.
+    expect(needsYouCard(item({ labels: ['Needs review'], answered: true, stalled: 'idle 2 d in In Progress' }), ny, now))
+      .toEqual(expect.objectContaining({ status: 'Stalled', action: 'Open', summary: 'idle 2 d in In Progress' }))
+    expect(needsYouWhy(item({ status: 'Waiting', answered: true, ciReason: 'CI failing on PR #12' }), ny, now).why).toBe('')
     expect(needsYouCard(item({ status: 'In Review' }), ny, now).action).toBe('Review')
     expect(needsYouCard(item({ labels: ['Needs decision'], updated: '2026-10-30T09:00:00Z' }), ny, now))
       .toMatchObject({ status: 'Needs decision', age: 'Updated 3 hours ago', action: 'Open' })

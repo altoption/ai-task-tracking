@@ -84,7 +84,7 @@ const defs = {
   // ----- issues: read -----
   whats_next: {
     title: 'What to work on next', readOnly: true,
-    description: 'What to work on, in buckets: needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace\'s. Use it at the start of a session when no issue is named.',
+    description: 'What to work on, in buckets: answered (the user replied on it and no agent has picked it up: read the reply with get_issue and continue), needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace\'s. Use it at the start of a session when no issue is named.',
     input: z.object({}),
   },
   get_issue: {

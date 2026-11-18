@@ -75,7 +75,8 @@ Every step has a flag (`aitt setup --help`): `--home <dir>`, `--project <name>`,
 - **Shortcuts (system-wide).** ⌥⌘I opens the window (or ⌃⌥⌘I, ⌥⌘T); ⌥⌘N opens Quick Capture (or ⌃⌥⌘N, ⌥⇧⌘N).
   Pick one or turn them off in Settings.
 - **In the window.** **Home** is a daily overview: today's summary, then *Needs you* first (issues waiting for your
-  decision or review, each with what it asks and how long it has waited; work that has stalled: idle in In Progress
+  decision or review, each with what it asks and how long it has waited, until you reply: an answered issue goes to
+  agents first in `whats_next`; work that has stalled: idle in In Progress
   for a day, or reopened again and again, tuned under `stalled:` in `config.yml`; and work whose linked PR's checks
   fail), *In progress*, *Ready next* with *Blocked work* as dependency chains, and Agent activity beside them (today's
   counts, the live session and what it is working on, what finished, and Session details with a card per agent

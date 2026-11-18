@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { CopyId, copyText } from '../../ui/components/CopyId'
 import type { FeedEvent } from '../../src/engine/eventlog'
 import type { IssueSummary, LabelDef } from '../../src/model'
-import { activityItems, buildTree, filterOptions, labelOptions, flatten, nextUp, openBlockers, positionInParent, statusMix, treeProgress } from '../../ui/issuePage'
+import { activityItems, buildTree, filterOptions, handBackStatus, labelOptions, flatten, nextUp, openBlockers, positionInParent, statusMix, treeProgress } from '../../ui/issuePage'
 import { isAllowedUrl, linkifyIds, makeSanitizer, renderMarkdown, rewriteUrl, toggleTask } from '../../ui/markdown'
 import { taskLines } from '../../src/shared/tasks'
 
@@ -232,5 +232,31 @@ describe('an epic\'s roll-up', () => {
   test('flatten lists parents before their children', () => {
     const t = [{ issue: list[0]!, children: [{ issue: list[1]!, children: [] }] }, { issue: list[2]!, children: [] }]
     expect(flatten(t).map((i) => i.id)).toEqual(['Q-2', 'Q-3', 'Q-4'])
+  })
+})
+
+describe('handBackStatus', () => {
+  const config = {
+    statuses: [
+      { name: 'Backlog', type: 'backlog' as const, color: '' }, { name: 'Todo', type: 'unstarted' as const, color: '' },
+      { name: 'In Progress', type: 'started' as const, color: '' }, { name: 'Waiting', type: 'started' as const, color: '' },
+      { name: 'In Review', type: 'started' as const, color: '' }, { name: 'Done', type: 'completed' as const, color: '' },
+    ],
+    needsYou: { statuses: ['Waiting', 'In Review'], labels: [] },
+  }
+  const move = (at: string, from: string, to: string): FeedEvent => ({ at, actor: { actor: 'agent' }, id: 'Q-1', kind: 'status', from, to })
+
+  test('the status it came from, by the newest move into the Needs-you status', () => {
+    const feed = [move('2026-11-02T10:00:00Z', 'Todo', 'Waiting'), move('2026-11-01T10:00:00Z', 'In Progress', 'Waiting')]
+    expect(handBackStatus('Waiting', feed, config)).toBe('Todo')
+  })
+  test('the working status when the move is unknown, or it came from a closed or Needs-you status', () => {
+    expect(handBackStatus('Waiting', [], config)).toBe('In Progress')
+    expect(handBackStatus('Waiting', [move('2026-11-01T10:00:00Z', 'In Review', 'Waiting')], config)).toBe('In Progress')
+    expect(handBackStatus('Waiting', [move('2026-11-01T10:00:00Z', 'Done', 'Waiting')], config)).toBe('In Progress')
+  })
+  test('nothing for an issue that does not wait on the owner, or before the config loads', () => {
+    expect(handBackStatus('In Progress', [], config)).toBeNull()
+    expect(handBackStatus('Waiting', [], null)).toBeNull()
   })
 })

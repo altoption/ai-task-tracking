@@ -309,6 +309,7 @@ kbd { font: 11px var(--font); color: var(--muted); border: 1px solid var(--borde
 .ov-chips { display: inline-flex; gap: 8px; white-space: nowrap; font-size: 11px; }
 .ov-priority { color: var(--warn); }
 .ov-unblocks { color: var(--link); }
+.ov-answered { color: var(--link); font-size: 11px; white-space: nowrap; }
 .ov-stats { display: flex; justify-content: space-between; gap: 12px; padding: 0 0 18px; border-bottom: 1px solid var(--border); }
 .ov-stat { display: grid; text-align: left; background: none; border: 0; padding: 4px 6px; margin: 0 -6px; border-radius: var(--radius); color: var(--text); }
 .ov-stat:hover { background: var(--hover); }
@@ -575,6 +576,7 @@ span.tree-toggle { transform: none; }
 .comment-box:focus-within { border-color: var(--border-focus); }
 .comment-box textarea { width: 100%; background: none; border: 0; outline: none; resize: vertical; min-height: 54px; line-height: 1.5; }
 .comment-foot { display: flex; align-items: center; justify-content: space-between; }
+.comment-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* properties sidebar */
 .issue-props { border-left: 1px solid var(--border); padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }

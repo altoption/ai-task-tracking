@@ -203,7 +203,10 @@ export function Home() {
           {home && home.inProgress.length === 0 && <p className="home-empty">Nothing in progress.</p>}
           <ul className="ov-rows">
             {home?.inProgress.slice(0, LIST_SHOWN).map((i) => (
-              <WorkRow key={i.id} issue={i} state={state} right={<span className="ov-row-time" title={`Updated ${new Date(i.updated).toLocaleString()}`}>{relTime(i.updated, now)}</span>} />
+              <WorkRow key={i.id} issue={i} state={state} right={<>
+                {i.answered && <span className="ov-answered" title="You replied; no agent has picked it up yet">Answered</span>}
+                <span className="ov-row-time" title={`Updated ${new Date(i.updated).toLocaleString()}`}>{relTime(i.updated, now)}</span>
+              </>} />
             ))}
           </ul>
           {working.length > 0 && <a className="ov-more" href={listHref({ status: working })}>All in progress · {listCount(scoped, { status: working }, statuses)}</a>}

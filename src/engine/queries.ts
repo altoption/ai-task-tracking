@@ -105,6 +105,26 @@ export function needsYouRequest(s: Store, i: Issue): { request?: string; waiting
   return out
 }
 
+/**
+ * The owner's reply no agent has acted on yet, on one line (at most REQUEST_MAX), or null. An issue is answered when
+ * its newest comment is the owner's, an agent commented before it (so it replies to something), and no agent has
+ * written to the issue since. It clears by itself: any agent write ends it. "Since" goes by the order the log saw the
+ * writes (Store.agentWroteSinceReply); for an issue the log knows nothing of, by the last writer and its time.
+ */
+export function ownerReplyOf(s: Store): (i: Issue) => string | null {
+  return (i) => {
+    let k = i.activity.length - 1
+    while (k >= 0 && !i.activity[k]!.body.trim()) k--
+    const last = i.activity[k]
+    if (!last || last.actor !== 'you') return null
+    if (!i.activity.slice(0, k).some((a) => a.actor === 'agent' && a.body.trim())) return null
+    const since = s.agentWroteSinceReply(i.id)
+    if (since ?? (i.touchedBy?.actor === 'agent' && Date.parse(i.updated) > Date.parse(last.at))) return null
+    const one = plainLine(last.body.slice(0, REQUEST_SCAN_MAX))
+    return one.length > REQUEST_MAX ? `${one.slice(0, REQUEST_MAX - 1).trimEnd()}…` : one
+  }
+}
+
 /** Has an open blocker or the Blocked label (the Blocked bucket's test). */
 function blockedTest(isOpen: (id: string) => boolean): (i: Issue) => boolean {
   return (i) => i.labels.includes(BLOCKED_LABEL) || i.blockedBy.some((b) => isOpen(b))
@@ -150,7 +170,7 @@ export function stalledOf(s: Store, now = Date.now()): (i: Issue) => string | nu
 }
 
 /**
- * `home(s).needsYou.length` without building the buckets (for the menu-bar poll of /api/health), plus the ids that
+ * `home(s).needsYou.length` (so without issues the owner answered) without building the buckets (for the menu-bar poll of /api/health), plus the ids that
  * are there only because they are stalled (the app leaves those out when its stalled setting is off) and every
  * stalled id (the app notifies once per stalled episode, so a Waiting round trip doesn't notify twice).
  */
@@ -161,12 +181,14 @@ export function needsYouCount(
   const test = needsYouOf(s)
   const stalled = stalledOf(s, now)
   const ci = ciReasonOf(s, now)
+  const reply = ownerReplyOf(s)
   let count = 0
   const stalledOnly: string[] = [], stalledAll: string[] = []
   for (const i of s.all()) {
     if (visible && !visible(i)) continue // a hidden project (src/engine/hidden.ts), for the app's poll
     if (!isOpen(i)) { if (ci(i)) count++; continue } // Done within the window with failing CI
-    const needs = test(i) || ci(i) !== null
+    // Answered by the owner: it waits on an agent now, not on the owner.
+    const needs = (test(i) && reply(i) === null) || ci(i) !== null
     const reason = stalled(i)
     if (reason) stalledAll.push(i.id)
     if (needs) count++
@@ -189,7 +211,9 @@ export function needsYouList(
   const rows = h.needsYou.map((issue) => {
     const reason = h.stalled.get(issue.id)
     const ci = h.ci.get(issue.id)
-    const why = nyStatus.has(issue.status) ? issue.status : issue.labels.find((l) => nyLabels.has(l)) ?? ci ?? (reason ? 'stalled' : issue.status)
+    // Answered by the owner: its status or label is no longer why it is here (it stalled, or its CI fails).
+    const own = h.answered.has(issue.id) ? undefined : nyStatus.has(issue.status) ? issue.status : issue.labels.find((l) => nyLabels.has(l))
+    const why = own ?? ci ?? (reason ? 'stalled' : issue.status)
     return { issue, why, ...(reason ? { stalled: reason } : {}), ...(ci ? { ci } : {}) }
   })
   // Without stalled work, stalled-only rows go before the cut, so the list still holds `limit` real ones.
@@ -198,16 +222,18 @@ export function needsYouList(
 
 /**
  * Home "Up next" buckets (spec §7.3), mutually exclusive, in precedence order:
- * needsYou (status or label in config.needsYou, stalled, or failing CI) > blocked (any open blocker, or label
+ * needsYou (status or label in config.needsYou and not answered, stalled, or failing CI) > blocked (any open blocker, or label
  * Blocked) > inProgress (started) > readyNext (backlog/unstarted; missing blockers count as closed).
  * Only open issues appear, plus Done issues with failing CI (src/engine/ci.ts) in needsYou. `stalled` and `ci` map
  * every stalled open issue / failing-CI issue to its reason (computed in the same pass); with
  * `stalledInNeedsYou: false` (whats_next) stalled and failing-CI issues stay in their usual bucket and are only
- * marked there (Done ones then appear nowhere). `visible` leaves issues out entirely (hidden projects, for the UI).
+ * marked there (Done ones then appear nowhere). `answered` maps every open issue the owner replied on last
+ * (ownerReplyOf) to that reply: such an issue waits on an agent, so its Needs-you status or label no longer puts it in
+ * needsYou and it falls to its usual bucket. `visible` leaves issues out entirely (hidden projects, for the UI).
  */
 export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boolean; visible?: (i: Issue) => boolean } = {}): {
   needsYou: Issue[]; inProgress: Issue[]; readyNext: { issue: Issue; unblocks: number }[]; blocked: { issue: Issue; blockers: string[] }[]
-  stalled: Map<string, string>; ci: Map<string, string>
+  stalled: Map<string, string>; ci: Map<string, string>; answered: Map<string, string>
 } {
   const type = statusTypes(s)
   const isOpen = openTest(s)
@@ -220,6 +246,8 @@ export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boo
   const blocked: { issue: Issue; blockers: string[] }[] = []
   const stalled = new Map<string, string>()
   const ci = new Map<string, string>()
+  const answered = new Map<string, string>()
+  const replyOf = ownerReplyOf(s)
   const visible = opts.visible
   for (const i of s.all()) {
     if (visible && !visible(i)) continue
@@ -228,7 +256,9 @@ export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boo
     if (!isOpen(i)) { if (ciReason && flagged) needsYou.push(i); continue }
     const reason = stalledTest(i)
     if (reason) stalled.set(i.id, reason)
-    if (((reason || ciReason) && flagged) || needsYouTest(i)) { needsYou.push(i); continue }
+    const reply = replyOf(i)
+    if (reply !== null) answered.set(i.id, reply)
+    if (((reason || ciReason) && flagged) || (needsYouTest(i) && reply === null)) { needsYou.push(i); continue }
     const blockers = i.blockedBy.filter((b) => isOpen(b))
     if (blockers.length || i.labels.includes(BLOCKED_LABEL)) {
       // Still blocked by a hidden issue, but the UI's list names only visible blockers.
@@ -243,7 +273,7 @@ export function home(s: Store, now = Date.now(), opts: { stalledInNeedsYou?: boo
   inProgress.sort(byPriorityThenId)
   blocked.sort((a, b) => byPriorityThenId(a.issue, b.issue))
   readyNext.sort((a, b) => prioRank(a.issue.priority) - prioRank(b.issue.priority) || b.unblocks - a.unblocks || compareIds(a.issue.id, b.issue.id))
-  return { needsYou, inProgress, readyNext, blocked, stalled, ci }
+  return { needsYou, inProgress, readyNext, blocked, stalled, ci, answered }
 }
 
 export interface Tree { issue: Issue; children: Tree[] }

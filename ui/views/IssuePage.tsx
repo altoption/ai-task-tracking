@@ -6,7 +6,7 @@ import { CopyId } from '../components/CopyId'
 import { ConceptIcon, Icon, ProgressPill, ProgressRing, StatusIcon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { HiddenNotice } from './HiddenNotice'
-import { buildTree, flatten, nextUp, openBlockers, positionInParent, statusMix, treeProgress, type TreeNode } from '../issuePage'
+import { buildTree, flatten, handBackStatus, nextUp, openBlockers, positionInParent, statusMix, treeProgress, type TreeNode } from '../issuePage'
 import { taskAt, type MdContext } from '../markdown'
 import { href, navigate } from '../router'
 import { IssueActivity } from './IssueActivity'
@@ -453,7 +453,7 @@ export function IssuePage({ id }: { id: string }) {
           <Description key={detail.id} issueId={detail.id} source={detail.description} ctx={ctx} save={save} apply={apply} reload={reload} />
           <SubIssues id={detail.id} children={detail.children} />
           <IssueAttempts attempts={detail.attempts} now={Date.now()} />
-          <IssueActivity issueId={detail.id} activity={detail.activity} feed={feed} ctx={ctx} onSaved={reload} />
+          <IssueActivity issueId={detail.id} activity={detail.activity} feed={feed} ctx={ctx} onSaved={reload} handBack={handBackStatus(detail.status, feed, state.config)} />
         </article>
         {changesOpen
           ? <ChangesPanel data={changes.data} error={changes.error} activity={scopeId === id ? detail.activity : []} project={detail.project} onBranch={setChangesBranch} onClose={closeChanges}
