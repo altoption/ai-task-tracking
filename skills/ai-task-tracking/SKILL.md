@@ -17,7 +17,9 @@ instructions at session start. Where they differ from this skill, they win (labe
 <!-- aitt:guidance:start (setup copies this section into other agent tools' instructions) -->
 
 1. **Orient.** A named issue → `get_issue({ id })` (`get_tree({ id })` for an epic). Otherwise
-   `whats_next()` and propose what to pick up.
+   `whats_next()` and propose what to pick up. Its `answered` list comes first: the user replied on
+   those and no agent has picked them up; read the reply with `get_issue` and continue (move it to
+   In Progress, or ask again in Waiting).
 2. **Search before creating.** `search({ query })`; reuse an existing issue over filing a duplicate.
 3. **Create.** One issue per piece of work, before writing code. Every issue gets a project (omit it
    and the repo's mapped project is used) and one type label (Bug, Feature, Improvement, Task), plus a

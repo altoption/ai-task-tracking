@@ -8,7 +8,7 @@ exports[`tool list snapshot: changes to the tool list are reviewed deliberately 
       "readOnlyHint": true,
       "title": "What to work on next",
     },
-    "description": "What to work on, in buckets: needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace's. Use it at the start of a session when no issue is named.",
+    "description": "What to work on, in buckets: answered (the user replied on it and no agent has picked it up: read the reply with get_issue and continue), needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace's. Use it at the start of a session when no issue is named.",
     "inputSchema": {
       "properties": {},
       "type": "object",

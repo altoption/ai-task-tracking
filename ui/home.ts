@@ -12,13 +12,15 @@ type Cfg = Pick<Config, 'workspaces'> | null
  * A Needs-you item; `stalled` is the engine's stalled reason when the issue stalled (config.yml `stalled:`), and
  * `ciReason` its failing-CI reason ("CI failing on PR #12"). `request` is its newest comment on one line and
  * `waitingSince` when it moved into its Needs-you status, when the engine knows (src/engine/queries.ts needsYouRequest).
+ * `answered`: the owner replied and no agent has written since, so it is here for its stalled or CI reason only.
  */
-export type NeedsYouItem = IssueSummary & { stalled?: string; ciReason?: string; request?: string; waitingSince?: string }
+export type NeedsYouItem = IssueSummary & { stalled?: string; ciReason?: string; request?: string; waitingSince?: string; answered?: boolean }
 
 /** `/api/home` payload: issue summaries in buckets. */
 export interface HomeData {
   needsYou: NeedsYouItem[]
-  inProgress: IssueSummary[]
+  /** `answered`: the owner replied on it last and no agent has written since (src/engine/queries.ts ownerReplyOf). */
+  inProgress: (IssueSummary & { answered?: boolean })[]
   readyNext: { issue: IssueSummary; unblocks: number }[]
   blocked: { issue: IssueSummary; blockers: string[] }[]
 }
@@ -67,7 +69,7 @@ export function needsYouWhy(
   // A hand-edited config.yml may hold anything here (`statuses: null`): only an array counts.
   const statuses = Array.isArray(needsYou?.statuses) ? needsYou.statuses : []
   const labels = Array.isArray(needsYou?.labels) ? needsYou.labels : []
-  const own = statuses.includes(i.status) ? i.status : i.labels.find((l) => labels.includes(l))
+  const own = i.answered ? undefined : statuses.includes(i.status) ? i.status : i.labels.find((l) => labels.includes(l))
   const stalled = { ...(i.stalled ? { stalled: i.stalled } : {}), ...(i.ciReason ? { ci: i.ciReason } : {}) }
   if (!own && (i.stalled || i.ciReason)) return { why: '', ...stalled }
   const why = own ?? i.status
@@ -139,8 +141,8 @@ export interface NeedsYouCard {
 export function needsYouCard(i: NeedsYouItem, needsYou: Config['needsYou'] | undefined, nowMs: number): NeedsYouCard {
   const statuses = Array.isArray(needsYou?.statuses) ? needsYou.statuses : []
   const labels = Array.isArray(needsYou?.labels) ? needsYou.labels : []
-  const byStatus = statuses.includes(i.status)
-  const label = i.labels.find((l) => labels.includes(l))
+  const byStatus = !i.answered && statuses.includes(i.status)
+  const label = i.answered ? undefined : i.labels.find((l) => labels.includes(l))
   const status = byStatus ? (i.status === 'Waiting' ? 'Input needed' : i.status) : label ?? (i.ciReason ? 'CI failing' : i.stalled ? 'Stalled' : i.status)
   const since = i.waitingSince ? Date.parse(i.waitingSince) : NaN
   let age: string

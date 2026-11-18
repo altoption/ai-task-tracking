@@ -86,6 +86,8 @@ function milestoneOut(s: Store, p: Project, m: Project['milestones'][number]) {
 
 const docId = (p: Project, slug: string) => `${p.slug}/${slug}`
 
+/** whats_next lists at most this many answered issues, newest first (they also stay in their usual bucket). */
+const ANSWERED_SHOWN = 20
 /** whats_next lists at most this many of the caller's stalled issues (they also stay in their usual bucket, with a `stalled` reason). */
 const STALLED_SHOWN = 5
 
@@ -339,7 +341,10 @@ const handlers: Record<string, Handler> = {
       ? [...h.inProgress, ...h.needsYou, ...h.readyNext.map((r) => r.issue)]
         .filter((i) => h.stalled.has(i.id) && (writerWorkspaces(i).includes(ws) || s.historyWorkspaces(i.id).has(ws)))
       : []
+    // The owner replied and no agent has written since: these come first, each with the reply.
+    const answered = s.all().filter((i) => h.answered.has(i.id)).sort((x, y) => Date.parse(y.updated) - Date.parse(x.updated))
     return {
+      ...(answered.length ? { answered: answered.slice(0, ANSWERED_SHOWN).map((i) => ({ ...brief(s, i), reply: h.answered.get(i.id)! })) } : {}),
       ...(mine.length ? { stalled: mine.slice(0, STALLED_SHOWN).map((i) => ({ ...brief(s, i), why: h.stalled.get(i.id)! })) } : {}),
       needsYou: h.needsYou.map(mark),
       inProgress: h.inProgress.map(mark),

@@ -1,6 +1,6 @@
 /** Pure helpers behind the issue page (tested without a DOM). */
 import type { FeedEvent } from '../src/engine/eventlog'
-import type { ActivityEntry, IssueSummary, LabelDef } from '../src/model'
+import type { ActivityEntry, Config, IssueSummary, LabelDef } from '../src/model'
 
 // ---------- sub-issue tree ----------
 
@@ -155,4 +155,19 @@ export function attemptsSummary(list: readonly { client?: string }[]): string {
   if (!list.length) return ''
   const tools = new Set(list.map((a) => a.client ?? '?')).size
   return `${list.length} attempt${list.length === 1 ? '' : 's'} · ${tools} tool${tools === 1 ? '' : 's'}`
+}
+
+/**
+ * Where "comment and hand back" moves an issue that waits on the owner: the status it was in before its Needs-you
+ * status (the newest move into it in the feed), when that is still an open status that doesn't itself wait on the
+ * owner; else the first started one of those. Null when the issue isn't in a Needs-you status, or there is nowhere to
+ * hand it back to.
+ */
+export function handBackStatus(status: string, feed: readonly FeedEvent[], config: Pick<Config, 'statuses' | 'needsYou'> | null): string | null {
+  const needs = Array.isArray(config?.needsYou?.statuses) ? config.needsYou.statuses : []
+  if (!config || !needs.includes(status)) return null
+  const ok = config.statuses.filter((s) => !needs.includes(s.name) && (s.type === 'started' || s.type === 'unstarted' || s.type === 'backlog'))
+  const moves = feed.filter((e) => e.kind === 'status' && e.to === status)
+  const from = moves.reduce<FeedEvent | undefined>((best, e) => (!best || e.at >= best.at ? e : best), undefined)?.from
+  return ok.find((s) => s.name === from)?.name ?? ok.find((s) => s.type === 'started')?.name ?? null
 }

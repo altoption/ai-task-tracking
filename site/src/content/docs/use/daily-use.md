@@ -72,6 +72,12 @@ its default: [the Settings reference](/docs/reference/settings/).
   last moved to Waiting (or was created there), else how long it has been quiet (*No activity for 7 days*). **View
   request**, **Review** or **Open** opens the issue, and so does its title; stalled-only and CI-only work shows **Open**.
   The first request is highlighted. Home shows three; **Show all** lists the rest.
+  **Answering a request.** Comment on the issue. Once your comment is the newest one, the issue counts as *answered*:
+  it leaves Needs you (and the menu-bar number) and shows under In progress marked **Answered**, and agents get it
+  first in `whats_next`, under `answered`, with your reply. It stays in its status until an agent picks it up; any
+  agent write ends *answered*, and a follow-up question brings it back to Needs you. To move it yourself in the same
+  step, use **Comment and move to In Progress** next to **Comment** (it names the status the issue came from). Nothing
+  wakes an agent: the next session that asks what's next sees it.
 - **In progress** and **Ready next**: the first three of each, with how long ago an issue in progress last changed,
   and *Urgent* or *High* and *Unblocks N* (how many open issues wait on it) on ready ones. **All in progress** and
   **All ready** open the full lists in All issues, with their counts. Those can be higher than the section's, since

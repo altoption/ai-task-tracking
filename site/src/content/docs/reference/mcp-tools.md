@@ -43,7 +43,7 @@ description and the arguments. Agents call them as `mcp__ai-task-tracking__<name
 
 **What to work on next** · read-only · hints: `readOnlyHint`, `openWorldHint: false`
 
-What to work on, in buckets: needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace's. Use it at the start of a session when no issue is named.
+What to work on, in buckets: answered (the user replied on it and no agent has picked it up: read the reply with get_issue and continue), needsYou (waiting on the user), inProgress, readyNext (unblocked, by priority) and blocked (with blocker ids). Stalled issues carry stalled (why), failing PR checks ci (why); stalled lists your workspace's. Use it at the start of a session when no issue is named.
 
 No arguments.
 

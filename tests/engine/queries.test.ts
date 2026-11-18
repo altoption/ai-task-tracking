@@ -1,8 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Actor } from '../../src/model'
-import { ancestors, filterIssues, home, needsYouCount, needsYouList, needsYouRequest, progress, REQUEST_MAX, search, stalledOf, subtree, unblocks } from '../../src/engine/queries'
+import { ancestors, filterIssues, home, needsYouCount, needsYouList, needsYouRequest, ownerReplyOf, progress, REQUEST_MAX, search, stalledOf, subtree, unblocks } from '../../src/engine/queries'
 import { feedPath } from '../../src/engine/eventlog'
 import { DEFAULT_STALLED } from '../../src/engine/stalled'
 import { Store } from '../../src/engine/store'
@@ -434,5 +434,94 @@ describe('stalled (config.stalled)', () => {
     expect(stalledOf(s)(s.get('Q-2')!)).toBe('4 sessions in 7 days without Done')
     expect(s.history('Q-4')).toEqual([]) // the owner's hand edit is no session and no status move...
     expect(s.lastChange(s.get('Q-4')!)).toBe(Date.parse(iso(H))) // ...but it is the newest change
+  })
+})
+
+describe('answered: the owner replied and no agent has written since', () => {
+  const you: Actor = { actor: 'you' }
+  /** Comment times are whole seconds and "since" starts a second later, so the tests step the clock. */
+  let clock = 0
+  const tick = (sec = 5) => { clock += sec * 1000; setSystemTime(new Date(clock)) }
+  beforeEach(() => { clock = Date.parse('2026-11-01T12:00:00Z'); setSystemTime(new Date(clock)) })
+  afterEach(() => { setSystemTime() })
+  /** Q-5 in the fixture is Waiting. */
+  const asked = async () => {
+    const s = await Store.open(await miniCopy())
+    await s.addComment('Q-5', 'Which provider?', agent)
+    tick()
+    await s.addComment('Q-5', 'Use **Stripe**', you)
+    tick()
+    return s
+  }
+
+  test('it leaves Needs you (home and the count) and is mapped to the reply', async () => {
+    const s = await asked()
+    expect(ownerReplyOf(s)(s.get('Q-5')!)).toBe('Use Stripe')
+    const h = home(s)
+    expect(ids(h.needsYou)).toEqual([])
+    expect(ids(h.inProgress)).toEqual(['Q-1', 'Q-5'])
+    expect([...h.answered]).toEqual([['Q-5', 'Use Stripe']])
+    expect(needsYouCount(s).count).toBe(0)
+    expect(needsYouList(s)).toEqual([])
+  })
+
+  test('any agent write ends it: a status move, or a follow-up question that puts it back in Needs you', async () => {
+    const moved = await asked()
+    await moved.updateIssue('Q-5', { status: 'In Progress' }, agent)
+    expect(home(moved).answered.size).toBe(0)
+    const again = await asked()
+    await again.addComment('Q-5', 'Live or test keys?', agent)
+    const h = home(again)
+    expect(h.answered.size).toBe(0)
+    expect(ids(h.needsYou)).toEqual(['Q-5'])
+    expect(needsYouCount(again).count).toBe(1)
+  })
+
+  test('not answered: only the owner wrote, or the owner changed a field after the agent asked', async () => {
+    const s = await Store.open(await miniCopy())
+    await s.addComment('Q-5', 'Still waiting on the customer', you)
+    tick()
+    expect(ownerReplyOf(s)(s.get('Q-5')!)).toBeNull()
+    expect(ids(home(s).needsYou)).toEqual(['Q-5'])
+    await s.addComment('Q-5', 'Which provider?', agent)
+    tick()
+    await s.updateIssue('Q-5', { priority: 1 }, you)
+    expect(ownerReplyOf(s)(s.get('Q-5')!)).toBeNull()
+  })
+
+  test('the owner hands it back to a working status: still answered, there', async () => {
+    const s = await asked()
+    await s.updateIssue('Q-5', { status: 'In Progress' }, you)
+    expect([...home(s).answered.keys()]).toEqual(['Q-5'])
+  })
+
+  test('"since" goes by the order of the writes: an agent session that picked it up stays seen after an owner edit, and in the same second', async () => {
+    const s = await asked()
+    await s.updateIssue('Q-5', { status: 'In Progress' }, { ...agent, session: 's1' })
+    tick()
+    await s.updateIssue('Q-5', { priority: 1 }, you)
+    expect(ownerReplyOf(s)(s.get('Q-5')!)).toBeNull()
+    // The owner replies again and an agent without a session moves it within the same second.
+    await s.updateIssue('Q-5', { status: 'Waiting' }, agent)
+    await s.addComment('Q-5', 'Test keys?', agent)
+    tick()
+    await s.addComment('Q-5', 'Live', you)
+    expect(ownerReplyOf(s)(s.get('Q-5')!)).toBe('Live')
+    await s.updateIssue('Q-5', { status: 'In Progress' }, agent)
+    tick(60)
+    expect(ownerReplyOf(s)(s.get('Q-5')!)).toBeNull()
+  })
+
+  test('answered and stalled: in Needs you for the stall only, so the list and the count agree without stalled work', async () => {
+    const s = await asked()
+    await s.updateIssue('Q-5', { status: 'In Progress', labels: ['Bug', 'Needs decision'] }, you)
+    s.config.stalled = { ...DEFAULT_STALLED, idleHours: 24 }
+    const later = Date.now() + 48 * 3_600_000
+    const h = home(s, later)
+    expect(h.answered.has('Q-5')).toBe(true)
+    expect(ids(h.needsYou)).toContain('Q-5')
+    expect(needsYouList(s, 50, later).find((r) => r.issue.id === 'Q-5')?.why).toBe('stalled')
+    expect(ids(needsYouList(s, 50, later, { stalled: false }).map((r) => r.issue))).not.toContain('Q-5')
+    expect(needsYouCount(s, later).stalledOnly).toContain('Q-5')
   })
 })

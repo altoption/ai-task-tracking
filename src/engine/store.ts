@@ -91,6 +91,8 @@ export class Store {
   /** Per issue, from the feed log: status moves and agent-session writes (pruned to the stalled window), and the newest write time. */
   private hist = new Map<string, IssueHistory>()
   private lastWrite = new Map<string, number>()
+  /** Per issue, who the log saw last out of an owner comment and any agent write (see `agentWroteSinceReply`). */
+  private replyTurn = new Map<string, 'owner' | 'agent'>()
   private feedStart = Infinity
   /** Per issue, from the feed log: when it last moved into a completed status (ms). Never pruned. */
   private doneTimes = new Map<string, number>()
@@ -187,6 +189,11 @@ export class Store {
   lastMove(id: string): HistoryEntry | null { return this.hist.get(id)?.lastMove ?? null }
   /** Agent workspaces seen in `id`'s recent history. */
   historyWorkspaces(id: string): ReadonlySet<string> { return this.hist.get(id)?.workspaces ?? NO_WORKSPACES }
+  /**
+   * Whether an agent wrote to `id` after the owner's newest logged comment, by the order the log saw them (times are
+   * whole seconds, so order is the only way to tell two writes in one second apart). Undefined: the log holds neither.
+   */
+  agentWroteSinceReply(id: string): boolean | undefined { const t = this.replyTurn.get(id); return t ? t === 'agent' : undefined }
   /** Whether anything is remembered about `id` (false after it is removed). */
   hasHistory(id: string): boolean { return this.hist.has(id) || this.lastWrite.has(id) }
   /** Newest change to `id` in ms: its `updated`, its newest comment, or a logged write (hand edits don't bump `updated`). */
@@ -781,6 +788,7 @@ export class Store {
     this.index.remove(id)
     this.hist.delete(id)
     this.lastWrite.delete(id)
+    this.replyTurn.delete(id)
     this.doneTimes.delete(id)
     this.closedTimes.delete(id)
   }
@@ -854,6 +862,8 @@ export class Store {
     if (!Number.isFinite(t)) return
     this.noteFeedStart(e.at)
     this.lastWrite.set(e.id, Math.max(t, this.lastWrite.get(e.id) ?? 0))
+    if (e.actor.actor === 'agent') this.replyTurn.set(e.id, 'agent')
+    else if (e.kind === 'comment' && e.actor.workspace !== 'external') this.replyTurn.set(e.id, 'owner')
     if (e.kind === 'status' && e.to && this.config.statuses.find((x) => x.name === e.to)?.type === 'completed') this.doneTimes.set(e.id, t)
     if (e.kind === 'status' && e.to) this.rememberClose(e.id, e.from, e.to, t)
     const session = e.actor.actor === 'agent' && e.actor.session ? e.actor.session : undefined

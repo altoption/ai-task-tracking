@@ -54,7 +54,8 @@ export interface HiddenStub { id: string; hidden: true }
 /**
  * `/api/home` with summaries (cheap, and carries `workspaces` for the switcher); Needs-you items carry
  * `stalled: <reason>` and `ciReason: "CI failing on PR #12"` when those apply, plus `request` (the newest comment, one
- * line) and `waitingSince` (when it moved into its Needs-you status) when known (needsYouRequest).
+ * line) and `waitingSince` (when it moved into its Needs-you status) when known (needsYouRequest). A needs-you or in-progress
+ * item carries `answered: true` when the owner replied on it and no agent has written since (ownerReplyOf).
  */
 function homeOut(s: Store) {
   const visible = visibleTest(s)
@@ -64,9 +65,10 @@ function homeOut(s: Store) {
     needsYou: h.needsYou.map((i) => {
       const reason = h.stalled.get(i.id)
       const ci = h.ci.get(i.id)
-      return { ...sum(i), ...(reason ? { stalled: reason } : {}), ...(ci ? { ciReason: ci } : {}), ...needsYouRequest(s, i) }
+      // Answered and here only because it stalled or its CI fails: the question it asked is no longer the request.
+      return { ...sum(i), ...(reason ? { stalled: reason } : {}), ...(ci ? { ciReason: ci } : {}), ...(h.answered.has(i.id) ? { answered: true } : needsYouRequest(s, i)) }
     }),
-    inProgress: h.inProgress.map(sum),
+    inProgress: h.inProgress.map((i) => ({ ...sum(i), ...(h.answered.has(i.id) ? { answered: true } : {}) })),
     readyNext: h.readyNext.map((x) => ({ issue: sum(x.issue), unblocks: x.unblocks })),
     blocked: h.blocked.map((x) => ({ issue: sum(x.issue), blockers: x.blockers })),
   }
